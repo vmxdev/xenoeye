@@ -43,7 +43,7 @@ struct nf_packet_info
 {
 	int n;
 	time_t tmin, tmax;
-	struct nf_flow_info[MAX_FLOWS_PER_PACKET];
+	struct nf_flow_info flows[MAX_FLOWS_PER_PACKET];
 };
 
 /* template-based flows */
@@ -134,7 +134,7 @@ parse_netflow_v9_template(uint8_t **ptr, int length, int count)
 }
 
 static int
-parse_netflow_v9_flowset(uint8_t **ptr,
+parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 	int flowset_id, int length, int count)
 {
 	uint8_t *fptr;
@@ -166,6 +166,11 @@ parse_netflow_v9_flowset(uint8_t **ptr,
 			flength = templates[ti].items[i].length;
 			ftype = templates[ti].items[i].type;
 
+			npi->flows[npi->n].type = ftype;
+			npi->flows[npi->n].length = flength;
+			memcpy(npi->flows[npi->n].value, fptr, flength);
+			npi->n++;
+
 			LOG("field type: %d, length == %d, first byte == %d",
 				ftype, flength, fptr[0]);
 			fptr += flength;
@@ -180,11 +185,15 @@ parse_netflow_v9_flowset(uint8_t **ptr,
 }
 
 static int
-parse_netflow_v9(const uint8_t *packet, int len)
+parse_netflow_v9(struct nf_packet_info *npi, const uint8_t *packet, int len)
 {
 	struct nf9_header *header;
 	int flowset_id, length, count;
 	uint8_t *ptr;
+
+	npi->n = 0;
+	npi->tmin = 0;
+	npi->tmax = 0;
 
 	header = (struct nf9_header *)packet;
 	LOG("got v9, package sequence: %u, source id %u, length %d",
@@ -215,7 +224,7 @@ parse_netflow_v9(const uint8_t *packet, int len)
 			LOG("options template");
 			break;
 		} else {
-			if (!parse_netflow_v9_flowset(&ptr, flowset_id,
+			if (!parse_netflow_v9_flowset(npi, &ptr, flowset_id,
 				length, count)) {
 
 				break;
@@ -272,6 +281,7 @@ main(int argc, char *argv[])
 	while (!stop) {
 		ssize_t len;
 		uint8_t packet[64 * 1024];
+		struct nf_packet_info npi;
 
 		len = recvfrom(sockfd, packet, sizeof(packet), 0,
 			(struct sockaddr *)&clientaddr, &clientlen);
@@ -280,7 +290,7 @@ main(int argc, char *argv[])
 			LOG("recvfrom() failed: %s", strerror(errno));
 		}
 
-		parse_netflow_v9(packet, len);
+		parse_netflow_v9(&npi, packet, len);
 	}
 
 	close(sockfd);
