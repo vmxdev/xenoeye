@@ -28,9 +28,20 @@
 #include "utils.h"
 #include "netflow.h"
 
+#include "tkvdb/tkvdb.h"
+
 
 #define MAX_FLOWS_PER_PACKET 1000
 #define MAX_FLOW_VAL_LEN 32
+
+#define TEMPLATES_DBFILE "templates.tkv"
+
+#define DEFAULT_NETFLOW_PORT 2055
+
+struct xe_data
+{
+	tkvdb *templates_db;
+};
 
 struct nf_flow_info
 {
@@ -42,6 +53,7 @@ struct nf_flow_info
 struct nf_packet_info
 {
 	int n;
+	struct sockaddr src_addr;
 	time_t tmin, tmax;
 	struct nf_flow_info flows[MAX_FLOWS_PER_PACKET];
 };
@@ -236,20 +248,48 @@ parse_netflow_v9(struct nf_packet_info *npi, const uint8_t *packet, int len)
 	return 1;
 }
 
+static void
+print_usage(const char *progname)
+{
+	fprintf(stderr, "Usage:\n %s [-p port]\n", progname);
+	fprintf(stderr, " %s -h\n", progname);
+	fprintf(stderr, "    -p UDP port for Netflow datagrams (default %d)\n",
+		DEFAULT_NETFLOW_PORT);
+	fprintf(stderr, "    -h print this message\n");
+}
 
 int
 main(int argc, char *argv[])
 {
 	int sockfd;
 	int one = 1;
-	int port;
-	struct sockaddr_in serveraddr, clientaddr;
+	int port = DEFAULT_NETFLOW_PORT;
+	struct sockaddr_in serveraddr;
 	socklen_t clientlen;
+	struct xe_data data;
 	int stop = 0;
+	int opt;
 
-	port = 2055;
+	while ((opt = getopt(argc, argv, "p:")) != -1) {
+		switch (opt) {
+			case 'p':
+				port = atoi(optarg);
+				break;
+
+			case 'h':
+			default:
+				print_usage(argv[0]);
+				return EXIT_SUCCESS;
+		}
+	}
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
+
+	data.templates_db = tkvdb_open(TEMPLATES_DBFILE, NULL);
+	if (!data.templates_db) {
+		LOG("Can't open '"TEMPLATES_DBFILE"'\n");
+		return EXIT_FAILURE;
+	}
 
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sockfd < 0) {
@@ -276,7 +316,9 @@ main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	clientlen = sizeof(clientaddr);
+	clientlen = sizeof(struct sockaddr);
+
+	LOG("Starting collector on port %d", port);
 
 	while (!stop) {
 		ssize_t len;
@@ -284,16 +326,24 @@ main(int argc, char *argv[])
 		struct nf_packet_info npi;
 
 		len = recvfrom(sockfd, packet, sizeof(packet), 0,
-			(struct sockaddr *)&clientaddr, &clientlen);
+			&(npi.src_addr), &clientlen);
 
 		if (len < 0) {
 			LOG("recvfrom() failed: %s", strerror(errno));
 		}
 
+		if (npi.src_addr.sa_family == AF_INET) {
+			struct sockaddr_in *addr;
+
+			addr = (struct sockaddr_in *)&npi.src_addr;
+			/* we're supporting only IPv4 */
+			LOG("src_addr: %s", inet_ntoa(addr->sin_addr));
+		}
 		parse_netflow_v9(&npi, packet, len);
 	}
 
 	close(sockfd);
+	tkvdb_close(data.templates_db);
 
 	return EXIT_SUCCESS;
 }
