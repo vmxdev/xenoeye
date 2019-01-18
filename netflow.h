@@ -2,6 +2,7 @@
 #define netflow_h_included
 
 #include <sys/types.h>
+#include <stdint.h>
 
 #ifdef _MSC_VER
 #define PACKED

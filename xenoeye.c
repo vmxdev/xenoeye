@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2018, Vladimir Misyurov
+ * Copyright (c) 2018-2019, Vladimir Misyurov
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -27,20 +27,16 @@
 
 #include "utils.h"
 #include "netflow.h"
-
-#include "tkvdb/tkvdb.h"
+#include "netflow_templates.h"
 
 
 #define MAX_FLOWS_PER_PACKET 1000
 #define MAX_FLOW_VAL_LEN 32
 
-#define TEMPLATES_DBFILE "templates.tkv"
-
 #define DEFAULT_NETFLOW_PORT 2055
 
 struct xe_data
 {
-	tkvdb *templates_db;
 };
 
 struct nf_flow_info
@@ -54,93 +50,79 @@ struct nf_packet_info
 {
 	int n;
 	struct sockaddr src_addr;
+	uint32_t src_addr_ipv4;
+
+	uint32_t source_id;
+	uint32_t epoch;
 	time_t tmin, tmax;
 	struct nf_flow_info flows[MAX_FLOWS_PER_PACKET];
 };
 
-/* template-based flows */
-struct netflow_template_item
+/* construct template key, used as key in persistent k-v templates storage */
+static void
+make_template_key(struct template_key *tkey, uint16_t template_id,
+	struct nf_packet_info *npi)
 {
-	int type;
-	int length;
-};
+	uint8_t *tkeyptr;
 
-struct netflow_template
-{
-	int id;
+	/* key: template ID, source IP, source ID and time */
+	tkey->size = sizeof(template_id) + sizeof(npi->src_addr_ipv4)
+		+ sizeof(npi->source_id) + sizeof(npi->epoch);
 
-	int nitems;
-	struct netflow_template_item *items;
-};
+	tkeyptr = tkey->data;
 
-/* we hold netflow templates in memory */
+	/* template ID */
+	memcpy(tkeyptr, &template_id, sizeof(template_id));
+	tkeyptr += sizeof(template_id);
 
-/* number of templates */
-static size_t ntemplates = 0;
-/* templates */
-static struct netflow_template *templates = NULL;
+	/* source IPv4 address */
+	memcpy(tkeyptr, &(npi->src_addr_ipv4), sizeof(npi->src_addr_ipv4));
+	tkeyptr += sizeof(npi->src_addr_ipv4);
+
+	/* source ID */
+	memcpy(tkeyptr, &(npi->source_id), sizeof(npi->source_id));
+	tkeyptr += sizeof(npi->source_id);
+
+	/* time */
+	memcpy(tkeyptr, &(npi->epoch), sizeof(npi->epoch));
+}
 
 static int
-parse_netflow_v9_template(uint8_t **ptr, int length, int count)
+parse_netflow_v9_template(struct nf_packet_info *npi, uint8_t **ptr,
+	int length)
 {
-	struct nf9_template_item *tmplitem;
-	int template_id, field_count;
-	struct netflow_template *tmptmpl;
-	int tmpl_found, i;
-	size_t ti;
+	struct nf9_template_item *tmplitem, *ptmpl;
+	uint16_t template_id, field_count;
+	struct template_key tkey;
+	int template_size;
 
-	LOG("template, length == %d, count: %d", length, count);
+	ptmpl = (struct nf9_template_item *)(*ptr);
+	template_id = ptmpl->template_id;
+	field_count = ntohs(ptmpl->field_count);
 
-	tmplitem = (struct nf9_template_item *)(*ptr);
-
-	template_id = ntohs(tmplitem->template_id);
-	field_count = ntohs(tmplitem->field_count);
-
-	LOG("template id %d, field count: %d", template_id, field_count);
-
-	tmpl_found = 0;
-	for (ti=0; ti<ntemplates; ti++) {
-		if (templates[ti].id == template_id) {
-			tmpl_found = 1;
-			break;
-		}
-	}
-
-	if (tmpl_found) {
-		free(templates[ti].items);
-	} else {
-		tmptmpl = realloc(templates, (ntemplates + 1)
-			*sizeof(struct netflow_template));
-		if (!tmptmpl) {
-			LOG("Not enough memory");
-			return 0;
-		}
-		templates = tmptmpl;
-		ti = ntemplates;
-		templates[ti].id = template_id;
-		ntemplates++;
-	}
-
-	templates[ti].items = malloc(field_count
-		* sizeof(struct netflow_template_item));
-	if (!templates[ti].items) {
-		LOG("Not enough memory");
+	template_size = 4 + field_count * 4;
+	if (template_size > length) {
+		/* packet too short */
+		LOG("Template is too short");
 		return 0;
 	}
+	LOG("Template id %d, field count: %u", ntohs(template_id),
+		field_count);
 
-	for (i=0; i<field_count; i++) {
-		templates[ti].items[i].type =
-			ntohs(tmplitem->typelen[i].type);
-		templates[ti].items[i].length =
-			ntohs(tmplitem->typelen[i].length);
+	/* search for template in database */
+	make_template_key(&tkey, template_id, npi);
+	tmplitem = netflow_template_find(&tkey);
 
-		LOG("  %d. type %d, length %d",
-			i,
-			templates[ti].items[i].type,
-			templates[ti].items[i].length);
+	*ptr += template_size;
+
+	if (!tmplitem) {
+		return netflow_template_add(&tkey, ptmpl);
 	}
-	templates[ti].nitems = field_count;
-	*ptr += 4 + field_count * 4;
+
+	if (memcmp(ptmpl, tmplitem, template_size) != 0) {
+		LOG("Template modified");
+		return netflow_template_add(&tkey, ptmpl);
+	}
 
 	return 1;
 }
@@ -150,40 +132,39 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 	int flowset_id, int length, int count)
 {
 	uint8_t *fptr;
-	int cnt, tmpl_found, i;
-	size_t ti;
+	int cnt, i;
+	struct nf9_template_item *tmpl;
+	struct template_key tkey;
+	int template_field_count;
 
 	LOG("v9 data, flowset: %d, length == %d, count = %d",
-		flowset_id, length, count);
+		ntohs(flowset_id), length, count);
 
-	tmpl_found = 0;
-	for (ti=0; ti<ntemplates; ti++) {
-		if (templates[ti].id == flowset_id) {
-			tmpl_found = 1;
-			break;
-		}
-	}
-	if (!tmpl_found) {
-		LOG("Unknown flowset id %d", flowset_id);
+	make_template_key(&tkey, flowset_id, npi);
+	tmpl = netflow_template_find(&tkey);
+
+	if (!tmpl) {
+		LOG("Unknown flowset id %d", ntohs(flowset_id));
 		return 0;
 	}
 
+	template_field_count = ntohs(tmpl->field_count);
+
 	fptr = (*ptr);
 	for (cnt=0; cnt<count; cnt++) {
-		LOG("flowset #%d\n", cnt);
-
-		for (i=0; i<templates[ti].nitems; i++) {
+		LOG("Flowset #%d", cnt);
+		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
 
-			flength = templates[ti].items[i].length;
-			ftype = templates[ti].items[i].type;
+			flength = ntohs(tmpl->typelen[i].length);
+			ftype = ntohs(tmpl->typelen[i].type);
 
 			npi->flows[npi->n].type = ftype;
 			npi->flows[npi->n].length = flength;
 			memcpy(npi->flows[npi->n].value, fptr, flength);
 			npi->n++;
 
-			LOG("field type: %d, length == %d, first byte == %d",
+			LOG("Field type: %d, length == %d, first byte == %d",
 				ftype, flength, fptr[0]);
 			fptr += flength;
 
@@ -197,10 +178,11 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 }
 
 static int
-parse_netflow_v9(struct nf_packet_info *npi, const uint8_t *packet, int len)
+parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi,
+	const uint8_t *packet, int len)
 {
 	struct nf9_header *header;
-	int flowset_id, length, count;
+	int flowset_id, flowset_id_host, length, count;
 	uint8_t *ptr;
 
 	npi->n = 0;
@@ -208,10 +190,14 @@ parse_netflow_v9(struct nf_packet_info *npi, const uint8_t *packet, int len)
 	npi->tmax = 0;
 
 	header = (struct nf9_header *)packet;
+	npi->source_id = header->source_id;
+	npi->epoch = header->unix_secs;
+
 	LOG("got v9, package sequence: %u, source id %u, length %d",
 		ntohl(header->package_sequence),
-		ntohl(header->source_id),
+		ntohl(npi->source_id),
 		len);
+
 
 	ptr = (uint8_t *)packet + sizeof(struct nf9_header);
 
@@ -220,19 +206,19 @@ parse_netflow_v9(struct nf_packet_info *npi, const uint8_t *packet, int len)
 
 		flowset_header = (struct nf9_flowset_header *)ptr;
 
-		flowset_id = ntohs(flowset_header->flowset_id);
+		flowset_id = flowset_header->flowset_id;
+		flowset_id_host = ntohs(flowset_id);
 		length = ntohs(flowset_header->length);
 		count = ntohs(header->count);
 
 		ptr += 4;
 
-		if (flowset_id == 0) {
-			if (!parse_netflow_v9_template(&ptr,
-				length, count)) {
+		if (flowset_id_host == 0) {
+			if (!parse_netflow_v9_template(npi, &ptr, length)) {
 				/* something went wrong in template parser */
 				return 0;
 			}
-		} else if (flowset_id == 1) {
+		} else if (flowset_id_host == 1) {
 			LOG("options template");
 			break;
 		} else {
@@ -285,9 +271,8 @@ main(int argc, char *argv[])
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
-	data.templates_db = tkvdb_open(TEMPLATES_DBFILE, NULL);
-	if (!data.templates_db) {
-		LOG("Can't open '"TEMPLATES_DBFILE"'\n");
+	if (!netflow_templates_init()) {
+		LOG("Can't init templates storage, exiting");
 		return EXIT_FAILURE;
 	}
 
@@ -338,12 +323,17 @@ main(int argc, char *argv[])
 			addr = (struct sockaddr_in *)&npi.src_addr;
 			/* we're supporting only IPv4 */
 			LOG("src_addr: %s", inet_ntoa(addr->sin_addr));
+
+			npi.src_addr_ipv4 = *((uint32_t *)&(addr->sin_addr));
+		} else {
+			npi.src_addr_ipv4 = 0;
 		}
-		parse_netflow_v9(&npi, packet, len);
+
+		parse_netflow_v9(&data, &npi, packet, len);
 	}
 
 	close(sockfd);
-	tkvdb_close(data.templates_db);
+	netflow_templates_shutdown();
 
 	return EXIT_SUCCESS;
 }
