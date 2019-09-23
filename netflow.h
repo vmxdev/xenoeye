@@ -1,8 +1,13 @@
 #ifndef netflow_h_included
 #define netflow_h_included
 
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <stdint.h>
+
+#define MAX_NF_PACKET_SIZE (64*1024)
+#define MAX_FLOWS_PER_PACKET 1000
+#define MAX_FLOW_VAL_LEN 32
 
 #ifdef _MSC_VER
 #define PACKED
@@ -41,12 +46,43 @@ struct nf9_template_item
 	struct nf9_fieldtype_and_len typelen[1];
 } PACKED;
 
+/* netflow packet with header on disk */
+struct nf_packet_on_disk
+{
+	uint16_t header_size, packet_size;
+	uint32_t src_ip_v4;
+	uint16_t dst_port;
+
+	uint8_t packet[MAX_NF_PACKET_SIZE];
+} PACKED;
+
 #ifdef _MSC_VER
 #pragma pack(pop)
 #undef PACKED
 #else
 #undef PACKED
 #endif
+
+struct nf_flow_info
+{
+	int type;
+	int length;
+	uint8_t value[MAX_FLOW_VAL_LEN];
+};
+
+struct nf_packet_info
+{
+	int nflows;
+	struct sockaddr src_addr;
+	uint32_t src_addr_ipv4;
+
+	uint32_t source_id;
+	uint32_t epoch;
+	uint32_t uptime;
+	time_t tmin, tmax;
+	struct nf_flow_info flows[MAX_FLOWS_PER_PACKET];
+	uint8_t rawpacket[MAX_NF_PACKET_SIZE];
+};
 
 #endif
 

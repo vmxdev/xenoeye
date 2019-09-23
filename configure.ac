@@ -11,9 +11,9 @@ AC_SEARCH_LIBS([pthread_create], [pthread], [], [
 
 AC_PROG_MKDIR_P
 
-AC_MSG_CHECKING(whether compiler understands -Wall -Wextra)
+AC_MSG_CHECKING(whether compiler understands -Wall -Wextra -pedantic)
 old_CFLAGS="$CFLAGS"
-CFLAGS="$CFLAGS -Wall -Wextra"
+CFLAGS="$CFLAGS -Wall -Wextra -pedantic"
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],[])],
   AC_MSG_RESULT(yes),
   AC_MSG_RESULT(no)

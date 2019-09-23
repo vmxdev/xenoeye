@@ -24,39 +24,14 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "utils.h"
 #include "netflow.h"
 #include "netflow_templates.h"
-
-
-#define MAX_FLOWS_PER_PACKET 1000
-#define MAX_FLOW_VAL_LEN 32
+#include "xenoeye.h"
 
 #define DEFAULT_NETFLOW_PORT 2055
-
-struct xe_data
-{
-};
-
-struct nf_flow_info
-{
-	int type;
-	int length;
-	uint8_t value[MAX_FLOW_VAL_LEN];
-};
-
-struct nf_packet_info
-{
-	int n;
-	struct sockaddr src_addr;
-	uint32_t src_addr_ipv4;
-
-	uint32_t source_id;
-	uint32_t epoch;
-	time_t tmin, tmax;
-	struct nf_flow_info flows[MAX_FLOWS_PER_PACKET];
-};
 
 /* construct template key, used as key in persistent k-v templates storage */
 static void
@@ -159,10 +134,35 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
 
-			npi->flows[npi->n].type = ftype;
-			npi->flows[npi->n].length = flength;
-			memcpy(npi->flows[npi->n].value, fptr, flength);
-			npi->n++;
+			if (ftype == 21) {
+				uint32_t last_uptime;
+
+				if (flength != 4) {
+					LOG("Incorrect LAST SWITCHED field");
+					return 0;
+				}
+				memcpy(&last_uptime, fptr, flength);
+				last_uptime = ntohl(last_uptime);
+				LOG("LAST SWITCHED: %u",
+					npi->uptime - last_uptime);
+			}
+			if (ftype == 22) {
+				uint32_t first_uptime;
+
+				if (flength != 4) {
+					LOG("Incorrect FIRST SWITCHED field");
+					return 0;
+				}
+				memcpy(&first_uptime, fptr, flength);
+				first_uptime = ntohl(first_uptime);
+				LOG("FIRST SWITCHED: %u",
+					npi->uptime - first_uptime);
+			}
+
+			npi->flows[npi->nflows].type = ftype;
+			npi->flows[npi->nflows].length = flength;
+			memcpy(npi->flows[npi->nflows].value, fptr, flength);
+			npi->nflows++;
 
 			LOG("Field type: %d, length == %d, first byte == %d",
 				ftype, flength, fptr[0]);
@@ -178,20 +178,20 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 }
 
 static int
-parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi,
-	const uint8_t *packet, int len)
+parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
 {
 	struct nf9_header *header;
 	int flowset_id, flowset_id_host, length, count;
 	uint8_t *ptr;
 
-	npi->n = 0;
+	npi->nflows = 0;
 	npi->tmin = 0;
 	npi->tmax = 0;
 
-	header = (struct nf9_header *)packet;
+	header = (struct nf9_header *)npi->rawpacket;
 	npi->source_id = header->source_id;
 	npi->epoch = header->unix_secs;
+	npi->uptime = htonl(header->sys_uptime);
 
 	LOG("got v9, package sequence: %u, source id %u, length %d",
 		ntohl(header->package_sequence),
@@ -199,9 +199,9 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi,
 		len);
 
 
-	ptr = (uint8_t *)packet + sizeof(struct nf9_header);
+	ptr = (uint8_t *)npi->rawpacket + sizeof(struct nf9_header);
 
-	while (ptr < ((uint8_t *)packet + len)) {
+	while (ptr < ((uint8_t *)npi->rawpacket + len)) {
 		struct nf9_flowset_header *flowset_header;
 
 		flowset_header = (struct nf9_flowset_header *)ptr;
@@ -233,6 +233,7 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi,
 	LOG("========================");
 	return 1;
 }
+
 
 static void
 print_usage(const char *progname)
@@ -307,29 +308,34 @@ main(int argc, char *argv[])
 
 	while (!stop) {
 		ssize_t len;
-		uint8_t packet[64 * 1024];
-		struct nf_packet_info npi;
+		struct nf_packet_info nfpkt;
 
-		len = recvfrom(sockfd, packet, sizeof(packet), 0,
-			&(npi.src_addr), &clientlen);
+		len = recvfrom(sockfd, nfpkt.rawpacket,
+			MAX_NF_PACKET_SIZE, 0,
+			&(nfpkt.src_addr), &clientlen);
 
 		if (len < 0) {
 			LOG("recvfrom() failed: %s", strerror(errno));
+
+			continue;
 		}
 
-		if (npi.src_addr.sa_family == AF_INET) {
+		if (nfpkt.src_addr.sa_family == AF_INET) {
 			struct sockaddr_in *addr;
 
-			addr = (struct sockaddr_in *)&npi.src_addr;
+			addr = (struct sockaddr_in *)&nfpkt.src_addr;
 			/* we're supporting only IPv4 */
 			LOG("src_addr: %s", inet_ntoa(addr->sin_addr));
 
-			npi.src_addr_ipv4 = *((uint32_t *)&(addr->sin_addr));
+			nfpkt.src_addr_ipv4 =
+				 *((uint32_t *)&(addr->sin_addr));
 		} else {
-			npi.src_addr_ipv4 = 0;
+			nfpkt.src_addr_ipv4 = 0;
 		}
 
-		parse_netflow_v9(&data, &npi, packet, len);
+		if (parse_netflow_v9(&data, &nfpkt, len)) {
+			/* ok */
+		}
 	}
 
 	close(sockfd);
