@@ -23,10 +23,18 @@ enum TOKEN_ID
 	OR,
 	AND,
 
+	CIDR,
+
 	SADDR,
 	DADDR,
 	SPORT,
 	DPORT
+};
+
+struct CIDR
+{
+	uint8_t addr[4];
+	uint8_t mask;
 };
 
 struct token
@@ -35,7 +43,7 @@ struct token
 	union data {
 		char str[TOKEN_MAX_SIZE];
 		int num;
-		uint32_t ip_addr;
+		struct CIDR cidr;
 	} data;
 };
 
@@ -51,6 +59,7 @@ struct query_input
 	struct token current_token;
 };
 
+void read_token(struct query_input *i);
 void mkerror(struct query_input *i, char *msg);
 
 #endif

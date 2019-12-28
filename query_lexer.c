@@ -119,21 +119,44 @@ again:
 		return;
 	}
 
-	/* number */
+	/* number or IP */
 	if (isdigit(*(i->s))) {
 		size_t l = 0;
 
 		SCAN_UNTIL(isdigit(*(i->s)));
 
 		if (is_idsym(*(i->s))) {
+			/* letter (or ID symbol) after digit */
 			mkerror(i, "Incorrect token");
 			return;
 		}
 
-		i->current_token.data.str[l] = '\0';
-		i->current_token.data.num = atoi(i->current_token.data.str);
-		i->current_token.id = NUM;
-		return;
+		if (*(i->s) == '.') {
+			/* probably IP */
+			int d, n;
+
+			i->current_token.data.str[l] = '\0';
+			d = atoi(i->current_token.data.str);
+			if ((d < 0) || (d > 255)) {
+				mkerror(i, "Incorrect IP address");
+				return;
+			}
+			i->current_token.data.cidr.addr[0] = d;
+
+			for (n=1; n<3; n++) {
+				SCAN_UNTIL(isdigit(*(i->s)));
+				if (*(i->s) != '.') {
+					mkerror(i, "Incorrect IP address");
+					return;
+				}
+			}
+		} else {
+			/* number */
+			i->current_token.data.str[l] = '\0';
+			i->current_token.data.num = atoi(i->current_token.data.str);
+			i->current_token.id = NUM;
+			return;
+		}
 	}
 
 	/* string */

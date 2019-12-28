@@ -60,13 +60,13 @@ netflow_templates_shutdown(void)
 	tkvdb_close(db);
 }
 
-struct nf9_template_item *
+void *
 netflow_template_find(struct template_key *tkey)
 {
 	tkvdb_cursor *c;
 	tkvdb_datum dtk;
 	TKVDB_RES rc;
-	struct nf9_template_item *ret = NULL;
+	void *ret = NULL;
 
 	/* search for the most recent template */
 	c = tkvdb_cursor_create(tr);
@@ -86,7 +86,7 @@ netflow_template_find(struct template_key *tkey)
 }
 
 int
-netflow_template_add(struct template_key *tkey, struct nf9_template_item *t)
+netflow_template_add(struct template_key *tkey, void *t, size_t size)
 {
 	tkvdb_datum dtk, dtv;
 
@@ -95,7 +95,7 @@ netflow_template_add(struct template_key *tkey, struct nf9_template_item *t)
 	dtk.size = tkey->size;
 
 	dtv.data = t;
-	dtv.size = 4 + ntohs(t->field_count) * 4;
+	dtv.size = size;
 
 	if (tr->put(tr, &dtk, &dtv) != TKVDB_OK) {
 		return 0;

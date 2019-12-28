@@ -3,7 +3,6 @@ AM_INIT_AUTOMAKE([foreign -Wall -Werror subdir-objects])
 AC_PROG_CC
 AC_CONFIG_HEADERS([config.h])
 
-
 #pthreads
 AC_SEARCH_LIBS([pthread_create], [pthread], [], [
   AC_MSG_ERROR([pthreads support required])
