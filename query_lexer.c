@@ -6,242 +6,141 @@
 
 #include "query.h"
 
-static int
-is_idsym(int c)
-{
-	if (isalnum(c)) return 1;
-	if (c == '_') return 1;
-	if (c == '$') return 1;
-
-	return 0;
-}
-
-void
-read_token(struct query_input *i)
-{
-
-#define CHECK_EOF()               \
-	if (*(i->s) == '\0') {    \
-		i->eof = 1;       \
-		return;           \
-	}
-
-#define BREAK_IF_EOF()            \
-	if (*(i->s) == '\0') {    \
-		break;            \
-	}
-
-#define NEXT_SYMBOL()             \
-do {                              \
-	i->s++;                   \
-	i->col++;                 \
+#define CHECK_END(I)                    \
+do {                                    \
+	if (*(I->s) == '\0') {          \
+		I->end = 1;             \
+		return;                 \
+	}                               \
 } while (0)
 
-again:
-	/* skip white space */
+#define CHECK_END_UNEXP(I, ERR)         \
+do {                                    \
+	if (*(I->s) == '\0') {          \
+		I->end = 1;             \
+		I->error = 1;           \
+		strcpy(I->errmsg, ERR); \
+		return;                 \
+	}                               \
+} while (0)
+
+#define EXPECT_SYM_IN_KW(I, C1, C2)                                         \
+do {                                                                        \
+	I->s++;                                                             \
+	CHECK_END_UNEXP(I, "unexpected end of input inside keyword");       \
+	if ((*(I->s) != C1) && ((*(I->s) != C2))) {                         \
+		I->error = 1;                                               \
+		sprintf(I->errmsg, "expected '%c', got '%c'", C1, *(I->s)); \
+		return;                                                     \
+	}                                                                   \
+	I->col++;                                                           \
+	I->current_token.data.str[I->current_token.str_len] = C1;           \
+	I->current_token.str_len++;                                         \
+} while (0)
+
+#define EXPECT(I, F)                    \
+do {                                    \
+	F(I);                           \
+	if (I->end || I->error) return; \
+} while (0)
+
+static void
+c_style_comment(struct query_input *q)
+{
 	for (;;) {
-		CHECK_EOF();
-		if (*(i->s) == '\n') {
-			i->line++;
-			i->col = 1;
+		q->s++;
+		CHECK_END_UNEXP(q,
+			"unexpected end of input inside the comment");
+
+		q->col++;
+		if (*(q->s) == '*') {
+			/* end of comment? */
+			q->s++;
+			CHECK_END_UNEXP(q,
+				"unexpected end of input inside the comment");
+
+			q->col++;
+			if (*(q->s) == '/') {
+				/* end of comment */
+				break;
+			}
+		} else if (*(q->s) == '\n') {
+			q->line++;
+			q->col = 1;
 		}
-		if (isspace(*(i->s))) {
-			NEXT_SYMBOL();
-			CHECK_EOF();
-		} else {
+	}
+}
+
+static void
+one_line_comment(struct query_input *q)
+{
+	for (;;) {
+		q->s++;
+		CHECK_END(q);
+
+		q->col++;
+		if (*(q->s) == '\n') {
+			/* end of comment */
+
+			q->line++;
+			q->col = 1;
 			break;
 		}
 	}
+}
 
-	/* skip comment */
-	if (*(i->s) == '/') {
+static void
+whitespace(struct query_input *q)
+{
+	for (;;) {
+		CHECK_END(q);
+		if ((*(q->s) == ' ') || (*(q->s) == '\t')) {
+			q->col++;
+		} else if ((*(q->s) == '\n') || (*(q->s) == '\r')) {
+			q->line++;
+			q->col = 1;
+		} else if (*(q->s) == '/') {
+			q->s++;
 
-#define IF_NEXT(SYM)           \
-	NEXT_SYMBOL();         \
-	if (*(i->s) == SYM)
+			CHECK_END_UNEXP(q,
+				"unexpected end of input after '/'");
 
-		IF_NEXT('*') {
-			for (;;) {
-				IF_NEXT('\n') {
-					i->line++;
-					i->col = 1;
-				}
-				if (*(i->s) != '*') {
-					continue;
-				}
-				IF_NEXT('/') {
-					i->s++;
-					goto again;
-				}
-				i->s--;
-			}
-		}
-		i->s--;
-	}
-
-
-#define SCAN_UNTIL(COND)                                     \
-	do {                                                 \
-		i->current_token.data.str[l] = *(i->s);      \
-		l++;                                         \
-		if (l > sizeof(i->current_token.data.str)) { \
-			mkerror(i, "Token is too big");      \
-			return;                              \
-		}                                            \
-		i->s++;                                      \
-		i->col++;                                    \
-	} while (COND)
-
-
-	/* keywords and id's */
-	if (isalpha(*(i->s))) {
-                size_t l = 0;
-
-		SCAN_UNTIL(is_idsym(*(i->s)));
-
-		i->current_token.data.str[l] = '\0';
-#define SCAN_STRING(STR, TOKEN) else if                     \
-	(strcasecmp(STR, i->current_token.data.str) == 0) { \
-		i->current_token.id = TOKEN;                \
-	}
-		if (0) {}
-		SCAN_STRING("in", IN)
-		SCAN_STRING("or", OR)
-		SCAN_STRING("and", AND)
-		SCAN_STRING("saddr", SADDR)
-		SCAN_STRING("daddr", DADDR)
-		SCAN_STRING("sport", SPORT)
-		SCAN_STRING("dport", DPORT)
-		else {
-			i->current_token.id = ID;
-		}
-#undef SCAN_STRING
-		return;
-	}
-
-	/* number or IP */
-	if (isdigit(*(i->s))) {
-		size_t l = 0;
-
-		SCAN_UNTIL(isdigit(*(i->s)));
-
-		if (is_idsym(*(i->s))) {
-			/* letter (or ID symbol) after digit */
-			mkerror(i, "Incorrect token");
-			return;
-		}
-
-		if (*(i->s) == '.') {
-			/* probably IP */
-			int d, n;
-
-			i->current_token.data.str[l] = '\0';
-			d = atoi(i->current_token.data.str);
-			if ((d < 0) || (d > 255)) {
-				mkerror(i, "Incorrect IP address");
-				return;
-			}
-			i->current_token.data.cidr.addr[0] = d;
-
-			for (n=1; n<3; n++) {
-				SCAN_UNTIL(isdigit(*(i->s)));
-				if (*(i->s) != '.') {
-					mkerror(i, "Incorrect IP address");
-					return;
-				}
-			}
-		} else {
-			/* number */
-			i->current_token.data.str[l] = '\0';
-			i->current_token.data.num = atoi(i->current_token.data.str);
-			i->current_token.id = NUM;
-			return;
-		}
-	}
-
-	/* string */
-	if (*(i->s) == '\"') {
-		size_t l = 0;
-
-		i->current_token.id = STRING_INCOMPLETE;
-		NEXT_SYMBOL();
-		CHECK_EOF();
-		for (;;) {
-			if (*(i->s) == '\"') {
+			q->col++;
+			if (*(q->s) == '*') {
+				EXPECT(q, c_style_comment);
+			} else if (*(q->s) == '/') {
+				EXPECT(q, one_line_comment);
+			} else {
+				q->col--;
+				q->s--;
 				break;
 			}
-
-			if (*(i->s) == '\\') {
-				/* escaped symbols */
-				NEXT_SYMBOL();
-				BREAK_IF_EOF();
-				switch (*(i->s)) {
-					case 'n':
-						i->current_token.data.str[l]
-							= '\n';
-						break;
-					case '\"':
-						i->current_token.data.str[l]
-							= '\"';
-						break;
-					case '\'':
-						i->current_token.data.str[l]
-							= '\'';
-						break;
-				}
-			} else {
-				i->current_token.data.str[l] = *(i->s);
-			}
-			l++;
-			if (l > sizeof(i->current_token.data.str)) {
-				mkerror(i, "Token is too big");
-				return;
-			}
-			NEXT_SYMBOL();
-			BREAK_IF_EOF();
+		} else {
+			/* end of whitespace */
+			break;
 		}
-
-		if (*(i->s) != '\"') {
-			mkerror(i, "Incorrect string token");
-			return;
-		}
-
-		i->current_token.data.str[l] = '\0';
-		i->current_token.id = STRING;
-		NEXT_SYMBOL();
-		return;
-	}
-
-#define SINGLE_SYM_TOKEN(SYM, ID)                    \
-	if (*(i->s) == SYM) {                        \
-		i->current_token.data.str[0] = SYM;  \
-		i->current_token.data.str[1] = '\0'; \
-		i->current_token.id = ID;            \
-		NEXT_SYMBOL();                       \
-		return;                              \
-	}
-
-	SINGLE_SYM_TOKEN(',', COMMA);
-	SINGLE_SYM_TOKEN('|', VBAR);
-	SINGLE_SYM_TOKEN('+', PLUS);
-	SINGLE_SYM_TOKEN('-', MINUS);
-
-	SINGLE_SYM_TOKEN('=', ASSIGN);
-	SINGLE_SYM_TOKEN('(', LPAREN);
-	SINGLE_SYM_TOKEN(')', RPAREN);
-
-#undef SINGLE_SYM_TOKEN
-#undef SCAN_UNTIL
-#undef CHECK_EOF
-#undef NEXT_SYMBOL
-#undef IF_NEXT
-	{
-		char msg[128];
-
-		snprintf(msg, sizeof(msg), "Unrecognized token '%c'", i->s[0]);
-		mkerror(i, msg);
-		return;
+		q->s++;
 	}
 }
 
+void
+read_token(struct query_input *q)
+{
+	q->current_token.str_len = 0;
+
+	EXPECT(q, whitespace);
+
+	if ((*(q->s) == 'h') || (*(q->s) == 'H')) {
+		/* host */
+		EXPECT_SYM_IN_KW(q, 'o', 'O');
+		EXPECT_SYM_IN_KW(q, 's', 'S');
+		EXPECT_SYM_IN_KW(q, 't', 'T');
+		q->current_token.id = HOST;
+	} else if ((*(q->s) == 's') || (*(q->s) == 'S')) {
+		/* src */
+		EXPECT_SYM_IN_KW(q, 'r', 'R');
+		EXPECT_SYM_IN_KW(q, 'c', 'C');
+		q->current_token.id = SRC;
+	}
+}
 

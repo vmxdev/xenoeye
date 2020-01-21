@@ -28,33 +28,34 @@ expect(struct query_input *i, enum TOKEN_ID token)
 }
 
 static void
-saddr(struct query_input *i)
+qualifier_without_dir(struct query_input *i)
 {
-	/* saddr in 192.168.0.0/24
-	 * daddr = 192.168.0.0/24
-	 **/
-
-	if (accept(i, IN)) {
-	} else if (accept(i, ASSIGN)) {
+	if (accept(i, HOST)) {
+		if (!expect(i, CIDR)) {
+			mkerror(i, "Expected address");
+			return;
+		}
+	} else if (accept(i, NET)) {
+		if (!expect(i, CIDR)) {
+			mkerror(i, "Expected address");
+			return;
+		}
+	} else if (accept(i, PORT)) {
 	} else {
-		mkerror(i, "Expected '=' or 'in' after ADDR");
+		mkerror(i, "Expected HOST, NET or PORT");
 		return;
 	}
 
-	if (!expect(i, CIDR)) {
-		mkerror(i, "Expected CIDR (address or address with mask)");
-		return;
-	}
 }
 
 void
 parse_query(struct query_input *i)
 {
 	read_token(i);
-	if (accept(i, SADDR)) {
-		saddr(i);
-	} else if (accept(i, DADDR)) {
-		saddr(i);
+	if (accept(i, SRC)) {
+		qualifier_without_dir(i);
+	} else if (accept(i, DST)) {
+		qualifier_without_dir(i);
 	} else {
 		mkerror(i, "Unexpected token");
 	}

@@ -25,21 +25,24 @@ enum TOKEN_ID
 
 	CIDR,
 
-	SADDR,
-	DADDR,
-	SPORT,
-	DPORT
+	SRC,
+	DST,
+	HOST,
+	NET,
+	PORT
 };
 
 struct CIDR
 {
-	uint8_t addr[4];
+	uint8_t ipv4[4];
+	uint8_t ipv6[16];
 	uint8_t mask;
 };
 
 struct token
 {
 	enum TOKEN_ID id;
+	int str_len;
 	union data {
 		char str[TOKEN_MAX_SIZE];
 		int num;
@@ -50,7 +53,7 @@ struct token
 struct query_input
 {
 	char *s;
-	int eof;
+	int end;
 	int line, col;
 
 	int error;
@@ -60,6 +63,7 @@ struct query_input
 };
 
 void read_token(struct query_input *i);
+void parse_query(struct query_input *i);
 void mkerror(struct query_input *i, char *msg);
 
 #endif

@@ -32,6 +32,7 @@
 #include "netflow.h"
 #include "netflow_templates.h"
 #include "xenoeye.h"
+#include "query.h"
 
 #define DEFAULT_NETFLOW_PORT 2055
 
@@ -121,6 +122,7 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 	struct nf9_template_item *tmpl;
 	struct template_key tkey;
 	int template_field_count;
+	int flow_unknown = 1;
 
 	LOG("v9 data, flowset: %d, length == %d, count = %d",
 		ntohs(flowset_id), length, count);
@@ -169,10 +171,14 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 					npi->uptime - first_uptime);
 			}
 
-			npi->flows[npi->nflows].type = ftype;
-			npi->flows[npi->nflows].length = flength;
-			memcpy(npi->flows[npi->nflows].value, fptr, flength);
-			npi->nflows++;
+			if (flow_unknown) {
+/*
+				npi->flows[npi->nflows].unktype = ftype;
+				npi->flows[npi->nflows].length = flength;
+				memcpy(npi->flows[npi->nflows].value, 
+					fptr, flength);
+*/
+			}
 
 			LOG("Field type: %d, length == %d, first byte == %d",
 				ftype, flength, fptr[0]);
@@ -194,7 +200,6 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
 	int flowset_id, flowset_id_host, length, count;
 	uint8_t *ptr;
 
-	npi->nflows = 0;
 	npi->tmin = 0;
 	npi->tmax = 0;
 
@@ -353,24 +358,38 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 	fptr = (*ptr);
 
 	while (!stop) {
+		struct nf_flow_info flow_info;
+
 		if ((length - (fptr - (*ptr))) < template_field_count) {
 			break;
 		}
 
 		LOG("flow #%d", flow_num);
+		memset(&flow_info, 0, sizeof(flow_info));
+
 		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
+			int known = 0;
 
 			flength = ntohs(tmpl->elements[i].length);
 			ftype = ntohs(tmpl->elements[i].id);
 
+			if (ftype == 2) {
+				uint64_t packets;
+
+				memcpy(&packets, fptr, flength);
+				packets = be64toh(packets);
+				LOG("packets: %lu", packets);
+				flow_info.packets = packets;
+			}
 			if (ftype == 153) {
 				uint64_t last_uptime;
 
 				memcpy(&last_uptime, fptr, flength);
 				last_uptime = be64toh(last_uptime);
-				LOG("flowStartMilliseconds: %lu",
-					 npi->uptime - last_uptime);
+				LOG("flowStartMilliseconds: %lu (uptime: %u)",
+					 last_uptime, npi->uptime);
+				flow_info.end = last_uptime;
 			}
 			if (ftype == 152) {
 				uint64_t first_uptime;
@@ -378,13 +397,18 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 				memcpy(&first_uptime, fptr, flength);
 				first_uptime = be64toh(first_uptime);
 				LOG("flowEndMilliseconds: %lu",
-					npi->uptime - first_uptime);
+					first_uptime);
+				flow_info.start = first_uptime;
 			}
 
-			npi->flows[npi->nflows].type = ftype;
-			npi->flows[npi->nflows].length = flength;
-			memcpy(npi->flows[npi->nflows].value, fptr, flength);
-			npi->nflows++;
+			if (!known) {
+/*
+				npi->flows[npi->nflows].type = ftype;
+				npi->flows[npi->nflows].length = flength;
+				memcpy(npi->flows[npi->nflows].value,
+					fptr, flength);
+*/
+			}
 
 			LOG("Field type: %d, length == %d, first byte == %d",
 				ftype, flength, fptr[0]);
@@ -396,6 +420,7 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 			}
 		}
 		flow_num++;
+		printf("%lu %lu\n", flow_info.end / 1000, flow_info.packets);
 	}
 	return 1;
 }
@@ -408,7 +433,6 @@ parse_netflow_v10(struct xe_data *data, struct nf_packet_info *npi, int len)
 	int flowset_id, flowset_id_host, length;
 	uint8_t *ptr;
 
-	npi->nflows = 0;
 	npi->tmin = 0;
 	npi->tmax = 0;
 
@@ -488,6 +512,15 @@ parse_netflow(struct xe_data *data, struct nf_packet_info *npi, int len)
 	return ret;
 }
 
+static int
+objects_init(void)
+{
+	struct query_input input;
+	input.s = "host 192.168.1.1";
+	parse_query(&input);
+
+	return 1;
+}
 
 static void
 print_usage(const char *progname)
@@ -525,6 +558,8 @@ main(int argc, char *argv[])
 	}
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
+
+	objects_init();
 
 	if (!netflow_templates_init()) {
 		LOG("Can't init templates storage, exiting");
