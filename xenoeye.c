@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2018-2019, Vladimir Misyurov
+ * Copyright (c) 2018-2020, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
