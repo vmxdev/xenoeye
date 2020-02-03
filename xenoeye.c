@@ -32,7 +32,7 @@
 #include "netflow.h"
 #include "netflow_templates.h"
 #include "xenoeye.h"
-#include "query.h"
+#include "filter.h"
 
 #define DEFAULT_NETFLOW_PORT 2055
 
@@ -518,6 +518,9 @@ objects_init(void)
 	struct query_input input;
 	input.s = "host 192.168.1.1";
 	parse_query(&input);
+	if (input.error) {
+		LOG("Parse error: %s", input.errmsg);
+	}
 
 	return 1;
 }

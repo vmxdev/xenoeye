@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "query.h"
+#include "filter.h"
 
 void
 mkerror(struct query_input *i, char *msg)

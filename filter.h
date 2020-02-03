@@ -9,21 +9,12 @@
 enum TOKEN_ID
 {
 	ID,
-	NUM,
-	STRING_INCOMPLETE,
-	STRING,
-	COMMA,
-	VBAR,
 	PLUS,
 	MINUS,
-	ASSIGN,
 	LPAREN,
 	RPAREN,
-	IN,
 	OR,
 	AND,
-
-	CIDR,
 
 	SRC,
 	DST,
@@ -62,9 +53,10 @@ struct query_input
 	struct token current_token;
 };
 
-void read_token(struct query_input *i);
 void parse_query(struct query_input *i);
 void mkerror(struct query_input *i, char *msg);
+
+void read_token(struct query_input *i);
 
 #endif
 

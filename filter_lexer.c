@@ -4,7 +4,7 @@
 #include <ctype.h>
 #include <errno.h>
 
-#include "query.h"
+#include "filter.h"
 
 #define CHECK_END(I)                    \
 do {                                    \
@@ -27,11 +27,11 @@ do {                                    \
 #define EXPECT_SYM_IN_KW(I, C1, C2)                                         \
 do {                                                                        \
 	I->s++;                                                             \
-	CHECK_END_UNEXP(I, "unexpected end of input inside keyword");       \
+	if (*(I->s) == '\0') {                                              \
+		goto not_a_keyword;                                         \
+	}                                                                   \
 	if ((*(I->s) != C1) && ((*(I->s) != C2))) {                         \
-		I->error = 1;                                               \
-		sprintf(I->errmsg, "expected '%c', got '%c'", C1, *(I->s)); \
-		return;                                                     \
+		goto not_a_keyword;                                         \
 	}                                                                   \
 	I->col++;                                                           \
 	I->current_token.data.str[I->current_token.str_len] = C1;           \
@@ -126,21 +126,66 @@ whitespace(struct query_input *q)
 void
 read_token(struct query_input *q)
 {
+	char *s_tmp;
+	int col_tmp;
+
 	q->current_token.str_len = 0;
 
 	EXPECT(q, whitespace);
 
-	if ((*(q->s) == 'h') || (*(q->s) == 'H')) {
+	s_tmp = q->s;
+	col_tmp = q->col;
+
+	if ((*(q->s) == 's') || (*(q->s) == 'S')) {
+		/* src */
+		EXPECT_SYM_IN_KW(q, 'r', 'R');
+		EXPECT_SYM_IN_KW(q, 'c', 'C');
+		q->current_token.id = SRC;
+	} else if ((*(q->s) == 'd') || (*(q->s) == 'D')) {
+		/* dst */
+		EXPECT_SYM_IN_KW(q, 's', 'S');
+		EXPECT_SYM_IN_KW(q, 't', 'T');
+		q->current_token.id = DST;
+	} else if ((*(q->s) == 'h') || (*(q->s) == 'H')) {
 		/* host */
 		EXPECT_SYM_IN_KW(q, 'o', 'O');
 		EXPECT_SYM_IN_KW(q, 's', 'S');
 		EXPECT_SYM_IN_KW(q, 't', 'T');
 		q->current_token.id = HOST;
-	} else if ((*(q->s) == 's') || (*(q->s) == 'S')) {
-		/* src */
+	} else if ((*(q->s) == 'n') || (*(q->s) == 'N')) {
+		/* net */
+		EXPECT_SYM_IN_KW(q, 'e', 'E');
+		EXPECT_SYM_IN_KW(q, 't', 'T');
+		q->current_token.id = NET;
+	} else if ((*(q->s) == 'p') || (*(q->s) == 'P')) {
+		/* port */
+		EXPECT_SYM_IN_KW(q, 'o', 'O');
 		EXPECT_SYM_IN_KW(q, 'r', 'R');
-		EXPECT_SYM_IN_KW(q, 'c', 'C');
-		q->current_token.id = SRC;
+		EXPECT_SYM_IN_KW(q, 't', 'T');
+		q->current_token.id = NET;
+	} else {
+		goto not_a_keyword;
 	}
+
+	return;
+
+not_a_keyword:
+	/* id (address, name or number) */
+
+	/* restore input */
+	q->s = s_tmp;
+	q->col = col_tmp;
+	q->current_token.str_len = 0;
+
+	do {
+		q->current_token.data.str[q->current_token.str_len] = *(q->s);
+		q->current_token.str_len++;
+		q->s++;
+		q->col++;
+	} while ((*(q->s) != '\0') && (*(q->s) != ' ') && (*(q->s) != '\t')
+		&& (*(q->s) != '\r') && (*(q->s) != '\n')
+		&& (*(q->s) != '(') && (*(q->s) != ')'));
+
+	q->current_token.id = ID;
 }
 

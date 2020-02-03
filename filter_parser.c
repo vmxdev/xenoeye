@@ -1,4 +1,4 @@
-#include "query.h"
+#include "filter.h"
 
 static int
 accept(struct query_input *i, enum TOKEN_ID token)
@@ -31,12 +31,12 @@ static void
 qualifier_without_dir(struct query_input *i)
 {
 	if (accept(i, HOST)) {
-		if (!expect(i, CIDR)) {
+		if (!expect(i, ID)) {
 			mkerror(i, "Expected address");
 			return;
 		}
 	} else if (accept(i, NET)) {
-		if (!expect(i, CIDR)) {
+		if (!expect(i, ID)) {
 			mkerror(i, "Expected address");
 			return;
 		}
@@ -56,6 +56,11 @@ parse_query(struct query_input *i)
 		qualifier_without_dir(i);
 	} else if (accept(i, DST)) {
 		qualifier_without_dir(i);
+	} else if (accept(i, HOST)) {
+		if (!expect(i, ID)) {
+			mkerror(i, "Expected address after HOST");
+			return;
+		}
 	} else {
 		mkerror(i, "Unexpected token");
 	}
