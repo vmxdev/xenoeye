@@ -49,7 +49,7 @@ qualifier_without_dir(struct query_input *i)
 }
 
 void
-parse_query(struct query_input *i)
+parse_filter(struct query_input *i)
 {
 	read_token(i);
 	if (accept(i, SRC)) {
@@ -59,6 +59,11 @@ parse_query(struct query_input *i)
 	} else if (accept(i, HOST)) {
 		if (!expect(i, ID)) {
 			mkerror(i, "Expected address after HOST");
+			return;
+		}
+	} else if (accept(i, NET)) {
+		if (!expect(i, ID)) {
+			mkerror(i, "Expected address after NET");
 			return;
 		}
 	} else {

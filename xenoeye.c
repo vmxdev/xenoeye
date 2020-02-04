@@ -512,18 +512,6 @@ parse_netflow(struct xe_data *data, struct nf_packet_info *npi, int len)
 	return ret;
 }
 
-static int
-objects_init(void)
-{
-	struct query_input input;
-	input.s = "host 192.168.1.1";
-	parse_query(&input);
-	if (input.error) {
-		LOG("Parse error: %s", input.errmsg);
-	}
-
-	return 1;
-}
 
 static void
 print_usage(const char *progname)
@@ -562,7 +550,10 @@ main(int argc, char *argv[])
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
-	objects_init();
+	if (!monit_items_init(&data)) {
+		LOG("Can't init monitoring items, exiting");
+		return EXIT_FAILURE;
+	}
 
 	if (!netflow_templates_init()) {
 		LOG("Can't init templates storage, exiting");

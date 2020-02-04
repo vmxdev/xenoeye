@@ -2,6 +2,7 @@
 #define utils_h_included
 
 #include <syslog.h>
+#include <stdio.h>
 
 #define LOG(...)                                               \
 do {                                                           \

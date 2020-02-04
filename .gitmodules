@@ -1,3 +1,6 @@
 [submodule "tkvdb"]
 	path = tkvdb
 	url = https://github.com/vmxdev/tkvdb
+[submodule "aajson"]
+	path = aajson
+	url = https://github.com/vmxdev/aajson

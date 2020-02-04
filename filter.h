@@ -53,7 +53,7 @@ struct query_input
 	struct token current_token;
 };
 
-void parse_query(struct query_input *i);
+void parse_filter(struct query_input *i);
 void mkerror(struct query_input *i, char *msg);
 
 void read_token(struct query_input *i);
