@@ -111,8 +111,7 @@ monit_items_init(struct xe_data *data)
 	int ret = 1;
 	char midir[PATH_MAX] = "monit_items";
 	char mifile[PATH_MAX];
-/*
-*/
+
 	d = opendir(midir);
 	if (!d) {
 		LOG("Can't open directory with monitoring items '%s': %s",
