@@ -123,69 +123,73 @@ whitespace(struct query_input *q)
 	}
 }
 
+static int
+id_sym(int c)
+{
+	int stop_symbols[] = {' ', '\t', '\r', '\n', '(', ')', 0};
+	int *sptr = stop_symbols;
+
+	if (c == '\0') {
+		return 0;
+	}
+
+	while (*sptr) {
+		if (c == *sptr) {
+			return 0;
+		}
+		sptr++;
+	}
+
+	return 1;
+}
+
 void
 read_token(struct query_input *q)
 {
-	char *s_tmp;
-	int col_tmp;
-
 	q->current_token.str_len = 0;
 
 	EXPECT(q, whitespace);
 
-	s_tmp = q->s;
-	col_tmp = q->col;
-
-	if ((*(q->s) == 's') || (*(q->s) == 'S')) {
-		/* src */
-		EXPECT_SYM_IN_KW(q, 'r', 'R');
-		EXPECT_SYM_IN_KW(q, 'c', 'C');
-		q->current_token.id = SRC;
-	} else if ((*(q->s) == 'd') || (*(q->s) == 'D')) {
-		/* dst */
-		EXPECT_SYM_IN_KW(q, 's', 'S');
-		EXPECT_SYM_IN_KW(q, 't', 'T');
-		q->current_token.id = DST;
-	} else if ((*(q->s) == 'h') || (*(q->s) == 'H')) {
-		/* host */
-		EXPECT_SYM_IN_KW(q, 'o', 'O');
-		EXPECT_SYM_IN_KW(q, 's', 'S');
-		EXPECT_SYM_IN_KW(q, 't', 'T');
-		q->current_token.id = HOST;
-	} else if ((*(q->s) == 'n') || (*(q->s) == 'N')) {
-		/* net */
-		EXPECT_SYM_IN_KW(q, 'e', 'E');
-		EXPECT_SYM_IN_KW(q, 't', 'T');
-		q->current_token.id = NET;
-	} else if ((*(q->s) == 'p') || (*(q->s) == 'P')) {
-		/* port */
-		EXPECT_SYM_IN_KW(q, 'o', 'O');
-		EXPECT_SYM_IN_KW(q, 'r', 'R');
-		EXPECT_SYM_IN_KW(q, 't', 'T');
-		q->current_token.id = NET;
+	if (*(q->s) == '(') {
+		q->current_token.str_len = 1;
+		q->current_token.id = LPAREN;
+	} else if (*(q->s) == ')') {
+		q->current_token.str_len = 1;
+		q->current_token.id = RPAREN;
 	} else {
-		goto not_a_keyword;
+		/* read rest of token */
+		do {
+			q->current_token.data.str[q->current_token.str_len]
+				= *(q->s);
+			q->current_token.str_len++;
+
+			q->s++;
+			q->col++;
+		} while (id_sym(*(q->s)));
+	}
+	/* append trailing 0 */
+	q->current_token.data.str[q->current_token.str_len] = '\0';
+
+	if (strcasecmp(q->current_token.data.str, "src") == 0) {
+		q->current_token.id = SRC;
+	} else if (strcasecmp(q->current_token.data.str, "dst") == 0) {
+		q->current_token.id = DST;
+	} else if (strcasecmp(q->current_token.data.str, "host") == 0) {
+		q->current_token.id = HOST;
+	} else if (strcasecmp(q->current_token.data.str, "net") == 0) {
+		q->current_token.id = NET;
+	} else if (strcasecmp(q->current_token.data.str, "port") == 0) {
+		q->current_token.id = PORT;
+	} else if (strcasecmp(q->current_token.data.str, "or") == 0) {
+		q->current_token.id = OR;
+	} else if (strcasecmp(q->current_token.data.str, "and") == 0) {
+		q->current_token.id = AND;
+	} else if (strcasecmp(q->current_token.data.str, "not") == 0) {
+		q->current_token.id = NOT;
+	} else {
+		q->current_token.id = ID;
 	}
 
-	return;
-
-not_a_keyword:
-	/* id (address, name or number) */
-
-	/* restore input */
-	q->s = s_tmp;
-	q->col = col_tmp;
-	q->current_token.str_len = 0;
-
-	do {
-		q->current_token.data.str[q->current_token.str_len] = *(q->s);
-		q->current_token.str_len++;
-		q->s++;
-		q->col++;
-	} while ((*(q->s) != '\0') && (*(q->s) != ' ') && (*(q->s) != '\t')
-		&& (*(q->s) != '\r') && (*(q->s) != '\n')
-		&& (*(q->s) != '(') && (*(q->s) != ')'));
-
-	q->current_token.id = ID;
+	printf("token: '%s', id: %d\n", q->current_token.data.str, q->current_token.id);
 }
 

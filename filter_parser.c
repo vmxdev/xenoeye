@@ -51,8 +51,12 @@ qualifier_without_dir(struct query_input *i)
 void
 parse_filter(struct query_input *i)
 {
+	int not = 0;
+
 	read_token(i);
-	if (accept(i, SRC)) {
+	if (accept(i, NOT)) {
+		not = 1;
+	} else if (accept(i, SRC)) {
 		qualifier_without_dir(i);
 	} else if (accept(i, DST)) {
 		qualifier_without_dir(i);

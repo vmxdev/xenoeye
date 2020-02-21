@@ -550,6 +550,7 @@ main(int argc, char *argv[])
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
+	memset(&data, 0, sizeof(struct xe_data));
 	if (!monit_items_init(&data)) {
 		LOG("Can't init monitoring items, exiting");
 		return EXIT_FAILURE;

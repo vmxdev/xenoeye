@@ -3,6 +3,8 @@
 
 #include <limits.h>
 
+struct nf_flow_info;
+
 struct monit_item
 {
 	char name[PATH_MAX];
@@ -16,6 +18,8 @@ struct xe_data
 
 int monit_items_init(struct xe_data *data);
 int monit_items_free(struct xe_data *data);
+
+int monit_item_match(struct monit_item *mi, struct nf_flow_info *fi);
 
 #endif
 

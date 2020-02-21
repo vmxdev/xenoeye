@@ -33,29 +33,33 @@ static int
 monit_item_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
 	struct query_input input;
+	memset(&input, 0, sizeof(input));
 
 	char *key = a->path_stack[a->path_stack_pos].data.path_item;
 	(void)user;
 
-	if (strcmp(key, "filter") == 0) {
-		input.s = value->str;
-		parse_filter(&input);
-		if (input.error) {
-			LOG("Parse error: %s", input.errmsg);
-			return 0;
+	if (a->path_stack_pos == 1) {
+		if (strcmp(key, "filter") == 0) {
+			input.s = value->str;
+			parse_filter(&input);
+			if (input.error) {
+				LOG("Parse error: %s", input.errmsg);
+				return 0;
+			}
 		}
 	}
 	return 1;
 }
 
 static int
-monit_item_info_parse(struct xe_data *data, const char *fn)
+monit_item_info_parse(struct xe_data *data, const char *miname, const char *fn)
 {
 	FILE *f;
 	struct stat st;
 	size_t s;
 	char *json;
 	int ret = 0;
+	struct monit_item mi, *mitmp;
 
 	struct aajson a;
 
@@ -84,14 +88,29 @@ monit_item_info_parse(struct xe_data *data, const char *fn)
 	}
 
 	aajson_init(&a, json);
-	aajson_parse(&a, &monit_item_json_callback, data);
+	aajson_parse(&a, &monit_item_json_callback, &mi);
 	if (a.error) {
 		LOG("Can't parse json file '%s': %s", fn, a.errmsg);
 		goto fail_parse;
 	}
 
+	mitmp = realloc(data->monit_items, (data->nmonit_items + 1)
+		* sizeof(struct monit_item));
+	if (!mitmp) {
+		LOG("realloc() failed");
+		goto fail_realloc;
+	}
+
+	/* copy name of monitoring item */
+	strcpy(mi.name, miname);
+
+	data->monit_items = mitmp;
+	data->monit_items[data->nmonit_items] = mi;
+	data->nmonit_items++;
+
 	ret = 1;
 
+fail_realloc:
 fail_parse:
 fail_fread:
 	free(json);
@@ -111,6 +130,10 @@ monit_items_init(struct xe_data *data)
 	int ret = 1;
 	char midir[PATH_MAX] = "monit_items";
 	char mifile[PATH_MAX];
+
+	free(data->monit_items);
+	data->monit_items = NULL;
+	data->nmonit_items = 0;
 
 	d = opendir(midir);
 	if (!d) {
@@ -132,7 +155,7 @@ monit_items_init(struct xe_data *data)
 		sprintf(mifile, "%s/%s/info.json", midir, dir->d_name);
 		LOG("Adding monitoring item '%s'", dir->d_name);
 
-		if (!monit_item_info_parse(data, mifile)) {
+		if (!monit_item_info_parse(data, dir->d_name, mifile)) {
 			continue;
 		}
 	}

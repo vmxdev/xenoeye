@@ -9,12 +9,11 @@
 enum TOKEN_ID
 {
 	ID,
-	PLUS,
-	MINUS,
 	LPAREN,
 	RPAREN,
 	OR,
 	AND,
+	NOT,
 
 	SRC,
 	DST,
