@@ -24,18 +24,14 @@ do {                                    \
 	}                               \
 } while (0)
 
-#define EXPECT_SYM_IN_KW(I, C1, C2)                                         \
-do {                                                                        \
-	I->s++;                                                             \
-	if (*(I->s) == '\0') {                                              \
-		goto not_a_keyword;                                         \
-	}                                                                   \
-	if ((*(I->s) != C1) && ((*(I->s) != C2))) {                         \
-		goto not_a_keyword;                                         \
-	}                                                                   \
-	I->col++;                                                           \
-	I->current_token.data.str[I->current_token.str_len] = C1;           \
-	I->current_token.str_len++;                                         \
+#define SINGLE_SYM_TOKEN(I, T)                  \
+do {                                            \
+	I->current_token.data.str[0] = *(I->s); \
+	I->current_token.data.str[1] = '\0';    \
+	I->current_token.str_len = 1;           \
+	I->s++;                                 \
+	I->col++;                               \
+	I->current_token.id = T;                \
 } while (0)
 
 #define EXPECT(I, F)                    \
@@ -45,7 +41,7 @@ do {                                    \
 } while (0)
 
 static void
-c_style_comment(struct query_input *q)
+c_style_comment(struct filter_input *q)
 {
 	for (;;) {
 		q->s++;
@@ -72,7 +68,7 @@ c_style_comment(struct query_input *q)
 }
 
 static void
-one_line_comment(struct query_input *q)
+one_line_comment(struct filter_input *q)
 {
 	for (;;) {
 		q->s++;
@@ -90,7 +86,7 @@ one_line_comment(struct query_input *q)
 }
 
 static void
-whitespace(struct query_input *q)
+whitespace(struct filter_input *q)
 {
 	for (;;) {
 		CHECK_END(q);
@@ -144,18 +140,16 @@ id_sym(int c)
 }
 
 void
-read_token(struct query_input *q)
+read_token(struct filter_input *q)
 {
 	q->current_token.str_len = 0;
 
 	EXPECT(q, whitespace);
 
 	if (*(q->s) == '(') {
-		q->current_token.str_len = 1;
-		q->current_token.id = LPAREN;
+		SINGLE_SYM_TOKEN(q, LPAREN);
 	} else if (*(q->s) == ')') {
-		q->current_token.str_len = 1;
-		q->current_token.id = RPAREN;
+		SINGLE_SYM_TOKEN(q, RPAREN);
 	} else {
 		/* read rest of token */
 		do {
@@ -166,28 +160,32 @@ read_token(struct query_input *q)
 			q->s++;
 			q->col++;
 		} while (id_sym(*(q->s)));
-	}
-	/* append trailing 0 */
-	q->current_token.data.str[q->current_token.str_len] = '\0';
 
-	if (strcasecmp(q->current_token.data.str, "src") == 0) {
-		q->current_token.id = SRC;
-	} else if (strcasecmp(q->current_token.data.str, "dst") == 0) {
-		q->current_token.id = DST;
-	} else if (strcasecmp(q->current_token.data.str, "host") == 0) {
-		q->current_token.id = HOST;
-	} else if (strcasecmp(q->current_token.data.str, "net") == 0) {
-		q->current_token.id = NET;
-	} else if (strcasecmp(q->current_token.data.str, "port") == 0) {
-		q->current_token.id = PORT;
-	} else if (strcasecmp(q->current_token.data.str, "or") == 0) {
-		q->current_token.id = OR;
-	} else if (strcasecmp(q->current_token.data.str, "and") == 0) {
-		q->current_token.id = AND;
-	} else if (strcasecmp(q->current_token.data.str, "not") == 0) {
-		q->current_token.id = NOT;
-	} else {
-		q->current_token.id = ID;
+		q->current_token.data.str[q->current_token.str_len] = '\0';
+
+#define MATCH(S) strcasecmp(q->current_token.data.str, S) == 0
+
+		if (MATCH("src")) {
+			q->current_token.id = SRC;
+		} else if (MATCH("dst")) {
+			q->current_token.id = DST;
+		} else if (MATCH("host")) {
+			q->current_token.id = HOST;
+		} else if (MATCH("net")) {
+			q->current_token.id = NET;
+		} else if (MATCH("port")) {
+			q->current_token.id = PORT;
+		} else if (MATCH("or")) {
+			q->current_token.id = OR;
+		} else if (MATCH("and")) {
+			q->current_token.id = AND;
+		} else if (MATCH("not")) {
+			q->current_token.id = NOT;
+		} else {
+			q->current_token.id = ID;
+		}
+
+#undef MATCH
 	}
 
 	printf("token: '%s', id: %d\n", q->current_token.data.str, q->current_token.id);

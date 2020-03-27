@@ -7,4 +7,8 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h \
 	filter.c filter.h filter_lexer.c filter_parser.c \
 	monit_items.c
 
-TESTS = tests/test1
+# checks
+check_PROGRAMS = test_filters
+test_filters_SOURCES = tests/test_filters.c \
+	filter.c filter_lexer.c filter_parser.c
+TESTS = $(check_PROGRAMS)

@@ -32,14 +32,14 @@
 static int
 monit_item_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
-	struct query_input input;
-	memset(&input, 0, sizeof(input));
-
 	char *key = a->path_stack[a->path_stack_pos].data.path_item;
 	(void)user;
 
 	if (a->path_stack_pos == 1) {
 		if (strcmp(key, "filter") == 0) {
+			struct filter_input input;
+
+			memset(&input, 0, sizeof(input));
 			input.s = value->str;
 			parse_filter(&input);
 			if (input.error) {

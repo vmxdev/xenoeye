@@ -1,4 +1,4 @@
-AC_INIT([xenoeye], [20.02], [vm@xenoeye.com])
+AC_INIT([xenoeye], [20.03], [vm@xenoeye.com])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([check-news foreign silent-rules subdir-objects -Wall])
 

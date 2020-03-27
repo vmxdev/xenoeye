@@ -3,9 +3,9 @@
 #include "filter.h"
 
 void
-mkerror(struct query_input *i, char *msg)
+mkerror(struct filter_input *f, char *msg)
 {
-	i->error = 1;
-	sprintf(i->errmsg, "Line %d, col %d: %s", i->line, i->col, msg);
+	f->error = 1;
+	sprintf(f->errmsg, "Line %d, col %d: %s", f->line, f->col, msg);
 }
 

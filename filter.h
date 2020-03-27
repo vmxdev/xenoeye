@@ -1,5 +1,5 @@
-#ifndef query_h_included
-#define query_h_included
+#ifndef filter_h_included
+#define filter_h_included
 
 #include <stdint.h>
 
@@ -40,7 +40,7 @@ struct token
 	} data;
 };
 
-struct query_input
+struct filter_input
 {
 	char *s;
 	int end;
@@ -52,10 +52,10 @@ struct query_input
 	struct token current_token;
 };
 
-void parse_filter(struct query_input *i);
-void mkerror(struct query_input *i, char *msg);
+void parse_filter(struct filter_input *f);
+void mkerror(struct filter_input *f, char *msg);
 
-void read_token(struct query_input *i);
+void read_token(struct filter_input *f);
 
 #endif
 
