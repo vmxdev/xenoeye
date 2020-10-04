@@ -188,6 +188,6 @@ read_token(struct filter_input *q)
 #undef MATCH
 	}
 
-	printf("token: '%s', id: %d\n", q->current_token.data.str, q->current_token.id);
+	/*printf("token: '%s', id: %d\n", q->current_token.data.str, q->current_token.id);*/
 }
 

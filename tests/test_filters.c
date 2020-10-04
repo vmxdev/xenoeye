@@ -7,12 +7,17 @@ int
 main()
 {
 	struct filter_input q;
+	struct filter_expr *e;
 
 	memset(&q, 0, sizeof(struct filter_input));
 
 	q.s = "Src host 1.2.3.4 and (PORT 12345 or 54321) or "\
 		"dst host 4.3.2.1";
-	parse_filter(&q);
+	e = parse_filter(&q);
+	if (!e) {
+		printf("malloc() failed\n");
+		return EXIT_FAILURE;
+	}
 
 	if (q.error) {
 		printf("Parse error: %s\n", q.errmsg);

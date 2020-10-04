@@ -32,8 +32,10 @@
 static int
 monit_item_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
+	struct monit_item *mi;
 	char *key = a->path_stack[a->path_stack_pos].data.path_item;
-	(void)user;
+
+	mi = (struct monit_item *)user;
 
 	if (a->path_stack_pos == 1) {
 		if (strcmp(key, "filter") == 0) {
@@ -41,7 +43,7 @@ monit_item_json_callback(struct aajson *a, aajson_val *value, void *user)
 
 			memset(&input, 0, sizeof(input));
 			input.s = value->str;
-			parse_filter(&input);
+			mi->expr = parse_filter(&input);
 			if (input.error) {
 				LOG("Parse error: %s", input.errmsg);
 				return 0;
@@ -63,6 +65,7 @@ monit_item_info_parse(struct xe_data *data, const char *miname, const char *fn)
 
 	struct aajson a;
 
+	/* read entire file in memory */
 	f = fopen(fn, "r");
 	if (!f) {
 		LOG("Can't open info file '%s': %s", fn, strerror(errno));
@@ -87,6 +90,7 @@ monit_item_info_parse(struct xe_data *data, const char *miname, const char *fn)
 		goto fail_fread;
 	}
 
+	/* parse */
 	aajson_init(&a, json);
 	aajson_parse(&a, &monit_item_json_callback, &mi);
 	if (a.error) {

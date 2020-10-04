@@ -122,7 +122,6 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 	struct nf9_template_item *tmpl;
 	struct template_key tkey;
 	int template_field_count;
-	int flow_unknown = 1;
 
 	LOG("v9 data, flowset: %d, length == %d, count = %d",
 		ntohs(flowset_id), length, count);
@@ -139,13 +138,17 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 
 	fptr = (*ptr);
 	for (cnt=0; cnt<count; cnt++) {
+		struct nf_flow_info flow;
+
+		memset(&flow, 0, sizeof(struct nf_flow_info));
+
 		LOG("Flowset #%d", cnt);
 		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
 
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
-
+#if 1
 			if (ftype == 21) {
 				uint32_t last_uptime;
 
@@ -155,8 +158,8 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 				}
 				memcpy(&last_uptime, fptr, flength);
 				last_uptime = ntohl(last_uptime);
-				LOG("LAST SWITCHED: %u",
-					npi->uptime - last_uptime);
+				LOG("LAST SWITCHED1: %u",
+					/*npi->uptime - */last_uptime);
 			}
 			if (ftype == 22) {
 				uint32_t first_uptime;
@@ -170,23 +173,47 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 				LOG("FIRST SWITCHED: %u",
 					npi->uptime - first_uptime);
 			}
-
-			if (flow_unknown) {
 /*
-				npi->flows[npi->nflows].unktype = ftype;
-				npi->flows[npi->nflows].length = flength;
-				memcpy(npi->flows[npi->nflows].value, 
-					fptr, flength);
-*/
-			}
-
 			LOG("Field type: %d, length == %d, first byte == %d",
 				ftype, flength, fptr[0]);
+*/
+#endif
+
+#define NF_V9_FIELD(NAME, FIELDTYPE, SIZEMIN, SIZEMAX)                        \
+if (ftype == FIELDTYPE) {                                                     \
+	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
+		LOG("Incorrect '" #NAME                                       \
+			"' field size (got %d, expected from %d to %d)",      \
+			flength, SIZEMIN, SIZEMAX);                           \
+	} else {                                                              \
+		if (flength == 2) {                                           \
+			uint16_t tmp = ntohs(*((uint16_t *)fptr));            \
+			memcpy(flow.NAME, &tmp, flength);                     \
+		} else if (flength == 4) {                                    \
+			uint32_t tmp = ntohl(*((uint32_t *)fptr));            \
+			memcpy(flow.NAME, &tmp, flength);                     \
+		} else {                                                      \
+			memcpy(&flow.NAME, fptr, flength);                    \
+		}                                                             \
+		LOG("Field: '"#NAME"', length: %d", flength);                 \
+		flow.has_##NAME = 1;                                          \
+	}                                                                     \
+}
+#include "netflow_v9.def"
+
 			fptr += flength;
 
 			if ((fptr - (*ptr)) >= length) {
 				break;
 			}
+		}
+
+		if (flow.has_last_switched) {
+			uint32_t *time = (uint32_t *)flow.last_switched;
+			LOG("LAST SWITCHED: %d (%u/%d)",
+			npi->uptime - (unsigned int)*time,
+			(unsigned int)*time,
+			npi->uptime);
 		}
 	}
 	(*ptr) += length;
@@ -358,18 +385,17 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 	fptr = (*ptr);
 
 	while (!stop) {
-		struct nf_flow_info flow_info;
+/*		struct nf_flow_info flow_info;*/
 
 		if ((length - (fptr - (*ptr))) < template_field_count) {
 			break;
 		}
 
 		LOG("flow #%d", flow_num);
-		memset(&flow_info, 0, sizeof(flow_info));
+/*		memset(&flow_info, 0, sizeof(flow_info));*/
 
 		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
-			int known = 0;
 
 			flength = ntohs(tmpl->elements[i].length);
 			ftype = ntohs(tmpl->elements[i].id);
@@ -380,7 +406,7 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 				memcpy(&packets, fptr, flength);
 				packets = be64toh(packets);
 				LOG("packets: %lu", packets);
-				flow_info.packets = packets;
+/*				flow_info.packets = packets;*/
 			}
 			if (ftype == 153) {
 				uint64_t last_uptime;
@@ -389,7 +415,7 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 				last_uptime = be64toh(last_uptime);
 				LOG("flowStartMilliseconds: %lu (uptime: %u)",
 					 last_uptime, npi->uptime);
-				flow_info.end = last_uptime;
+/*				flow_info.end = last_uptime;*/
 			}
 			if (ftype == 152) {
 				uint64_t first_uptime;
@@ -398,16 +424,7 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 				first_uptime = be64toh(first_uptime);
 				LOG("flowEndMilliseconds: %lu",
 					first_uptime);
-				flow_info.start = first_uptime;
-			}
-
-			if (!known) {
-/*
-				npi->flows[npi->nflows].type = ftype;
-				npi->flows[npi->nflows].length = flength;
-				memcpy(npi->flows[npi->nflows].value,
-					fptr, flength);
-*/
+/*				flow_info.start = first_uptime;*/
 			}
 
 			LOG("Field type: %d, length == %d, first byte == %d",
@@ -420,7 +437,7 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 			}
 		}
 		flow_num++;
-		printf("%lu %lu\n", flow_info.end / 1000, flow_info.packets);
+/*		printf("%lu %lu\n", flow_info.end / 1000, flow_info.packets);*/
 	}
 	return 1;
 }

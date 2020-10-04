@@ -95,15 +95,6 @@ struct nf10_flowset_header
 	uint16_t length;
 } PACKED;
 
-/* netflow packet with header on disk */
-struct nf_packet_on_disk
-{
-	uint16_t header_size, packet_size;
-	uint32_t src_ip_v4;
-	uint16_t dst_port;
-
-	uint8_t packet[MAX_NF_PACKET_SIZE];
-} PACKED;
 
 #ifdef _MSC_VER
 #pragma pack(pop)
@@ -112,12 +103,12 @@ struct nf_packet_on_disk
 #undef PACKED
 #endif
 
-
 struct nf_flow_info
 {
-	uint32_t ipv4_addr;
-	uint64_t packets, octets;
-	uint64_t start, end;
+#define NF_V9_FIELD(NAME, FIELDTYPE, SIZEMIN, SIZEMAX)     \
+	uint8_t NAME[SIZEMAX];                             \
+	int has_##NAME;
+#include "netflow_v9.def"
 };
 
 struct nf_packet_info

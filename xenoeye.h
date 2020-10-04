@@ -4,10 +4,12 @@
 #include <limits.h>
 
 struct nf_flow_info;
+struct filter_expr;
 
 struct monit_item
 {
 	char name[PATH_MAX];
+	struct filter_expr *expr;
 };
 
 struct xe_data
