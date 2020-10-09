@@ -182,7 +182,32 @@ read_token(struct filter_input *q)
 		} else if (MATCH("not")) {
 			q->current_token.id = NOT;
 		} else {
-			q->current_token.id = ID;
+			/* check if it int or range */
+			char *endptr;
+			long int res;
+
+			res = strtol(q->current_token.data.str, &endptr, 0);
+			if (*endptr == '\0') {
+				/* number */
+				q->current_token.id = INT_RANGE;
+				q->current_token.data.range.low
+					= q->current_token.data.range.high
+					= res;
+			} else if (*endptr == '-') {
+				long int res2;
+				char *endptr2;
+
+				res2 = strtol(endptr + 1, &endptr2, 0);
+				if (*endptr2 == '\0') {
+					q->current_token.id = INT_RANGE;
+					q->current_token.data.range.low = res;
+					q->current_token.data.range.high = res2;
+				} else {
+					q->current_token.id = ID;
+				}
+			} else {
+				q->current_token.id = ID;
+			}
 		}
 
 #undef MATCH

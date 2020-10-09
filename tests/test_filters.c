@@ -15,7 +15,7 @@ main()
 		"dst host 4.3.2.1";
 	e = parse_filter(&q);
 	if (!e) {
-		printf("malloc() failed\n");
+		printf("Filter allocation failed\n");
 		return EXIT_FAILURE;
 	}
 
@@ -23,6 +23,10 @@ main()
 		printf("Parse error: %s\n", q.errmsg);
 		return EXIT_FAILURE;
 	}
+
+	/*filter_dump(e, stdout);*/
+
+	filter_free(e);
 
 	return EXIT_SUCCESS;
 }

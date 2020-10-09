@@ -24,6 +24,7 @@ struct int_range
 enum TOKEN_ID
 {
 	ID,
+	INT_RANGE,
 	LPAREN,
 	RPAREN,
 	OR,
@@ -43,13 +44,16 @@ struct token
 	int str_len;
 	union token_data {
 		char str[TOKEN_MAX_SIZE];
-		int num;
-		struct int_range prange;
+		struct int_range range;
 		struct CIDR cidr;
 	} data;
 };
 
 /* filter_simple */
+#define FILTER_SIMPLE_DIR_SRC  1
+#define FILTER_SIMPLE_DIR_DST  2
+#define FILTER_SIMPLE_DIR_BOTH (FILTER_SIMPLE_DIR_SRC | FILTER_SIMPLE_DIR_DST)
+
 union filter_simple_data
 {
 	struct int_range range;
@@ -59,12 +63,13 @@ union filter_simple_data
 enum FILTER_SIMPLE_TYPE
 {
 	FILTER_SIMPLE_NET,
-	FILTER_SIMPLE_PORT
+	FILTER_SIMPLE_RANGE
 };
 
 struct filter_simple
 {
 	enum FILTER_SIMPLE_TYPE type;
+	int direction;
 	size_t n;
 	union filter_simple_data *data;
 };
@@ -107,6 +112,14 @@ struct filter_expr *parse_filter(struct filter_input *f);
 void mkerror(struct filter_input *f, char *msg);
 
 void read_token(struct filter_input *f);
+
+int filter_add_simple_filter(struct filter_expr *e,
+	enum FILTER_SIMPLE_TYPE type, int dir);
+int filter_add_to_simple_filter(struct filter_expr *e, struct token *tok);
+int filter_add_op(struct filter_expr *e, enum FILTER_OP op);
+
+void filter_dump(struct filter_expr *e, FILE *f);
+void filter_free(struct filter_expr *e);
 
 #endif
 
