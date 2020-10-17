@@ -5,6 +5,8 @@
 #include <arpa/inet.h>
 
 #include "filter.h"
+#include "netflow.h"
+#include "utils.h"
 
 void
 mkerror(struct filter_input *f, char *msg)
@@ -14,20 +16,21 @@ mkerror(struct filter_input *f, char *msg)
 }
 
 int
-filter_add_simple_filter(struct filter_expr *e, enum FILTER_SIMPLE_TYPE type,
-	int dir)
+filter_add_basic_filter(struct filter_expr *e, enum FILTER_BASIC_TYPE type,
+	enum FILTER_BASIC_NAME name, int dir)
 {
 	struct filter_op *tmpfo;
-	struct filter_simple *fs;
+	struct filter_basic *fb;
 
-	fs = malloc(sizeof(struct filter_simple));
-	if (!fs) {
+	fb = malloc(sizeof(struct filter_basic));
+	if (!fb) {
 		goto fail_filter_malloc;
 	}
-	fs->type = type;
-	fs->n = 0;
-	fs->data = NULL;
-	fs->direction = dir;
+	fb->type = type;
+	fb->name = name;
+	fb->n = 0;
+	fb->data = NULL;
+	fb->direction = dir;
 
 
 	tmpfo = realloc(e->filter, sizeof(struct filter_op) * (e->n + 1));
@@ -36,14 +39,14 @@ filter_add_simple_filter(struct filter_expr *e, enum FILTER_SIMPLE_TYPE type,
 	}
 	e->filter = tmpfo;
 
-	e->filter[e->n].op = FILTER_OP_SIMPLE;
-	e->filter[e->n].arg = fs;
+	e->filter[e->n].op = FILTER_OP_BASIC;
+	e->filter[e->n].arg = fb;
 	e->n++;
 
 	return 1;
 
 fail_realloc:
-	free(fs);
+	free(fb);
 fail_filter_malloc:
 	return 0;
 }
@@ -53,8 +56,21 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 {
 	int rc;
 	struct in6_addr hostaddr;
+	char *mask;
 
-	/* TODO: add mask and getaddrinfo */
+	mask = strchr(host, '/');
+	if (mask) {
+		char *endptr;
+		*mask = '\0';
+		mask++;
+		cidr->mask = strtol(mask, &endptr, 10);
+		if (*endptr != '\0') {
+			/* incorrect mask */
+			return 0;
+		}
+	}
+
+	/* TODO: add getaddrinfo */
 	rc = inet_pton(AF_INET, host, &hostaddr);
 	if (rc == 1) {
 		/* IPv4 */
@@ -75,42 +91,42 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 }
 
 int
-filter_add_to_simple_filter(struct filter_expr *e, struct token *tok)
+filter_add_to_basic_filter(struct filter_expr *e, struct token *tok)
 {
 	struct filter_op *fo;
-	struct filter_simple *fs;
-	union filter_simple_data *tmpfsd;
+	struct filter_basic *fb;
+	union filter_basic_data *tmpfbd;
 
 	if (e->n < 1) {
 		return 0;
 	}
 
 	fo = &(e->filter[e->n - 1]);
-	if (fo->op != FILTER_OP_SIMPLE) {
+	if (fo->op != FILTER_OP_BASIC) {
 		return 0;
 	}
 
-	fs = fo->arg;
-	tmpfsd = realloc(fs->data,
-		sizeof(union filter_simple_data) * (fs->n + 1));
-	if (!tmpfsd) {
+	fb = fo->arg;
+	tmpfbd = realloc(fb->data,
+		sizeof(union filter_basic_data) * (fb->n + 1));
+	if (!tmpfbd) {
 		return 0;
 	}
 
-	fs->data = tmpfsd;
+	fb->data = tmpfbd;
 	if (tok->id == ID) {
 		if (!filter_id_to_addr(tok->data.str,
-			&(fs->data[fs->n].cidr))) {
+			&(fb->data[fb->n].cidr))) {
 
 			return 0;
 		}
 	} else if (tok->id == INT_RANGE) {
-		fs->data[fs->n].range.low = tok->data.range.low;
-		fs->data[fs->n].range.high = tok->data.range.high;
+		fb->data[fb->n].range.low = tok->data.range.low;
+		fb->data[fb->n].range.high = tok->data.range.high;
 	} else {
 		return 0;
 	}
-	fs->n++;
+	fb->n++;
 
 	return 1;
 }
@@ -136,18 +152,232 @@ fail_realloc:
 	return 0;
 }
 
+static int
+filter_basic_match_addr(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	void *addr4, *addr6;
+	void *addr4_second = NULL, *addr6_second = NULL;
+
+	switch (fb->name) {
+#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D)                \
+		case FILTER_BASIC_NAME_##NAME:                               \
+			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
+				addr4 = flow->IP4S;                          \
+				addr6 = flow->IP6S;                          \
+			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
+				addr4 = flow->IP4D;                          \
+				addr6 = flow->IP6D;                          \
+			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
+				addr4 = flow->IP4S;                          \
+				addr6 = flow->IP6S;                          \
+				addr4_second = flow->IP4D;                   \
+				addr6_second = flow->IP6D;                   \
+			} else {                                             \
+				return 0;                                    \
+			}                                                    \
+			break;
+#include "filter.def"
+		default:
+			return 0;
+	}
+
+	/* TODO: add mask */
+	for (i=0; i<fb->n; i++) {
+		if (fb->data[i].cidr.version == 4) {
+			if (fb->direction == FILTER_BASIC_DIR_BOTH) {
+				if (memcmp(addr4,
+					fb->data[i].cidr.ipv4, 4) == 0) {
+					return 1;
+				}
+				if (memcmp(addr4_second,
+					fb->data[i].cidr.ipv4, 4) == 0) {
+					return 1;
+				}
+			} else {
+				if (memcmp(addr4,
+					fb->data[i].cidr.ipv4, 4) == 0) {
+					return 1;
+				}
+			}
+		} else if (fb->data[i].cidr.version == 6) {
+			if (fb->direction == FILTER_BASIC_DIR_BOTH) {
+				if (memcmp(addr6,
+					fb->data[i].cidr.ipv6, 16) == 0) {
+					return 1;
+				}
+				if (memcmp(addr6_second,
+					fb->data[i].cidr.ipv6, 16) == 0) {
+					return 1;
+				}
+			} else {
+				if (memcmp(addr6,
+					fb->data[i].cidr.ipv6, 16) == 0) {
+					return 1;
+				}
+			}
+		} else {
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+static int
+filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	int r1, r2;
+
+	void *tmp;
+
+	switch (fb->name) {
+#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D)                \
+		case FILTER_BASIC_NAME_##NAME:                               \
+			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
+				tmp = flow->IP4S;                            \
+				if (flow->IP4S##_size == 1) {                \
+					r1 = *((uint8_t *)tmp);              \
+				} else if (flow->IP4S##_size == 2) {         \
+					r1 = ntohs(*((uint16_t *)tmp));      \
+				} else if (flow->IP4S##_size == 4) {         \
+					r1 = ntohl(*((uint32_t *)tmp));      \
+				}                                            \
+			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
+				tmp = flow->IP4D;                            \
+				if (flow->IP4D##_size == 1) {                \
+					r1 = *((uint8_t *)tmp);              \
+				} else if (flow->IP4D##_size == 2) {         \
+					r1 = ntohs(*((uint16_t *)tmp));      \
+				} else if (flow->IP4D##_size == 4) {         \
+					r1 = ntohl(*((uint32_t *)tmp));      \
+				}                                            \
+			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
+				tmp = flow->IP4S;                            \
+				if (flow->IP4S##_size == 1) {                \
+					r1 = *((uint8_t *)tmp);              \
+				} else if (flow->IP4S##_size == 2) {         \
+					r1 = ntohs(*((uint16_t *)tmp));      \
+				} else if (flow->IP4S##_size == 4) {         \
+					r1 = ntohl(*((uint32_t *)tmp));      \
+				}                                            \
+				tmp = flow->IP4D;                            \
+				if (flow->IP4D##_size == 1) {                \
+					r1 = *((uint8_t *)tmp);              \
+				} else if (flow->IP4D##_size == 2) {         \
+					r2 = ntohs(*((uint16_t *)tmp));      \
+				} else if (flow->IP4D##_size == 4) {         \
+					r2 = ntohl(*((uint32_t *)tmp));      \
+				}                                            \
+			} else {                                             \
+				return 0;                                    \
+			}                                                    \
+			break;
+#include "filter.def"
+		default:
+			return 0;
+	}
+
+	for (i=0; i<fb->n; i++) {
+		if (fb->direction != FILTER_BASIC_DIR_BOTH) {
+			if ((r1 >= fb->data[i].range.low)
+				&& (r1 <= fb->data[i].range.high)) {
+				return 1;
+			}
+		} else {
+			if ((r1 >= fb->data[i].range.low)
+				&& (r1 <= fb->data[i].range.high)) {
+				return 1;
+			}
+			if ((r2 >= fb->data[i].range.low)
+				&& (r2 <= fb->data[i].range.high)) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+
+static int
+filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	int ret = 0;
+
+	if (fb->type == FILTER_BASIC_ADDR) {
+		ret = filter_basic_match_addr(fb, flow);
+	} else if (fb->type == FILTER_BASIC_RANGE) {
+		ret = filter_basic_match_range(fb, flow);
+	} else {
+		/* unknown filter type */
+	}
+
+	return ret;
+}
+
+int
+filter_match(struct filter_expr *expr, struct nf_flow_info *flow)
+{
+	size_t i;
+	int ret;
+	int *stack = alloca(expr->n * sizeof(int));
+	size_t sp = 0;
+
+	for (i=0; i<expr->n; i++) {
+		struct filter_op *op = &expr->filter[i];
+		switch (op->op) {
+			case FILTER_OP_BASIC:
+				stack[sp] = filter_basic_match(op->arg, flow);
+				sp++;
+				break;
+			case FILTER_OP_NOT:
+				if (sp < 1) {
+					return 0;
+				}
+				stack[sp] = ~stack[sp];
+				break;
+			case FILTER_OP_AND:
+				if (sp < 2) {
+					return 0;
+				}
+				stack[sp - 1] &= stack[sp];
+				sp--;
+				break;
+			case FILTER_OP_OR:
+				if (sp < 2) {
+					return 0;
+				}
+				stack[sp - 1] |= stack[sp];
+				sp--;
+				break;
+			default:
+				return 0;
+		}
+	}
+
+	if (sp != 1) {
+		ret = 0;
+	} else {
+		ret = stack[0];
+	}
+
+	return ret;
+}
+
 void
 filter_free(struct filter_expr *e)
 {
 	size_t i;
-	struct filter_simple *fs;
+	struct filter_basic *fb;
 
 	for (i=0; i<e->n; i++) {
-		fs = e->filter[i].arg;
-		if (fs) {
-			free(fs->data);
-			fs->data = NULL;
-			free(fs);
+		fb = e->filter[i].arg;
+		if (fb) {
+			free(fb->data);
+			fb->data = NULL;
+			free(fb);
 		}
 		e->filter[i].arg = NULL;
 	}
@@ -174,7 +404,7 @@ filter_dump_addr(struct CIDR *cidr, FILE *f)
 		for (i=0; i<16; i++) {
 			fprintf(f, "%d", cidr->ipv6[i]);
 			if (i != 15) {
-				fprintf(f, ".");
+				fprintf(f, ":");
 			}
 		}
 	} else {
@@ -183,35 +413,44 @@ filter_dump_addr(struct CIDR *cidr, FILE *f)
 }
 
 static void
-filter_dump_simple(struct filter_simple *fs, FILE *f)
+filter_dump_basic(struct filter_basic *fb, FILE *f)
 {
 	size_t i;
 
-	if (fs->direction == FILTER_SIMPLE_DIR_SRC) {
+	if (fb->direction == FILTER_BASIC_DIR_SRC) {
 		fprintf(f, "SRC ");
-	} else if (fs->direction == FILTER_SIMPLE_DIR_DST) {
+	} else if (fb->direction == FILTER_BASIC_DIR_DST) {
 		fprintf(f, "DST ");
-	} else if (fs->direction == FILTER_SIMPLE_DIR_BOTH) {
+	} else if (fb->direction == FILTER_BASIC_DIR_BOTH) {
 		fprintf(f, "SRC OR DST ");
 	} else {
-		fprintf(f, "<Unknown direction %d> ", fs->direction);
+		fprintf(f, "<Unknown direction %d> ", fb->direction);
 	}
 
-	if (fs->type == FILTER_SIMPLE_NET) {
-		fprintf(f, "NET");
+	switch (fb->name) {
 
-		for (i=0; i<fs->n; i++) {
-			filter_dump_addr(&(fs->data[i].cidr), f);
+#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D) \
+		case FILTER_BASIC_NAME_##NAME:                \
+			fprintf(f, #STR" ");                  \
+			break;
+#include "filter.def"
+
+		default:
+			fprintf(f, "<Unknown name %d> ", fb->name);
+			break;
+	}
+
+	if (fb->type == FILTER_BASIC_ADDR) {
+		for (i=0; i<fb->n; i++) {
+			filter_dump_addr(&(fb->data[i].cidr), f);
 		}
-	} else if (fs->type == FILTER_SIMPLE_RANGE) {
-		fprintf(f, "RANGE");
-
-		for (i=0; i<fs->n; i++) {
-			fprintf(f, " %d-%d", fs->data[i].range.low,
-				fs->data[i].range.high);
+	} else if (fb->type == FILTER_BASIC_RANGE) {
+		for (i=0; i<fb->n; i++) {
+			fprintf(f, " %d-%d", fb->data[i].range.low,
+				fb->data[i].range.high);
 		}
 	} else {
-		fprintf(f, "<Unknown type %d>", fs->type);
+		fprintf(f, "<Unknown type %d>", fb->type);
 	}
 
 	fprintf(f, "\n");
@@ -221,13 +460,13 @@ void
 filter_dump(struct filter_expr *e, FILE *f)
 {
 	size_t i;
-	struct filter_simple *fs;
+	struct filter_basic *fb;
 
 	for (i=0; i<e->n; i++) {
 		switch (e->filter[i].op) {
-			case FILTER_OP_SIMPLE:
-				fs = e->filter[i].arg;
-				filter_dump_simple(fs, f);
+			case FILTER_OP_BASIC:
+				fb = e->filter[i].arg;
+				filter_dump_basic(fb, f);
 				break;
 
 			case FILTER_OP_NOT:

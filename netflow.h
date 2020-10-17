@@ -107,6 +107,7 @@ struct nf_flow_info
 {
 #define NF_V9_FIELD(NAME, FIELDTYPE, SIZEMIN, SIZEMAX)     \
 	uint8_t NAME[SIZEMAX];                             \
+	int NAME##_size;                                   \
 	int has_##NAME;
 #include "netflow_v9.def"
 };

@@ -105,6 +105,7 @@ monit_item_info_parse(struct xe_data *data, const char *miname, const char *fn)
 		goto fail_realloc;
 	}
 
+	filter_dump(mi.expr, stdout);
 	/* copy name of monitoring item */
 	strcpy(mi.name, miname);
 

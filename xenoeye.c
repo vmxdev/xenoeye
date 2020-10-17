@@ -72,6 +72,16 @@ make_template_key(struct template_key *tkey, uint16_t template_id,
 
 
 static int
+table_process(struct filter_expr *expr, struct nf_flow_info *flow)
+{
+	int ret;
+
+	ret = filter_match(expr, flow);
+	LOG("MATCH: %d", ret);
+	return ret;
+}
+
+static int
 parse_netflow_v9_template(struct nf_packet_info *npi, uint8_t **ptr,
 	int length)
 {
@@ -114,14 +124,15 @@ parse_netflow_v9_template(struct nf_packet_info *npi, uint8_t **ptr,
 }
 
 static int
-parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
-	int flowset_id, int length, int count)
+parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
+	uint8_t **ptr, int flowset_id, int length, int count)
 {
 	uint8_t *fptr;
 	int cnt, i;
 	struct nf9_template_item *tmpl;
 	struct template_key tkey;
 	int template_field_count;
+	size_t t_id;
 
 	LOG("v9 data, flowset: %d, length == %d, count = %d",
 		ntohs(flowset_id), length, count);
@@ -148,7 +159,7 @@ parse_netflow_v9_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
-#if 1
+#if 0
 			if (ftype == 21) {
 				uint32_t last_uptime;
 
@@ -186,26 +197,24 @@ if (ftype == FIELDTYPE) {                                                     \
 			"' field size (got %d, expected from %d to %d)",      \
 			flength, SIZEMIN, SIZEMAX);                           \
 	} else {                                                              \
-		if (flength == 2) {                                           \
-			uint16_t tmp = ntohs(*((uint16_t *)fptr));            \
-			memcpy(flow.NAME, &tmp, flength);                     \
-		} else if (flength == 4) {                                    \
-			uint32_t tmp = ntohl(*((uint32_t *)fptr));            \
-			memcpy(flow.NAME, &tmp, flength);                     \
-		} else {                                                      \
-			memcpy(&flow.NAME, fptr, flength);                    \
-		}                                                             \
+		memcpy(&flow.NAME, fptr, flength);                            \
 		LOG("Field: '"#NAME"', length: %d", flength);                 \
 		flow.has_##NAME = 1;                                          \
+		flow.NAME##_size = flength;                                   \
 	}                                                                     \
 }
 #include "netflow_v9.def"
+
 
 			fptr += flength;
 
 			if ((fptr - (*ptr)) >= length) {
 				break;
 			}
+		}
+
+		for (t_id=0; t_id<data->nmonit_items; t_id++) {
+			table_process(data->monit_items[t_id].expr, &flow);
 		}
 
 		if (flow.has_last_switched) {
@@ -264,8 +273,8 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
 			LOG("options template");
 			break;
 		} else {
-			if (!parse_netflow_v9_flowset(npi, &ptr, flowset_id,
-				length, count)) {
+			if (!parse_netflow_v9_flowset(data, npi, &ptr,
+				flowset_id, length, count)) {
 
 				break;
 			}

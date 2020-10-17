@@ -49,7 +49,7 @@ id(struct filter_input *f, struct filter_expr *e)
 		return 0;
 	}
 
-	filter_add_to_simple_filter(e, &f->current_token);
+	filter_add_to_basic_filter(e, &f->current_token);
 
 	READ_TOKEN_CHECK(f);
 
@@ -62,7 +62,7 @@ id(struct filter_input *f, struct filter_expr *e)
 		if ((f->current_token.id == ID)
 			|| (f->current_token.id == INT_RANGE)) {
 
-			filter_add_to_simple_filter(e, &f->current_token);
+			filter_add_to_basic_filter(e, &f->current_token);
 
 			READ_TOKEN_CHECK(f);
 			continue;
@@ -79,15 +79,16 @@ id(struct filter_input *f, struct filter_expr *e)
 static int
 rule_without_direction(struct filter_input *q, struct filter_expr *e, int dir)
 {
-	if (accept(q, HOST)) {
-		filter_add_simple_filter(e, FILTER_SIMPLE_NET, dir);
+
+	if (0) {
+
+#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D)         \
+	} else if (accept(q, NAME)) {                                 \
+		filter_add_basic_filter(e, FILTER_BASIC_##TYPE,       \
+			FILTER_BASIC_NAME_##NAME, dir);               \
 		return id(q, e);
-	} else if (accept(q, NET)) {
-		filter_add_simple_filter(e, FILTER_SIMPLE_NET, dir);
-		return id(q, e);
-	} else if (accept(q, PORT)) {
-		filter_add_simple_filter(e, FILTER_SIMPLE_RANGE, dir);
-		return id(q, e);
+#include "filter.def"
+
 	}
 
 	return 0;
@@ -96,14 +97,14 @@ rule_without_direction(struct filter_input *q, struct filter_expr *e, int dir)
 static int
 rule(struct filter_input *q, struct filter_expr *e)
 {
-	if (rule_without_direction(q, e, FILTER_SIMPLE_DIR_BOTH)) {
+	if (rule_without_direction(q, e, FILTER_BASIC_DIR_BOTH)) {
 		return 1;
 	}
 
 	if (accept(q, SRC)) {
-		return rule_without_direction(q, e, FILTER_SIMPLE_DIR_SRC);
+		return rule_without_direction(q, e, FILTER_BASIC_DIR_SRC);
 	} else if (accept(q, DST)) {
-		return rule_without_direction(q, e, FILTER_SIMPLE_DIR_DST);
+		return rule_without_direction(q, e, FILTER_BASIC_DIR_DST);
 	} else {
 		return 0;
 	}

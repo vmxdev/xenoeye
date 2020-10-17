@@ -24,7 +24,7 @@ main()
 		return EXIT_FAILURE;
 	}
 
-	/*filter_dump(e, stdout);*/
+	filter_dump(e, stdout);
 
 	filter_free(e);
 

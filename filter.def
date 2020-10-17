@@ -1,0 +1,6 @@
+/*           NAME	STR		TYPE	IPv4 SRC	IPv4 DST	IPv6 SRC	IPv6 DST */
+FILTER_FIELD(HOST,	"host",		ADDR,	ip4_src_addr,	ip4_dst_addr,	ip6_src_addr,	ip6_dst_addr)
+FILTER_FIELD(NET,	"net",		ADDR,	ip4_src_addr,   ip4_dst_addr,   ip6_src_addr,   ip6_dst_addr)
+FILTER_FIELD(PORT,	"port",		RANGE,	l4_src_port,	l4_dst_port,	l4_src_port,	l4_dst_port)
+FILTER_FIELD(PROTO,	"proto",	RANGE,	protocol,	protocol,	protocol,	protocol)
+#undef FILTER_FIELD

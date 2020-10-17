@@ -169,12 +169,12 @@ read_token(struct filter_input *q)
 			q->current_token.id = SRC;
 		} else if (MATCH("dst")) {
 			q->current_token.id = DST;
-		} else if (MATCH("host")) {
-			q->current_token.id = HOST;
-		} else if (MATCH("net")) {
-			q->current_token.id = NET;
-		} else if (MATCH("port")) {
-			q->current_token.id = PORT;
+
+#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D) \
+		} else if (MATCH(STR)) {                      \
+			q->current_token.id = NAME;
+		#include "filter.def"
+
 		} else if (MATCH("or")) {
 			q->current_token.id = OR;
 		} else if (MATCH("and")) {
