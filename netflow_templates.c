@@ -34,7 +34,7 @@ netflow_templates_init(void)
 {
 	db = tkvdb_open(TEMPLATES_DBFILE, NULL);
 	if (!db) {
-		LOG("Can't create transaction");
+		LOG("Can't open database");
 		goto fail_db;
 	}
 
@@ -78,9 +78,9 @@ netflow_template_find(struct template_key *tkey)
 		size_t sk = tkey->size - sizeof(uint32_t);
 		if (memcmp(c->key(c), tkey->data, sk) == 0) {
 			ret = c->val(c);
-			c->free(c);
 		}
 	}
+	c->free(c);
 
 	return ret;
 }
@@ -98,9 +98,11 @@ netflow_template_add(struct template_key *tkey, void *t, size_t size)
 	dtv.size = size;
 
 	if (tr->put(tr, &dtk, &dtv) != TKVDB_OK) {
+		LOG("Can't put template in storage");
 		return 0;
 	}
 	if (tr->commit(tr) != TKVDB_OK) {
+		LOG("Can't commit data transaction");
 		return 0;
 	}
 	tr->begin(tr);

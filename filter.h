@@ -8,12 +8,26 @@
 
 struct nf_flow_info;
 
+struct ipv4_addr_and_mask
+{
+	uint32_t addr;
+	uint32_t mask;
+};
+
+struct ipv6_addr_and_mask
+{
+	uint64_t addr[2];
+	uint64_t mask[2];
+};
+
 struct CIDR
 {
 	int version;
-	uint8_t ipv4[4];
-	uint8_t ipv6[16];
-	unsigned int mask;
+	union CIDR_addr
+	{
+		struct ipv4_addr_and_mask ipv4;
+		struct ipv6_addr_and_mask ipv6;
+	} cidr;
 };
 
 struct int_range

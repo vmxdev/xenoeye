@@ -1,0 +1,7 @@
+{
+	"capture": [
+		{"pcap" : {"interface": "eth0", "filter": "udp"}},
+		{"socket": {"listen-on": "*", "port": "2055"}}
+	]
+}
+

@@ -5,6 +5,8 @@
 #include <sys/types.h>
 #include <stdint.h>
 
+#include "xenoeye.h"
+
 #define MAX_NF_PACKET_SIZE (64*1024)
 
 #define MAX_FLOWS_PER_PACKET 100
@@ -123,6 +125,8 @@ struct nf_packet_info
 	time_t tmin, tmax;
 	uint8_t rawpacket[MAX_NF_PACKET_SIZE];
 };
+
+int netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len);
 
 #endif
 

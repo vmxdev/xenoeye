@@ -20,6 +20,10 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],[])],
   AC_MSG_RESULT(no)
   CFLAGS="$old_CFLAGS")
 
+AC_SEARCH_LIBS([pcap_open_live], [pcap], [], [
+  AC_MSG_ERROR([unable to find the pcap_open_live() function])
+])
+
 # pthreads
 
 AX_PTHREAD([

@@ -56,18 +56,23 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 {
 	int rc;
 	struct in6_addr hostaddr;
-	char *mask;
+	char *mask_sym;
+	int mask;
+	char host_tmp[TOKEN_MAX_SIZE];
 
-	mask = strchr(host, '/');
-	if (mask) {
+	strcpy(host_tmp, host);
+
+	mask_sym = strchr(host_tmp, '/');
+	if (mask_sym) {
 		char *endptr;
-		*mask = '\0';
-		mask++;
-		cidr->mask = strtol(mask, &endptr, 10);
+		*mask_sym = '\0';
+		mask_sym++;
+		mask = strtol(mask_sym, &endptr, 10);
 		if (*endptr != '\0') {
 			/* incorrect mask */
 			return 0;
 		}
+	} else {
 	}
 
 	/* TODO: add getaddrinfo */
@@ -75,7 +80,10 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 	if (rc == 1) {
 		/* IPv4 */
 		cidr->version = 4;
-		memcpy(cidr->ipv4, &hostaddr, 4);
+		memcpy(&cidr->cidr.ipv4.addr, &hostaddr, 4);
+		if (mask_sym) {
+			/*cidr->cidr.ipv4.mask = ;*/
+		}
 		return 1;
 	}
 
@@ -83,7 +91,7 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 	if (rc == 1) {
 		/* IPv6 */
 		cidr->version = 6;
-		memcpy(cidr->ipv6, &hostaddr, 16);
+		memcpy(&cidr->cidr.ipv6.addr, &hostaddr, 16);
 		return 1;
 	}
 
@@ -187,32 +195,32 @@ filter_basic_match_addr(struct filter_basic *fb, struct nf_flow_info *flow)
 		if (fb->data[i].cidr.version == 4) {
 			if (fb->direction == FILTER_BASIC_DIR_BOTH) {
 				if (memcmp(addr4,
-					fb->data[i].cidr.ipv4, 4) == 0) {
+					&fb->data[i].cidr.cidr.ipv4.addr, 4) == 0) {
 					return 1;
 				}
 				if (memcmp(addr4_second,
-					fb->data[i].cidr.ipv4, 4) == 0) {
+					&fb->data[i].cidr.cidr.ipv4.addr, 4) == 0) {
 					return 1;
 				}
 			} else {
 				if (memcmp(addr4,
-					fb->data[i].cidr.ipv4, 4) == 0) {
+					&fb->data[i].cidr.cidr.ipv4.addr, 4) == 0) {
 					return 1;
 				}
 			}
 		} else if (fb->data[i].cidr.version == 6) {
 			if (fb->direction == FILTER_BASIC_DIR_BOTH) {
 				if (memcmp(addr6,
-					fb->data[i].cidr.ipv6, 16) == 0) {
+					fb->data[i].cidr.cidr.ipv6.addr, 16) == 0) {
 					return 1;
 				}
 				if (memcmp(addr6_second,
-					fb->data[i].cidr.ipv6, 16) == 0) {
+					fb->data[i].cidr.cidr.ipv6.addr, 16) == 0) {
 					return 1;
 				}
 			} else {
 				if (memcmp(addr6,
-					fb->data[i].cidr.ipv6, 16) == 0) {
+					fb->data[i].cidr.cidr.ipv6.addr, 16) == 0) {
 					return 1;
 				}
 			}
@@ -393,20 +401,25 @@ filter_dump_addr(struct CIDR *cidr, FILE *f)
 
 	if (cidr->version == 4) {
 		fprintf(f, " ");
+/*
+		FIXME: print
 		for (i=0; i<4; i++) {
-			fprintf(f, "%d", cidr->ipv4[i]);
+			fprintf(f, "%d", cidr->cidr.ipv4.addr);
 			if (i != 3) {
 				fprintf(f, ".");
 			}
 		}
+*/
 	} else if (cidr->version == 6) {
 		fprintf(f, " ");
+/*
 		for (i=0; i<16; i++) {
 			fprintf(f, "%d", cidr->ipv6[i]);
 			if (i != 15) {
 				fprintf(f, ":");
 			}
 		}
+*/
 	} else {
 		fprintf(f, " <Unknown IP version>");
 	}
