@@ -33,7 +33,6 @@
 #include "xenoeye.h"
 #include "aajson/aajson.h"
 
-#define DEFAULT_NETFLOW_PORT 2055
 #define DEFAULT_CONFIG_FILE "xeconfig.json"
 
 static void

@@ -29,6 +29,23 @@
 static tkvdb *db;     /* templates database */
 static tkvdb_tr *tr;  /* transaction */
 
+static void
+dump(char *pfx, char *data, size_t len)
+{
+	size_t i;
+	char buf[512];
+
+	buf[0] = '\0';
+	for (i=0; i<len; i++) {
+		char sym[10];
+
+		sprintf(sym, "%02x ", (unsigned char)data[i]);
+		strcat(buf, sym);
+	}
+	LOG("%s: %s", pfx, buf);
+}
+
+
 int
 netflow_templates_init(void)
 {
@@ -90,7 +107,7 @@ netflow_template_add(struct template_key *tkey, void *t, size_t size)
 {
 	tkvdb_datum dtk, dtv;
 
-	LOG("adding template");
+	LOG("Adding template");
 	dtk.data = tkey->data;
 	dtk.size = tkey->size;
 
@@ -102,11 +119,11 @@ netflow_template_add(struct template_key *tkey, void *t, size_t size)
 		return 0;
 	}
 	if (tr->commit(tr) != TKVDB_OK) {
-		LOG("Can't commit data transaction");
+		LOG("Can't commit transaction");
 		return 0;
 	}
 	tr->begin(tr);
-	LOG("template added");
+	LOG("Template added");
 
 	return 1;
 }

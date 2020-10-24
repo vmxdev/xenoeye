@@ -34,8 +34,6 @@
 #include "xenoeye.h"
 #include "filter.h"
 
-#define DEFAULT_NETFLOW_PORT 2055
-
 /* construct template key, used as key in persistent k-v templates storage */
 static void
 make_template_key(struct template_key *tkey, uint16_t template_id,

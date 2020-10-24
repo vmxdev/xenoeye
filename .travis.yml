@@ -1,4 +1,6 @@
 language: c
+before_install:
+  - sudo apt-get -y install libpcap-dev
 before_script: autoreconf -i
 script: ./configure && make && make check
 
