@@ -15,12 +15,6 @@
 
 #define MAX_FLOW_VAL_LEN 32
 
-#ifdef _MSC_VER
-#define PACKED
-#pragma pack(push,1)
-#else
-#define PACKED __attribute__ ((__packed__))
-#endif
 
 struct nf9_header
 {
@@ -31,26 +25,26 @@ struct nf9_header
 
 	uint32_t package_sequence;
 	uint32_t source_id;
-} PACKED;
+} __attribute__ ((__packed__));
 
 struct nf9_fieldtype_and_len
 {
 	uint16_t type;
 	uint16_t length;
-} PACKED;
+} __attribute__ ((__packed__));
 
 struct nf9_flowset_header
 {
 	uint16_t flowset_id;
 	uint16_t length;
-} PACKED;
+} __attribute__ ((__packed__));
 
 struct nf9_template_item
 {
 	uint16_t template_id;
 	uint16_t field_count;
 	struct nf9_fieldtype_and_len typelen[1];
-} PACKED;
+} __attribute__ ((__packed__));
 
 /* IPFIX (we call it netflow 10) */
 struct nf10_header
@@ -61,49 +55,42 @@ struct nf10_header
 
 	uint32_t sequence_number;
 	uint32_t observation_domain;
-} PACKED;
+} __attribute__ ((__packed__));
 
 /* IPFIX templates */
 struct nf10_template_header
 {
 	uint16_t template_id;
 	uint16_t field_count;
-} PACKED;
+} __attribute__ ((__packed__));
 
 struct nf10_inf_element_iana
 {
 	uint16_t id;
 	uint16_t length;
-} PACKED;
+} __attribute__ ((__packed__));
 
 struct nf10_inf_element_enterprise
 {
 	uint16_t id;
 	uint16_t length;
 	uint32_t number;
-} PACKED;
+} __attribute__ ((__packed__));
 
 struct nf10_stored_template
 {
 	struct nf10_template_header header;
 
 	struct nf10_inf_element_enterprise elements[1];
-} PACKED;
+} __attribute__ ((__packed__));
 
 /* flowset */
 struct nf10_flowset_header
 {
 	uint16_t flowset_id;
 	uint16_t length;
-} PACKED;
+} __attribute__ ((__packed__));
 
-
-#ifdef _MSC_VER
-#pragma pack(pop)
-#undef PACKED
-#else
-#undef PACKED
-#endif
 
 struct nf_flow_info
 {
@@ -127,6 +114,7 @@ struct nf_packet_info
 };
 
 int netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len);
+
 
 #endif
 

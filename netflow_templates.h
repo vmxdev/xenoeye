@@ -3,23 +3,28 @@
 
 #include "netflow.h"
 
+/*
+ * template key: source IP address version (4 or 6), Netflow version,
+ * template ID, source IP, source ID and time
+ */
 struct template_key
 {
-	/* template key: Netflow version, template ID, source IP,
-	 * source ID and time
-	 */
-	uint8_t data[sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint32_t)
-		+ sizeof(uint32_t) + sizeof(uint32_t)];
-	/* size depends on size of source IP address (currently we handle
-	 *  only IPv4)
-	 */
-	size_t size;
-};
+	uint8_t  src_ip_version;
+	uint8_t  nf_version;
+	uint16_t template_id;
 
-int netflow_templates_init(void);
+	xe_ip source_ip;
+
+	uint32_t source_id;
+	uint32_t epoch;
+} PACKED;
+
+int netflow_templates_init(struct xe_data *data);
 void netflow_templates_shutdown(void);
 
-void *netflow_template_find(struct template_key *tkey);
+void *netflow_template_find(struct template_key *tkey,
+	int allow_templates_in_future);
+
 int netflow_template_add(struct template_key *tkey, void *t, size_t size);
 
 #endif

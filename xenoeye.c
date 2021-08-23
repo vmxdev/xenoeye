@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2018-2020, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2018-2021, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "utils.h"
 #include "netflow.h"
@@ -34,6 +35,7 @@
 #include "aajson/aajson.h"
 
 #define DEFAULT_CONFIG_FILE "xeconfig.json"
+#define DEFAULT_TEMPLATES_FILE "templates.tkv"
 
 static void
 print_usage(const char *progname)
@@ -66,19 +68,74 @@ config_adjust_cap_size(struct xe_data *data, size_t idx)
 	return 1;
 }
 
+#define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
+
+static int
+config_templates(struct aajson *a, aajson_val *value, struct xe_data *data)
+{
+	if (STRCMP(a, 2, "db") == 0) {
+		strcpy(data->templates_db, value->str);
+	}
+
+	if (STRCMP(a, 2, "allow-templates-in-future") == 0) {
+		if (value->type == AAJSON_VALUE_TRUE) {
+			data->allow_templates_in_future = 1;
+		}
+		if (value->type == AAJSON_VALUE_NUM) {
+			data->allow_templates_in_future = atoi(value->str);
+		}
+	}
+
+	return 1;
+}
+
+static int
+config_debug(struct aajson *a, aajson_val *value, struct xe_data *data)
+{
+	if (STRCMP(a, 2, "dump-flows") == 0) {
+		data->debug.dump_flows = 1;
+
+		if (strcmp(value->str, "syslog") == 0) {
+			data->debug.dump_to_syslog = 1;
+		} else if (strcmp(value->str, "stdout") == 0) {
+			data->debug.dump_out = stdout;
+		} else {
+			/* file */
+			data->debug.dump_out = fopen(value->str, "a");
+			if (!data->debug.dump_out) {
+				LOG("Can't open file '%s': %s", value->str,
+					strerror(errno));
+				return 0;
+			}
+		}
+	}
+
+	return 1;
+}
+
 static int
 config_callback(struct aajson *a, aajson_val *value, void *user)
 {
 	struct xe_data *data = user;
 	size_t idx;
 
-#define STRCMP(I, S) strcmp(a->path_stack[I].data.path_item, S)
-
-	if (a->path_stack_pos != 4) {
+	if (a->path_stack_pos < 2) {
 		return 1;
 	}
 
-	if (STRCMP(1, "capture") != 0) {
+	if (STRCMP(a, 1, "templates") == 0) {
+		return config_templates(a, value, data);
+	}
+
+	if (STRCMP(a, 1, "debug") == 0) {
+		return config_debug(a, value, data);
+	}
+
+	if (STRCMP(a, 1, "capture") != 0) {
+		return 1;
+	}
+
+	if (a->path_stack_pos != 4) {
 		return 1;
 	}
 
@@ -87,34 +144,34 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 	}
 	idx = a->path_stack[2].data.array_idx;
 
-	if (STRCMP(3, "pcap") == 0) {
+	if (STRCMP(a, 3, "pcap") == 0) {
 		if (!config_adjust_cap_size(data, idx)) {
 			return 0;
 		}
 
 		data->cap[data->ncap - 1].type = XENOEYE_CAPTURE_TYPE_PCAP;
 
-		if (STRCMP(4, "interface") == 0) {
+		if (STRCMP(a, 4, "interface") == 0) {
 			data->cap[data->ncap - 1].iface = strdup(value->str);
 		}
 
-		if (STRCMP(4, "filter") == 0) {
+		if (STRCMP(a, 4, "filter") == 0) {
 			data->cap[data->ncap - 1].filter = strdup(value->str);
 		}
 	}
 
-	if (STRCMP(3, "socket") == 0) {
+	if (STRCMP(a, 3, "socket") == 0) {
 		if (!config_adjust_cap_size(data, idx)) {
 			return 0;
 		}
 
 		data->cap[data->ncap - 1].type = XENOEYE_CAPTURE_TYPE_SOCKET;
 
-		if (STRCMP(4, "listen-on") == 0) {
+		if (STRCMP(a, 4, "listen-on") == 0) {
 			data->cap[data->ncap - 1].addr = strdup(value->str);
 		}
 
-		if (STRCMP(4, "port") == 0) {
+		if (STRCMP(a, 4, "port") == 0) {
 			struct servent *se;
 			long int port;
 			char *endptr;
@@ -145,10 +202,9 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		}
 	}
 
-#undef STRCMP
-
 	return 1;
 }
+#undef STRCMP
 
 static int
 config_parse(struct xe_data *data, const char *conffile)
@@ -324,6 +380,19 @@ fail_alloc:
 	return 0;
 }
 
+static struct xe_data *tmp_data;
+
+static void
+on_ctrl_c(int s)
+{
+	if (s != SIGINT) {
+		return;
+	}
+
+	/* TODO: correct shutdown */
+	exit(0);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -331,6 +400,7 @@ main(int argc, char *argv[])
 	struct xe_data data;
 	int opt;
 	size_t i;
+	struct sigaction sig_int;
 
 
 	while ((opt = getopt(argc, argv, "c:h")) != -1) {
@@ -349,8 +419,20 @@ main(int argc, char *argv[])
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
 	memset(&data, 0, sizeof(struct xe_data));
+	strcpy(data.templates_db, DEFAULT_TEMPLATES_FILE);
+
 	if (!config_parse(&data, conffile ? conffile : DEFAULT_CONFIG_FILE)) {
 		return EXIT_FAILURE;
+	}
+
+	LOG("Templates DB: '%s'", data.templates_db);
+	LOG("Allow templates in future: %s",
+		data.allow_templates_in_future ? "yes": "no");
+	if (data.debug.dump_flows) {
+		LOG("Dump flows: yes (syslog: %s)",
+			data.debug.dump_to_syslog ? "yes": "no");
+	} else {
+		LOG("Dump flows: no");
 	}
 
 	if (!monit_items_init(&data)) {
@@ -358,7 +440,7 @@ main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	if (!netflow_templates_init()) {
+	if (!netflow_templates_init(&data)) {
 		LOG("Can't init templates storage, exiting");
 		return EXIT_FAILURE;
 	}
@@ -374,6 +456,13 @@ main(int argc, char *argv[])
 			}
 		}
 	}
+
+
+	tmp_data = &data;
+	sig_int.sa_handler = &on_ctrl_c;
+	sigemptyset(&sig_int.sa_mask);
+	sig_int.sa_flags = 0;
+	sigaction(SIGINT, &sig_int, NULL);
 
 	/* FIXME: correct shutdown */
 	for (i=0; i<data.ncap; i++) {

@@ -4,6 +4,10 @@
 #include <limits.h>
 #include <pthread.h>
 #include <pcap.h>
+#include <stdatomic.h>
+
+
+typedef __int128_t xe_ip;
 
 struct nf_flow_info;
 struct filter_expr;
@@ -37,6 +41,16 @@ struct capture
 	unsigned int port;
 };
 
+
+/* debug options */
+struct xe_debug
+{
+	int dump_flows;
+	int dump_to_syslog;
+	FILE *dump_out;
+};
+
+
 struct xe_data
 {
 	size_t nmonit_items;
@@ -44,6 +58,13 @@ struct xe_data
 
 	struct capture *cap;
 	size_t ncap;
+
+	/* templates */
+	int allow_templates_in_future;
+	char templates_db[PATH_MAX];
+
+	struct xe_debug debug;
+
 };
 
 /* helper struct for passing data to capture threads */
@@ -60,6 +81,7 @@ int monit_items_free(struct xe_data *data);
 int monit_item_match(struct monit_item *mi, struct nf_flow_info *fi);
 
 int pcapture_start(struct xe_data *data, size_t idx);
+
 
 #endif
 

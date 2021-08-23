@@ -19,12 +19,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <alloca.h>
 
 #include "utils.h"
 #include "netflow_templates.h"
 #include "tkvdb/tkvdb.h"
 
-#define TEMPLATES_DBFILE "templates.tkv"
 
 static tkvdb *db;     /* templates database */
 static tkvdb_tr *tr;  /* transaction */
@@ -47,11 +47,11 @@ dump(char *pfx, char *data, size_t len)
 
 
 int
-netflow_templates_init(void)
+netflow_templates_init(struct xe_data *data)
 {
-	db = tkvdb_open(TEMPLATES_DBFILE, NULL);
+	db = tkvdb_open(data->templates_db, NULL);
 	if (!db) {
-		LOG("Can't open database");
+		LOG("Can't open database '%s'", data->templates_db);
 		goto fail_db;
 	}
 
@@ -78,22 +78,36 @@ netflow_templates_shutdown(void)
 }
 
 void *
-netflow_template_find(struct template_key *tkey)
+netflow_template_find(struct template_key *tkey, int allow_templates_in_future)
 {
 	tkvdb_cursor *c;
 	tkvdb_datum dtk;
 	TKVDB_RES rc;
 	void *ret = NULL;
+	struct template_key *key;
+
+	if (allow_templates_in_future) {
+		key = alloca(sizeof(struct template_key));
+		*key = *tkey;
+		key->epoch = 0xffffff;
+	} else {
+		key = tkey;
+	}
 
 	/* search for the most recent template */
 	c = tkvdb_cursor_create(tr);
-	dtk.data = tkey->data;
-	dtk.size = tkey->size;
+	dtk.data = key;
+	dtk.size = sizeof(struct template_key);
+
 	rc = c->seek(c, &dtk, TKVDB_SEEK_LE);
-	if ((rc == TKVDB_OK) && (c->keysize(c) == tkey->size)) {
-		/* size of key without epoch */
-		size_t sk = tkey->size - sizeof(uint32_t);
-		if (memcmp(c->key(c), tkey->data, sk) == 0) {
+	if ((rc == TKVDB_OK)
+		&& (c->keysize(c) == sizeof(struct template_key))) {
+
+		/* size of key without time */
+		size_t sk = sizeof(struct template_key) - sizeof(uint32_t);
+
+		/* compare keys without time */
+		if (memcmp(c->key(c), key, sk) == 0) {
 			ret = c->val(c);
 		}
 	}
@@ -108,8 +122,9 @@ netflow_template_add(struct template_key *tkey, void *t, size_t size)
 	tkvdb_datum dtk, dtv;
 
 	LOG("Adding template");
-	dtk.data = tkey->data;
-	dtk.size = tkey->size;
+
+	dtk.data = tkey;
+	dtk.size = sizeof(struct template_key);
 
 	dtv.data = t;
 	dtv.size = size;

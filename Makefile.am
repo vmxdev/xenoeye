@@ -1,3 +1,6 @@
+AM_CPPFLAGS = -I$(srcdir)/tkvdb
+
+#bin_PROGRAMS = xenoeye xemkrep
 bin_PROGRAMS = xenoeye
 xenoeye_SOURCES = xenoeye.c xenoeye.h \
 	utils.h netflow.h netflow.c \
@@ -6,6 +9,9 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h \
 	aajson/aajson.h \
 	filter.c filter.h filter_lexer.c filter_parser.c \
 	pcapture.c monit_items.c
+
+#xemkrep_SOURCES = xemkrep.c \
+#	tkvdb/tkvdb.c tkvdb/tkvdb.h
 
 # checks
 check_PROGRAMS = test_filters

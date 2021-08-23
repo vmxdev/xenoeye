@@ -169,6 +169,7 @@ pcap_packet(struct xe_data* data,
 	memcpy(nfpkt.rawpacket, payload, size_payload);
 	if (netflow_process(data, &nfpkt, size_payload)) {
 		/* ok */
+		/*data->packets_processed++;*/
 	}
 }
 

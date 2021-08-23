@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2021, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -34,38 +34,25 @@
 #include "xenoeye.h"
 #include "filter.h"
 
+#include "tkvdb.h"
+
 /* construct template key, used as key in persistent k-v templates storage */
 static void
 make_template_key(struct template_key *tkey, uint16_t template_id,
 	struct nf_packet_info *npi, uint8_t version)
 {
-	uint8_t *tkeyptr;
+	xe_ip addr;
+	/* currently we support only IPv4 */
+	tkey->src_ip_version = 4;
 
-	/* key: version, template ID, source IP, source ID and time */
-	tkey->size = sizeof(version) + sizeof(template_id)
-		+ sizeof(npi->src_addr_ipv4)
-		+ sizeof(npi->source_id) + sizeof(npi->epoch);
+	tkey->nf_version = version;
+	tkey->template_id = template_id;
 
-	tkeyptr = tkey->data;
+	addr = npi->src_addr_ipv4;
+	memcpy(&tkey->source_ip, &addr, sizeof(xe_ip));
 
-	/* Netflow version */
-	memcpy(tkeyptr, &version, sizeof(version));
-	tkeyptr += sizeof(version);
-
-	/* template ID */
-	memcpy(tkeyptr, &template_id, sizeof(template_id));
-	tkeyptr += sizeof(template_id);
-
-	/* source IPv4 address */
-	memcpy(tkeyptr, &(npi->src_addr_ipv4), sizeof(npi->src_addr_ipv4));
-	tkeyptr += sizeof(npi->src_addr_ipv4);
-
-	/* source ID */
-	memcpy(tkeyptr, &(npi->source_id), sizeof(npi->source_id));
-	tkeyptr += sizeof(npi->source_id);
-
-	/* time */
-	memcpy(tkeyptr, &(npi->epoch), sizeof(npi->epoch));
+	tkey->source_id = npi->source_id;
+	tkey->epoch = npi->epoch;
 }
 
 static void
@@ -73,19 +60,21 @@ template_dump(struct template_key *tkey)
 {
 	size_t i;
 	char buf[512];
+	unsigned char *data = (unsigned char *)tkey;
 
 	buf[0] = '\0';
-	for (i=0; i<tkey->size; i++) {
-		char sym[10];
+	for (i=0; i<sizeof(struct template_key); i++) {
+		char sym[5];
 
-		sprintf(sym, "%02x ", tkey->data[i]);
+		sprintf(sym, "%02x ", data[i]);
 		strcat(buf, sym);
 	}
 	LOG("%s", buf);
 }
 
 static int
-table_process(struct filter_expr *expr, struct nf_flow_info *flow)
+table_process(struct xe_data *data, struct filter_expr *expr,
+	struct nf_flow_info *flow)
 {
 	int ret;
 
@@ -96,8 +85,8 @@ table_process(struct filter_expr *expr, struct nf_flow_info *flow)
 
 
 static int
-parse_netflow_v9_template(struct nf_packet_info *npi, uint8_t **ptr,
-	int length)
+parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
+	uint8_t **ptr, int length)
 {
 	struct nf9_template_item *tmplitem, *ptmpl;
 	uint16_t template_id, field_count;
@@ -116,18 +105,20 @@ parse_netflow_v9_template(struct nf_packet_info *npi, uint8_t **ptr,
 		LOG("******************");
 		return 0;
 	}
+/*
 	LOG("Template id %d, field count: %u", ntohs(template_id),
 		field_count);
-
+*/
 	/* search for template in database */
 	make_template_key(&tkey, template_id, npi, 9);
-	tmplitem = netflow_template_find(&tkey);
+	tmplitem = netflow_template_find(&tkey,
+		data->allow_templates_in_future);
 
 	*ptr += template_size;
 
 	if (!tmplitem) {
+		LOG("Unknown template, id %d", ntohs(template_id));
 		template_dump(&tkey);
-		LOG("Trying to add template %d", ntohs(template_id));
 		return netflow_template_add(&tkey, ptmpl, template_size);
 	}
 
@@ -154,10 +145,10 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 		ntohs(flowset_id), length, count);
 */
 	make_template_key(&tkey, flowset_id, npi, 9);
-	tmpl = netflow_template_find(&tkey);
+	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
 
 	if (!tmpl) {
-		LOG("Unknown flowset id %d", ntohs(flowset_id));
+/*		LOG("Unknown flowset id %d", ntohs(flowset_id));*/
 		return 0;
 	}
 
@@ -175,36 +166,6 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
-#if 0
-			if (ftype == 21) {
-				uint32_t last_uptime;
-
-				if (flength != 4) {
-					LOG("Incorrect LAST SWITCHED field");
-					return 0;
-				}
-				memcpy(&last_uptime, fptr, flength);
-				last_uptime = ntohl(last_uptime);
-				LOG("LAST SWITCHED1: %u",
-					/*npi->uptime - */last_uptime);
-			}
-			if (ftype == 22) {
-				uint32_t first_uptime;
-
-				if (flength != 4) {
-					LOG("Incorrect FIRST SWITCHED field");
-					return 0;
-				}
-				memcpy(&first_uptime, fptr, flength);
-				first_uptime = ntohl(first_uptime);
-				LOG("FIRST SWITCHED: %u",
-					npi->uptime - first_uptime);
-			}
-/*
-			LOG("Field type: %d, length == %d, first byte == %d",
-				ftype, flength, fptr[0]);
-*/
-#endif
 
 #define NF_V9_FIELD(NAME, FIELDTYPE, SIZEMIN, SIZEMAX)                        \
 if (ftype == FIELDTYPE) {                                                     \
@@ -214,7 +175,7 @@ if (ftype == FIELDTYPE) {                                                     \
 			flength, SIZEMIN, SIZEMAX);                           \
 	} else {                                                              \
 		memcpy(&flow.NAME, fptr, flength);                            \
-		/*LOG("Field: '"#NAME"', length: %d", flength);*/                 \
+		/*LOG("Field: '"#NAME"', length: %d", flength);*/             \
 		flow.has_##NAME = 1;                                          \
 		flow.NAME##_size = flength;                                   \
 	}                                                                     \
@@ -230,7 +191,8 @@ if (ftype == FIELDTYPE) {                                                     \
 		}
 
 		for (t_id=0; t_id<data->nmonit_items; t_id++) {
-			table_process(data->monit_items[t_id].expr, &flow);
+			table_process(data, data->monit_items[t_id].expr,
+				&flow);
 		}
 /*
 		if (flow.has_last_switched) {
@@ -282,7 +244,8 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
 		ptr += 4;
 
 		if (flowset_id_host == 0) {
-			if (!parse_netflow_v9_template(npi, &ptr, length)) {
+			if (!parse_netflow_v9_template(data, npi, &ptr,
+				length)) {
 				/* something went wrong in template parser */
 				return 0;
 			}
@@ -342,8 +305,8 @@ netflow10_template_convert(struct nf10_stored_template *tmpl, uint8_t **ptr,
 }
 
 static int
-parse_netflow_v10_template(struct nf_packet_info *npi, uint8_t **ptr,
-	int length)
+parse_netflow_v10_template(struct xe_data *data, struct nf_packet_info *npi,
+	uint8_t **ptr, int length)
 {
 	struct nf10_template_header *tmpl_header;
 	struct nf10_stored_template *tmpl_db, *tmpl;
@@ -372,7 +335,8 @@ parse_netflow_v10_template(struct nf_packet_info *npi, uint8_t **ptr,
 	netflow10_template_convert(tmpl, ptr, field_count);
 
 	make_template_key(&tkey, template_id, npi, 10);
-	tmpl_db = netflow_template_find(&tkey);
+	tmpl_db = netflow_template_find(&tkey,
+		data->allow_templates_in_future);
 
 	if (!tmpl_db) {
 		return netflow_template_add(&tkey, tmpl, template_size);
@@ -387,8 +351,8 @@ parse_netflow_v10_template(struct nf_packet_info *npi, uint8_t **ptr,
 }
 
 static int
-parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
-	int flowset_id, int length)
+parse_netflow_v10_flowset(struct xe_data *data, struct nf_packet_info *npi,
+	uint8_t **ptr, int flowset_id, int length)
 {
 	uint8_t *fptr;
 	int i;
@@ -401,7 +365,7 @@ parse_netflow_v10_flowset(struct nf_packet_info *npi, uint8_t **ptr,
 	LOG("v10 data, flowset: %d, length == %d", ntohs(flowset_id), length);
 
 	make_template_key(&tkey, flowset_id, npi, 10);
-	tmpl = netflow_template_find(&tkey);
+	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
 
 	if (!tmpl) {
 		LOG("Unknown flowset id %d", ntohs(flowset_id));
@@ -508,7 +472,8 @@ parse_netflow_v10(struct xe_data *data, struct nf_packet_info *npi, int len)
 		LOG("Flowset %u, length %u", flowset_id_host, length);
 
 		if (flowset_id_host == 2) {
-			if (!parse_netflow_v10_template(npi, &ptr, length)) {
+			if (!parse_netflow_v10_template(data, npi, &ptr,
+				length)) {
 				/* something went wrong in template parser */
 				break;
 			}
@@ -516,8 +481,8 @@ parse_netflow_v10(struct xe_data *data, struct nf_packet_info *npi, int len)
 			LOG("options template v10, skipping");
 		} else if (flowset_id_host > 255) {
 			/* data */
-			if (!parse_netflow_v10_flowset(npi, &ptr, flowset_id,
-				length)) {
+			if (!parse_netflow_v10_flowset(data, npi, &ptr,
+				flowset_id, length)) {
 
 				break;
 			}
