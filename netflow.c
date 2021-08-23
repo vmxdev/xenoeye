@@ -508,6 +508,9 @@ netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len)
 	version_ptr = (uint16_t *)npi->rawpacket;
 	version = ntohs(*version_ptr);
 	switch (version) {
+		case 5:
+			LOG("not supported yet");
+			break;
 		case 9:
 			ret = parse_netflow_v9(data, npi, len);
 			break;
