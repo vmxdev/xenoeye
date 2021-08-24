@@ -268,71 +268,71 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
 }
 
 /*
- * each item (both nf10_inf_element_iana and nf10_inf_element_enterprise)
- * in template converted to nf10_inf_element_enterprise
+ * each item (both ipfix_inf_element_iana and ipfix_inf_element_enterprise)
+ * in template converted to ipfix_inf_element_enterprise
  */
 static void
-netflow10_template_convert(struct nf10_stored_template *tmpl, uint8_t **ptr,
+ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 	unsigned int field_count)
 {
 	unsigned int i;
 
 	/* copy template header */
-	memcpy(tmpl, *ptr, sizeof(struct nf10_template_header));
+	memcpy(tmpl, *ptr, sizeof(struct ipfix_template_header));
 
 	/* skip header, seek to data */
-	*ptr += sizeof(struct nf10_template_header);
+	*ptr += sizeof(struct ipfix_template_header);
 
 	for (i=0; i<field_count; i++) {
-		struct nf10_inf_element_enterprise *ent;
+		struct ipfix_inf_element_enterprise *ent;
 
-		ent = (struct nf10_inf_element_enterprise *)(*ptr);
+		ent = (struct ipfix_inf_element_enterprise *)(*ptr);
 		LOG("id: %d, length: %d", ntohs(ent->id), ntohs(ent->length));
 		if ((ntohs(ent->id) >> 15) & 1) {
 			/* enterprise */
 			tmpl->elements[i].id = ent->id;
 			tmpl->elements[i].length = ent->length;
 			tmpl->elements[i].number = ent->number;
-			*ptr += sizeof(struct nf10_inf_element_enterprise);
+			*ptr += sizeof(struct ipfix_inf_element_enterprise);
 		} else {
 			/* iana */
 			tmpl->elements[i].id = ent->id;
 			tmpl->elements[i].length = ent->length;
 			tmpl->elements[i].number = 0;
-			*ptr += sizeof(struct nf10_inf_element_iana);
+			*ptr += sizeof(struct ipfix_inf_element_iana);
 		}
 	}
 }
 
 static int
-parse_netflow_v10_template(struct xe_data *data, struct nf_packet_info *npi,
+parse_ipfix_template(struct xe_data *data, struct nf_packet_info *npi,
 	uint8_t **ptr, int length)
 {
-	struct nf10_template_header *tmpl_header;
-	struct nf10_stored_template *tmpl_db, *tmpl;
+	struct ipfix_template_header *tmpl_header;
+	struct ipfix_stored_template *tmpl_db, *tmpl;
 
 	uint16_t template_id, field_count;
 	struct template_key tkey;
 	size_t template_size;
 
-	tmpl_header = (struct nf10_template_header *)(*ptr);
+	tmpl_header = (struct ipfix_template_header *)(*ptr);
 	template_id = tmpl_header->template_id;
 	field_count = ntohs(tmpl_header->field_count);
 
-	LOG("nf10: template id %d, field count: %u", ntohs(template_id),
+	LOG("ipfix: template id %d, field count: %u", ntohs(template_id),
 		field_count);
 
 	/* search for template in database */
 	if (field_count < 1) {
-		LOG("nf10: incorrect field count %u", field_count);
+		LOG("ipfix: incorrect field count %u", field_count);
 		return 0;
 	}
 
-	template_size = sizeof(struct nf10_template_header)
-		+ sizeof(struct nf10_inf_element_enterprise) * field_count;
+	template_size = sizeof(struct ipfix_template_header)
+		+ sizeof(struct ipfix_inf_element_enterprise) * field_count;
 	tmpl = alloca(template_size);
 
-	netflow10_template_convert(tmpl, ptr, field_count);
+	ipfix_template_convert(tmpl, ptr, field_count);
 
 	make_template_key(&tkey, template_id, npi, 10);
 	tmpl_db = netflow_template_find(&tkey,
@@ -343,7 +343,7 @@ parse_netflow_v10_template(struct xe_data *data, struct nf_packet_info *npi,
 	}
 
 	if (memcmp(tmpl_db, tmpl, template_size) != 0) {
-		LOG("Template v10 modified");
+		LOG("Template ipfix modified");
 		return netflow_template_add(&tkey, tmpl, template_size);
 	}
 
@@ -351,18 +351,19 @@ parse_netflow_v10_template(struct xe_data *data, struct nf_packet_info *npi,
 }
 
 static int
-parse_netflow_v10_flowset(struct xe_data *data, struct nf_packet_info *npi,
+parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	uint8_t **ptr, int flowset_id, int length)
 {
 	uint8_t *fptr;
 	int i;
-	struct nf10_stored_template *tmpl;
+	struct ipfix_stored_template *tmpl;
 	struct template_key tkey;
 	int template_field_count;
 	int stop = 0;
 	int flow_num = 0;
 
-	LOG("v10 data, flowset: %d, length == %d", ntohs(flowset_id), length);
+	LOG("ipfix data, flowset: %d, length == %d", ntohs(flowset_id),
+		length);
 
 	make_template_key(&tkey, flowset_id, npi, 10);
 	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
@@ -436,52 +437,52 @@ parse_netflow_v10_flowset(struct xe_data *data, struct nf_packet_info *npi,
 
 
 static int
-parse_netflow_v10(struct xe_data *data, struct nf_packet_info *npi, int len)
+parse_ipfix(struct xe_data *data, struct nf_packet_info *npi, int len)
 {
-	struct nf10_header *header;
+	struct ipfix_header *header;
 	int flowset_id, flowset_id_host, length;
 	uint8_t *ptr;
 
 	npi->tmin = 0;
 	npi->tmax = 0;
 
-	header = (struct nf10_header *)npi->rawpacket;
+	header = (struct ipfix_header *)npi->rawpacket;
 	npi->source_id = header->observation_domain;
 	npi->epoch = header->export_time;
 	npi->uptime = 0;
 
-	LOG("got v10, package sequence: %u, source id %u, length %d",
+	LOG("got ipfix, package sequence: %u, source id %u, length %d",
 		ntohl(header->sequence_number),
 		ntohl(npi->source_id),
 		len);
 
 
-	ptr = (uint8_t *)npi->rawpacket + sizeof(struct nf10_header);
+	ptr = (uint8_t *)npi->rawpacket + sizeof(struct ipfix_header);
 
 	while (ptr < ((uint8_t *)npi->rawpacket + len)) {
-		struct nf10_flowset_header *flowset_header;
+		struct ipfix_flowset_header *flowset_header;
 
-		flowset_header = (struct nf10_flowset_header *)ptr;
+		flowset_header = (struct ipfix_flowset_header *)ptr;
 
 		flowset_id = flowset_header->flowset_id;
 		flowset_id_host = ntohs(flowset_id);
 		length = ntohs(flowset_header->length);
 
-		ptr += sizeof(struct nf10_flowset_header);
+		ptr += sizeof(struct ipfix_flowset_header);
 
 		LOG("Flowset %u, length %u", flowset_id_host, length);
 
 		if (flowset_id_host == 2) {
-			if (!parse_netflow_v10_template(data, npi, &ptr,
+			if (!parse_ipfix_template(data, npi, &ptr,
 				length)) {
 				/* something went wrong in template parser */
 				break;
 			}
 		} else if (flowset_id_host == 3) {
-			LOG("options template v10, skipping");
+			LOG("options template ipfix, skipping");
 		} else if (flowset_id_host > 255) {
 			/* data */
-			if (!parse_netflow_v10_flowset(data, npi, &ptr,
+			if (!parse_ipfix_flowset(data, npi, &ptr,
 				flowset_id, length)) {
 
 				break;
@@ -491,9 +492,9 @@ parse_netflow_v10(struct xe_data *data, struct nf_packet_info *npi, int len)
 			/* skip flowset */
 		}
 
-		ptr += length - sizeof(struct nf10_flowset_header);
+		ptr += length - sizeof(struct ipfix_flowset_header);
 	}
-	LOG("end of v10");
+	LOG("end of ipfix");
 	LOG("========================");
 	return 1;
 }
@@ -515,7 +516,7 @@ netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len)
 			ret = parse_netflow_v9(data, npi, len);
 			break;
 		case 10:
-			ret = parse_netflow_v10(data, npi, len);
+			ret = parse_ipfix(data, npi, len);
 			break;
 		default:
 			LOG("Unknown netflow version %u", version);

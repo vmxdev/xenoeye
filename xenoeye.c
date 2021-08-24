@@ -95,7 +95,9 @@ config_debug(struct aajson *a, aajson_val *value, struct xe_data *data)
 	if (STRCMP(a, 2, "dump-flows") == 0) {
 		data->debug.dump_flows = 1;
 
-		if (strcmp(value->str, "syslog") == 0) {
+		if (strcmp(value->str, "none") == 0) {
+			data->debug.dump_flows = 0;
+		} else if (strcmp(value->str, "syslog") == 0) {
 			data->debug.dump_to_syslog = 1;
 		} else if (strcmp(value->str, "stdout") == 0) {
 			data->debug.dump_out = stdout;

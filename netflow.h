@@ -46,8 +46,8 @@ struct nf9_template_item
 	struct nf9_fieldtype_and_len typelen[1];
 } __attribute__ ((__packed__));
 
-/* IPFIX (we call it netflow 10) */
-struct nf10_header
+/* IPFIX */
+struct ipfix_header
 {
 	uint16_t version;
 	uint16_t length;
@@ -58,34 +58,34 @@ struct nf10_header
 } __attribute__ ((__packed__));
 
 /* IPFIX templates */
-struct nf10_template_header
+struct ipfix_template_header
 {
 	uint16_t template_id;
 	uint16_t field_count;
 } __attribute__ ((__packed__));
 
-struct nf10_inf_element_iana
+struct ipfix_inf_element_iana
 {
 	uint16_t id;
 	uint16_t length;
 } __attribute__ ((__packed__));
 
-struct nf10_inf_element_enterprise
+struct ipfix_inf_element_enterprise
 {
 	uint16_t id;
 	uint16_t length;
 	uint32_t number;
 } __attribute__ ((__packed__));
 
-struct nf10_stored_template
+struct ipfix_stored_template
 {
-	struct nf10_template_header header;
+	struct ipfix_template_header header;
 
-	struct nf10_inf_element_enterprise elements[1];
+	struct ipfix_inf_element_enterprise elements[1];
 } __attribute__ ((__packed__));
 
 /* flowset */
-struct nf10_flowset_header
+struct ipfix_flowset_header
 {
 	uint16_t flowset_id;
 	uint16_t length;
