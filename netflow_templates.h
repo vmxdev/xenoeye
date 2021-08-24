@@ -17,7 +17,7 @@ struct template_key
 
 	uint32_t source_id;
 	uint32_t epoch;
-} PACKED;
+} __attribute__ ((__packed__));
 
 int netflow_templates_init(struct xe_data *data);
 void netflow_templates_shutdown(void);

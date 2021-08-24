@@ -157,17 +157,21 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	fptr = (*ptr);
 	for (cnt=0; cnt<count; cnt++) {
 		struct nf_flow_info flow;
+		char debug_flow_str[1024];
+		char *debug_flow_str_p = debug_flow_str;
 
 		memset(&flow, 0, sizeof(struct nf_flow_info));
 
-/*		LOG("Flowset #%d", cnt);*/
+		debug_flow_str[0] = '\0';
+
+		/*LOG("Flowset #%d", cnt);*/
 		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
 
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
 
-#define NF_V9_FIELD(NAME, FIELDTYPE, SIZEMIN, SIZEMAX)                        \
+#define NF_V9_FIELD(NAME, DESC, FIELDTYPE, SIZEMIN, SIZEMAX)                  \
 if (ftype == FIELDTYPE) {                                                     \
 	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
 		LOG("Incorrect '" #NAME                                       \
@@ -182,6 +186,28 @@ if (ftype == FIELDTYPE) {                                                     \
 }
 #include "netflow_v9.def"
 
+			/* debug dump */
+			if (data->debug.dump_flows) {
+				char flow_str[128];
+#define NF_V9_FIELD(NAME, DESC, FIELDTYPE, SIZEMIN, SIZEMAX)                   \
+if (ftype == FIELDTYPE) {                                                      \
+	if (flength == 2) {                                                    \
+		sprintf(flow_str, "|%s: %d", DESC, ntohs(*((uint16_t *)fptr)));\
+	} else if (flength == 4) {                                             \
+		sprintf(flow_str, "|%s: %d", DESC, ntohl(*((uint32_t *)fptr)));\
+	} else {                                                               \
+		int ffi;                                                       \
+		sprintf(flow_str, "|%s: ", DESC);                              \
+		for (ffi=0; ffi<flength; ffi++) {                              \
+			sprintf(flow_str + strlen(flow_str), "0x%02x ",        \
+				*(fptr + ffi));                                \
+		}                                                              \
+	}                                                                      \
+	flow.NAME##_size = flength;                                            \
+}
+#include "netflow_v9.def"
+				strcat(debug_flow_str, flow_str);
+			}
 
 			fptr += flength;
 
@@ -190,6 +216,9 @@ if (ftype == FIELDTYPE) {                                                     \
 			}
 		}
 
+		if (data->debug.dump_flows) {
+			LOG("%s", debug_flow_str);
+		}
 		for (t_id=0; t_id<data->nmonit_items; t_id++) {
 			table_process(data, data->monit_items[t_id].expr,
 				&flow);
@@ -510,7 +539,7 @@ netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len)
 	version = ntohs(*version_ptr);
 	switch (version) {
 		case 5:
-			LOG("not supported yet");
+			LOG("netflow v5 not supported yet");
 			break;
 		case 9:
 			ret = parse_netflow_v9(data, npi, len);
