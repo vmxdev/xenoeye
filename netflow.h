@@ -15,6 +15,12 @@
 
 #define MAX_FLOW_VAL_LEN 32
 
+enum NF_FIELD_TYPE
+{
+	NF_FIELD_IP_ADDR,
+	NF_FIELD_INT,
+	NF_FIELD_BYTES
+};
 
 struct nf9_header
 {
@@ -94,9 +100,9 @@ struct ipfix_flowset_header
 
 struct nf_flow_info
 {
-#define NF_V9_FIELD(NAME, DESC, FIELDTYPE, SIZEMIN, SIZEMAX)  \
-	uint8_t NAME[SIZEMAX];                                \
-	int NAME##_size;                                      \
+#define NF_V9_FIELD(NAME, DESC, FLDTYPE, FLDID,SIZEMIN, SIZEMAX) \
+	uint8_t NAME[SIZEMAX];                                   \
+	int NAME##_size;                                         \
 	int has_##NAME;
 #include "netflow_v9.def"
 };

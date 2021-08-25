@@ -83,6 +83,43 @@ table_process(struct xe_data *data, struct filter_expr *expr,
 	return ret;
 }
 
+static void
+flow_dump_bytes(char *str, int flength, char *desc, uint8_t *fptr)
+{
+	int i;
+
+	sprintf(str, "%s: ", desc);
+	for (i=0; i<flength; i++) {
+		sprintf(str + strlen(str), "0x%02x ", *(fptr + i));
+	}
+}
+
+static void
+flow_dump(char *str, enum NF_FIELD_TYPE type, int flength,
+	char *desc, uint8_t *fptr)
+{
+	if (type == NF_FIELD_BYTES) {
+		flow_dump_bytes(str, flength, desc, fptr);
+		return;
+	}
+
+	if (flength == 1) {
+		sprintf(str, "%s: %u", desc, *fptr);
+	} else if (flength == 2) {
+		sprintf(str, "%s: %u", desc, ntohs(*((uint16_t *)fptr)));
+	} else if (flength == 4) {
+		if (type == NF_FIELD_IP_ADDR) {
+			sprintf(str, "%s: %u.%u.%u.%u", desc,
+				*(fptr + 0), *(fptr + 1),
+				*(fptr + 2), *(fptr + 3));
+		} else {
+			sprintf(str, "%s: %u", desc,
+				ntohl(*((uint32_t *)fptr)));
+		}
+	} else {
+		flow_dump_bytes(str, flength, desc, fptr);
+	}
+}
 
 static int
 parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
@@ -158,7 +195,6 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	for (cnt=0; cnt<count; cnt++) {
 		struct nf_flow_info flow;
 		char debug_flow_str[1024];
-		char *debug_flow_str_p = debug_flow_str;
 
 		memset(&flow, 0, sizeof(struct nf_flow_info));
 
@@ -171,8 +207,8 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
 
-#define NF_V9_FIELD(NAME, DESC, FIELDTYPE, SIZEMIN, SIZEMAX)                  \
-if (ftype == FIELDTYPE) {                                                     \
+#define NF_V9_FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)             \
+if (ftype == FLDID) {                                                         \
 	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
 		LOG("Incorrect '" #NAME                                       \
 			"' field size (got %d, expected from %d to %d)",      \
@@ -189,23 +225,27 @@ if (ftype == FIELDTYPE) {                                                     \
 			/* debug dump */
 			if (data->debug.dump_flows) {
 				char flow_str[128];
-#define NF_V9_FIELD(NAME, DESC, FIELDTYPE, SIZEMIN, SIZEMAX)                   \
-if (ftype == FIELDTYPE) {                                                      \
-	if (flength == 2) {                                                    \
-		sprintf(flow_str, "|%s: %d", DESC, ntohs(*((uint16_t *)fptr)));\
-	} else if (flength == 4) {                                             \
-		sprintf(flow_str, "|%s: %d", DESC, ntohl(*((uint32_t *)fptr)));\
-	} else {                                                               \
-		int ffi;                                                       \
-		sprintf(flow_str, "|%s: ", DESC);                              \
-		for (ffi=0; ffi<flength; ffi++) {                              \
-			sprintf(flow_str + strlen(flow_str), "0x%02x ",        \
-				*(fptr + ffi));                                \
-		}                                                              \
-	}                                                                      \
-	flow.NAME##_size = flength;                                            \
-}
+				if (debug_flow_str[0]) {
+					strcat(debug_flow_str, "; ");
+				}
+
+				if (0) {
+#define NF_V9_FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)             \
+} else if (ftype == FLDID) {                                                  \
+	flow_dump(flow_str, FLDTYPE, flength, DESC, fptr);
 #include "netflow_v9.def"
+				} else {
+					int ffi;
+					sprintf(flow_str, "Unknown field %d: ",
+						ftype);
+					for (ffi=0; ffi<flength; ffi++) {
+						sprintf(flow_str
+							+ strlen(flow_str),
+							"0x%02x ",
+							*(fptr + ffi));
+					}
+				}
+
 				strcat(debug_flow_str, flow_str);
 			}
 
@@ -219,19 +259,11 @@ if (ftype == FIELDTYPE) {                                                      \
 		if (data->debug.dump_flows) {
 			LOG("%s", debug_flow_str);
 		}
+
 		for (t_id=0; t_id<data->nmonit_items; t_id++) {
 			table_process(data, data->monit_items[t_id].expr,
 				&flow);
 		}
-/*
-		if (flow.has_last_switched) {
-			uint32_t *time = (uint32_t *)flow.last_switched;
-			LOG("LAST SWITCHED: %d (%u/%d)",
-			npi->uptime - (unsigned int)*time,
-			(unsigned int)*time,
-			npi->uptime);
-		}
-*/
 	}
 	(*ptr) += length;
 	return 1;
