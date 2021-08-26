@@ -27,6 +27,7 @@
 #include <pthread.h>
 #include <endian.h>
 #include <alloca.h>
+#include <endian.h>
 
 #include "utils.h"
 #include "netflow.h"
@@ -84,7 +85,7 @@ table_process(struct xe_data *data, struct filter_expr *expr,
 }
 
 static void
-flow_dump_bytes(char *str, int flength, char *desc, uint8_t *fptr)
+flow_field_dump_bytes(char *str, int flength, char *desc, uint8_t *fptr)
 {
 	int i;
 
@@ -95,11 +96,11 @@ flow_dump_bytes(char *str, int flength, char *desc, uint8_t *fptr)
 }
 
 static void
-flow_dump(char *str, enum NF_FIELD_TYPE type, int flength,
+flow_field_dump(char *str, enum NF_FIELD_TYPE type, int flength,
 	char *desc, uint8_t *fptr)
 {
 	if (type == NF_FIELD_BYTES) {
-		flow_dump_bytes(str, flength, desc, fptr);
+		flow_field_dump_bytes(str, flength, desc, fptr);
 		return;
 	}
 
@@ -116,8 +117,65 @@ flow_dump(char *str, enum NF_FIELD_TYPE type, int flength,
 			sprintf(str, "%s: %u", desc,
 				ntohl(*((uint32_t *)fptr)));
 		}
+	} else if ((flength == 8) && (type == NF_FIELD_INT)) {
+		sprintf(str, "%s: %lu", desc,
+			be64toh(*((uint64_t *)fptr)));
+	} else if ((flength == 16) && (type == NF_FIELD_IP_ADDR)) {
+		/* FIXME: hmm */
+		sprintf(str, "%s: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:"
+			"%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", desc,
+			*(fptr + 0), *(fptr + 1), *(fptr + 2), *(fptr + 3),
+			*(fptr + 4), *(fptr + 5), *(fptr + 6), *(fptr + 7),
+			*(fptr + 8), *(fptr + 9), *(fptr + 10), *(fptr + 11),
+			*(fptr + 12), *(fptr + 13), *(fptr + 14), *(fptr + 15));
 	} else {
-		flow_dump_bytes(str, flength, desc, fptr);
+		flow_field_dump_bytes(str, flength, desc, fptr);
+	}
+}
+
+static void
+flow_parse(struct xe_data *data, struct nf_flow_info *flow,
+	int flength, int ftype, uint8_t *fptr,
+	char *debug_flow_str)
+{
+
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+if (ftype == FLDID) {                                                         \
+	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
+		LOG("Incorrect '" #NAME                                       \
+			"' field size (got %d, expected from %d to %d)",      \
+			flength, SIZEMIN, SIZEMAX);                           \
+	} else {                                                              \
+		memcpy(&flow->NAME, fptr, flength);                            \
+		/*LOG("Field: '"#NAME"', length: %d", flength);*/             \
+		flow->has_##NAME = 1;                                          \
+		flow->NAME##_size = flength;                                   \
+	}                                                                     \
+}
+#include "netflow.def"
+
+	/* debug dump */
+	if (data->debug.dump_flows) {
+		char flow_str[128];
+		if (debug_flow_str[0]) {
+			strcat(debug_flow_str, "; ");
+		}
+
+		if (0) {
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+} else if (ftype == FLDID) {                                                  \
+	flow_field_dump(flow_str, FLDTYPE, flength, DESC, fptr);
+#include "netflow.def"
+		} else {
+			int i;
+			sprintf(flow_str, "Unknown field %d: ", ftype);
+			for (i=0; i<flength; i++) {
+				sprintf(flow_str + strlen(flow_str),
+					"0x%02x ", *(fptr + i));
+			}
+		}
+
+		strcat(debug_flow_str, flow_str);
 	}
 }
 
@@ -207,47 +265,8 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
 
-#define NF_V9_FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)             \
-if (ftype == FLDID) {                                                         \
-	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
-		LOG("Incorrect '" #NAME                                       \
-			"' field size (got %d, expected from %d to %d)",      \
-			flength, SIZEMIN, SIZEMAX);                           \
-	} else {                                                              \
-		memcpy(&flow.NAME, fptr, flength);                            \
-		/*LOG("Field: '"#NAME"', length: %d", flength);*/             \
-		flow.has_##NAME = 1;                                          \
-		flow.NAME##_size = flength;                                   \
-	}                                                                     \
-}
-#include "netflow_v9.def"
-
-			/* debug dump */
-			if (data->debug.dump_flows) {
-				char flow_str[128];
-				if (debug_flow_str[0]) {
-					strcat(debug_flow_str, "; ");
-				}
-
-				if (0) {
-#define NF_V9_FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)             \
-} else if (ftype == FLDID) {                                                  \
-	flow_dump(flow_str, FLDTYPE, flength, DESC, fptr);
-#include "netflow_v9.def"
-				} else {
-					int ffi;
-					sprintf(flow_str, "Unknown field %d: ",
-						ftype);
-					for (ffi=0; ffi<flength; ffi++) {
-						sprintf(flow_str
-							+ strlen(flow_str),
-							"0x%02x ",
-							*(fptr + ffi));
-					}
-				}
-
-				strcat(debug_flow_str, flow_str);
-			}
+			flow_parse(data, &flow,
+				flength, ftype, fptr, debug_flow_str);
 
 			fptr += flength;
 
@@ -321,10 +340,6 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
 			}
 		}
 	}
-/*
-	LOG("end of v9");
-	LOG("========================");
-*/
 	return 1;
 }
 
@@ -348,7 +363,7 @@ ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 		struct ipfix_inf_element_enterprise *ent;
 
 		ent = (struct ipfix_inf_element_enterprise *)(*ptr);
-		LOG("id: %d, length: %d", ntohs(ent->id), ntohs(ent->length));
+		/*LOG("id: %d, length: %d", ntohs(ent->id), ntohs(ent->length));*/
 		if ((ntohs(ent->id) >> 15) & 1) {
 			/* enterprise */
 			tmpl->elements[i].id = ent->id;
@@ -423,9 +438,10 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	int stop = 0;
 	int flow_num = 0;
 
+/*
 	LOG("ipfix data, flowset: %d, length == %d", ntohs(flowset_id),
 		length);
-
+*/
 	make_template_key(&tkey, flowset_id, npi, 10);
 	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
 
@@ -439,14 +455,16 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	fptr = (*ptr);
 
 	while (!stop) {
-/*		struct nf_flow_info flow_info;*/
+		struct nf_flow_info flow;
+		char debug_flow_str[1024];
 
 		if ((length - (fptr - (*ptr))) < template_field_count) {
 			break;
 		}
 
-		LOG("flow #%d", flow_num);
-/*		memset(&flow_info, 0, sizeof(flow_info));*/
+		/*LOG("flow #%d", flow_num);*/
+		memset(&flow, 0, sizeof(struct nf_flow_info));
+		debug_flow_str[0] = '\0';
 
 		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
@@ -454,35 +472,9 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			flength = ntohs(tmpl->elements[i].length);
 			ftype = ntohs(tmpl->elements[i].id);
 
-			if (ftype == 2) {
-				uint64_t packets;
+			flow_parse(data, &flow,
+				flength, ftype, fptr, debug_flow_str);
 
-				memcpy(&packets, fptr, flength);
-				packets = be64toh(packets);
-				LOG("packets: %lu", packets);
-/*				flow_info.packets = packets;*/
-			}
-			if (ftype == 153) {
-				uint64_t last_uptime;
-
-				memcpy(&last_uptime, fptr, flength);
-				last_uptime = be64toh(last_uptime);
-				LOG("flowStartMilliseconds: %lu (uptime: %u)",
-					 last_uptime, npi->uptime);
-/*				flow_info.end = last_uptime;*/
-			}
-			if (ftype == 152) {
-				uint64_t first_uptime;
-
-				memcpy(&first_uptime, fptr, flength);
-				first_uptime = be64toh(first_uptime);
-				LOG("flowEndMilliseconds: %lu",
-					first_uptime);
-/*				flow_info.start = first_uptime;*/
-			}
-
-			LOG("Field type: %d, length == %d, first byte == %d",
-				ftype, flength, fptr[0]);
 			fptr += flength;
 
 			if ((fptr - (*ptr)) >= length) {
@@ -490,8 +482,13 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 				break;
 			}
 		}
+
+		/* debug dump */
+		if (data->debug.dump_flows) {
+			LOG("%s", debug_flow_str);
+		}
+
 		flow_num++;
-/*		printf("%lu %lu\n", flow_info.end / 1000, flow_info.packets);*/
 	}
 	return 1;
 }
@@ -511,12 +508,12 @@ parse_ipfix(struct xe_data *data, struct nf_packet_info *npi, int len)
 	npi->source_id = header->observation_domain;
 	npi->epoch = header->export_time;
 	npi->uptime = 0;
-
+/*
 	LOG("got ipfix, package sequence: %u, source id %u, length %d",
 		ntohl(header->sequence_number),
 		ntohl(npi->source_id),
 		len);
-
+*/
 
 	ptr = (uint8_t *)npi->rawpacket + sizeof(struct ipfix_header);
 
@@ -531,7 +528,7 @@ parse_ipfix(struct xe_data *data, struct nf_packet_info *npi, int len)
 
 		ptr += sizeof(struct ipfix_flowset_header);
 
-		LOG("Flowset %u, length %u", flowset_id_host, length);
+/*		LOG("Flowset %u, length %u", flowset_id_host, length);*/
 
 		if (flowset_id_host == 2) {
 			if (!parse_ipfix_template(data, npi, &ptr,
@@ -555,8 +552,6 @@ parse_ipfix(struct xe_data *data, struct nf_packet_info *npi, int len)
 
 		ptr += length - sizeof(struct ipfix_flowset_header);
 	}
-	LOG("end of ipfix");
-	LOG("========================");
 	return 1;
 }
 
