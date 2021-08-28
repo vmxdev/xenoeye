@@ -134,6 +134,16 @@ flow_field_dump(char *str, enum NF_FIELD_TYPE type, int flength,
 }
 
 static void
+flow_dump(struct xe_data *data, const char *flow_str)
+{
+	if (data->debug.dump_to_syslog) {
+		LOG("%s", flow_str);
+	} else {
+		fprintf(data->debug.dump_out, "%s\n", flow_str);
+	}
+}
+
+static void
 flow_parse(struct xe_data *data, struct nf_flow_info *flow,
 	int flength, int ftype, uint8_t *fptr,
 	char *debug_flow_str)
@@ -146,10 +156,10 @@ if (ftype == FLDID) {                                                         \
 			"' field size (got %d, expected from %d to %d)",      \
 			flength, SIZEMIN, SIZEMAX);                           \
 	} else {                                                              \
-		memcpy(&flow->NAME, fptr, flength);                            \
+		memcpy(&flow->NAME, fptr, flength);                           \
 		/*LOG("Field: '"#NAME"', length: %d", flength);*/             \
-		flow->has_##NAME = 1;                                          \
-		flow->NAME##_size = flength;                                   \
+		flow->has_##NAME = 1;                                         \
+		flow->NAME##_size = flength;                                  \
 	}                                                                     \
 }
 #include "netflow.def"
@@ -276,7 +286,7 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 		}
 
 		if (data->debug.dump_flows) {
-			LOG("%s", debug_flow_str);
+			flow_dump(data, debug_flow_str);
 		}
 
 		for (t_id=0; t_id<data->nmonit_items; t_id++) {
@@ -485,7 +495,7 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 
 		/* debug dump */
 		if (data->debug.dump_flows) {
-			LOG("%s", debug_flow_str);
+			flow_dump(data, debug_flow_str);
 		}
 
 		flow_num++;
