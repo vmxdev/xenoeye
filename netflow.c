@@ -447,6 +447,7 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	int template_field_count;
 	int stop = 0;
 	int flow_num = 0;
+	size_t t_id;
 
 /*
 	LOG("ipfix data, flowset: %d, length == %d", ntohs(flowset_id),
@@ -496,6 +497,11 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 		/* debug dump */
 		if (data->debug.dump_flows) {
 			flow_dump(data, debug_flow_str);
+		}
+
+		for (t_id=0; t_id<data->nmonit_items; t_id++) {
+			table_process(data, data->monit_items[t_id].expr,
+				&flow);
 		}
 
 		flow_num++;

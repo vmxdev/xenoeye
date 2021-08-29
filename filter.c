@@ -65,6 +65,7 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 	mask_sym = strchr(host_tmp, '/');
 	if (mask_sym) {
 		char *endptr;
+
 		*mask_sym = '\0';
 		mask_sym++;
 		mask = strtol(mask_sym, &endptr, 10);
@@ -76,7 +77,7 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 	}
 
 	/* TODO: add getaddrinfo */
-	rc = inet_pton(AF_INET, host, &hostaddr);
+	rc = inet_pton(AF_INET, host_tmp, &hostaddr);
 	if (rc == 1) {
 		/* IPv4 */
 		cidr->version = 4;
@@ -87,7 +88,7 @@ filter_id_to_addr(char *host, struct CIDR *cidr)
 		return 1;
 	}
 
-	rc = inet_pton(AF_INET6, host, &hostaddr);
+	rc = inet_pton(AF_INET6, host_tmp, &hostaddr);
 	if (rc == 1) {
 		/* IPv6 */
 		cidr->version = 6;
