@@ -2,11 +2,13 @@
 #define filter_h_included
 
 #include <stdint.h>
+#include "xenoeye.h"
 
 #define ERR_MSG_LEN     1024
 #define TOKEN_MAX_SIZE  512
 
 struct nf_flow_info;
+
 
 struct ipv4_addr_and_mask
 {
@@ -16,19 +18,10 @@ struct ipv4_addr_and_mask
 
 struct ipv6_addr_and_mask
 {
-	uint64_t addr[2];
-	uint64_t mask[2];
+	xe_ip addr;
+	xe_ip mask;
 };
 
-struct CIDR
-{
-	int version;
-	union CIDR_addr
-	{
-		struct ipv4_addr_and_mask ipv4;
-		struct ipv6_addr_and_mask ipv6;
-	} cidr;
-};
 
 struct int_range
 {
@@ -49,7 +42,7 @@ enum TOKEN_ID
 	AND,
 	NOT,
 
-#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D)  \
+#define FIELD(NAME, STR, TYPE, SRC, DST)  \
 	NAME,
 #include "filter.def"
 
@@ -64,7 +57,8 @@ struct token
 	union token_data {
 		char str[TOKEN_MAX_SIZE];
 		struct int_range range;
-		struct CIDR cidr;
+		struct ipv4_addr_and_mask ipv4;
+		struct ipv6_addr_and_mask ipv6;
 	} data;
 };
 
@@ -76,19 +70,21 @@ struct token
 union filter_basic_data
 {
 	struct int_range range;
-	struct CIDR cidr;
+	struct ipv4_addr_and_mask ipv4;
+	struct ipv6_addr_and_mask ipv6;
 };
 
 enum FILTER_BASIC_TYPE
 {
-	FILTER_BASIC_ADDR,
+	FILTER_BASIC_ADDR4,
+	FILTER_BASIC_ADDR6,
 	FILTER_BASIC_RANGE
 };
 
 enum FILTER_BASIC_NAME
 {
 	FILTER_BASIC_NAME_NONE,
-#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D)  \
+#define FIELD(NAME, STR, TYPE, SRC, DST)  \
 	FILTER_BASIC_NAME_##NAME,
 #include "filter.def"
 	FILTER_BASIC_NAME_DUMMY
@@ -145,7 +141,10 @@ void read_token(struct filter_input *f);
 
 int filter_add_basic_filter(struct filter_expr *e,
 	enum FILTER_BASIC_TYPE type, enum FILTER_BASIC_NAME name, int dir);
-int filter_add_to_basic_filter(struct filter_expr *e, struct token *tok);
+
+int filter_add_to_basic_filter(struct filter_input *f,
+	struct filter_expr *e, struct token *tok, enum FILTER_BASIC_TYPE type);
+
 int filter_add_op(struct filter_expr *e, enum FILTER_OP op);
 
 int filter_match(struct filter_expr *expr, struct nf_flow_info *flow);

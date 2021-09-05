@@ -170,7 +170,7 @@ read_token(struct filter_input *q)
 		} else if (MATCH("dst")) {
 			q->current_token.id = DST;
 
-#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D) \
+#define FIELD(NAME, STR, TYPE, SRC, DST)                      \
 		} else if (MATCH(STR)) {                      \
 			q->current_token.id = NAME;
 		#include "filter.def"

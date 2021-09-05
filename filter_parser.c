@@ -40,7 +40,7 @@ expect(struct filter_input *i, enum TOKEN_ID token)
 }
 
 static int
-id(struct filter_input *f, struct filter_expr *e)
+id(struct filter_input *f, struct filter_expr *e, enum FILTER_BASIC_TYPE type)
 {
 	if ((f->current_token.id != ID)
 		&& (f->current_token.id != INT_RANGE)) {
@@ -49,7 +49,7 @@ id(struct filter_input *f, struct filter_expr *e)
 		return 0;
 	}
 
-	filter_add_to_basic_filter(e, &f->current_token);
+	filter_add_to_basic_filter(f, e, &f->current_token, type);
 
 	READ_TOKEN_CHECK(f);
 
@@ -62,7 +62,8 @@ id(struct filter_input *f, struct filter_expr *e)
 		if ((f->current_token.id == ID)
 			|| (f->current_token.id == INT_RANGE)) {
 
-			filter_add_to_basic_filter(e, &f->current_token);
+			filter_add_to_basic_filter(f, e, &f->current_token,
+				type);
 
 			READ_TOKEN_CHECK(f);
 			continue;
@@ -82,11 +83,11 @@ rule_without_direction(struct filter_input *q, struct filter_expr *e, int dir)
 
 	if (0) {
 
-#define FILTER_FIELD(NAME, STR, TYPE, IP4S, IP4D, IP6S, IP6D)         \
+#define FIELD(NAME, STR, TYPE, SRC, DST)                              \
 	} else if (accept(q, NAME)) {                                 \
 		filter_add_basic_filter(e, FILTER_BASIC_##TYPE,       \
 			FILTER_BASIC_NAME_##NAME, dir);               \
-		return id(q, e);
+		return id(q, e, FILTER_BASIC_##TYPE);
 #include "filter.def"
 
 	}
