@@ -12,7 +12,7 @@ typedef __int128_t xe_ip;
 struct nf_flow_info;
 struct filter_expr;
 
-struct monit_item
+struct monit_object
 {
 	char name[PATH_MAX];
 	struct filter_expr *expr;
@@ -53,8 +53,8 @@ struct xe_debug
 
 struct xe_data
 {
-	size_t nmonit_items;
-	struct monit_item *monit_items;
+	size_t nmonit_objects;
+	struct monit_object *monit_objects;
 
 	struct capture *cap;
 	size_t ncap;
@@ -75,10 +75,10 @@ struct capture_thread_params
 };
 
 
-int monit_items_init(struct xe_data *data);
-int monit_items_free(struct xe_data *data);
+int monit_objects_init(struct xe_data *data);
+int monit_objects_free(struct xe_data *data);
 
-int monit_item_match(struct monit_item *mi, struct nf_flow_info *fi);
+int monit_object_match(struct monit_object *mi, struct nf_flow_info *fi);
 
 int pcapture_start(struct xe_data *data, size_t idx);
 

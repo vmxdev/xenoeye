@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2021, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,12 +30,12 @@
 #include "aajson/aajson.h"
 
 static int
-monit_item_json_callback(struct aajson *a, aajson_val *value, void *user)
+monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
-	struct monit_item *mi;
+	struct monit_object *mi;
 	char *key = a->path_stack[a->path_stack_pos].data.path_item;
 
-	mi = (struct monit_item *)user;
+	mi = (struct monit_object *)user;
 
 	if (a->path_stack_pos == 1) {
 		if (strcmp(key, "filter") == 0) {
@@ -54,14 +54,14 @@ monit_item_json_callback(struct aajson *a, aajson_val *value, void *user)
 }
 
 static int
-monit_item_info_parse(struct xe_data *data, const char *miname, const char *fn)
+monit_object_info_parse(struct xe_data *data, const char *miname, const char *fn)
 {
 	FILE *f;
 	struct stat st;
 	size_t s;
 	char *json;
 	int ret = 0;
-	struct monit_item mi, *mitmp;
+	struct monit_object mi, *mitmp;
 
 	struct aajson a;
 
@@ -92,26 +92,26 @@ monit_item_info_parse(struct xe_data *data, const char *miname, const char *fn)
 
 	/* parse */
 	aajson_init(&a, json);
-	aajson_parse(&a, &monit_item_json_callback, &mi);
+	aajson_parse(&a, &monit_object_json_callback, &mi);
 	if (a.error) {
 		LOG("Can't parse json file '%s': %s", fn, a.errmsg);
 		goto fail_parse;
 	}
 
-	mitmp = realloc(data->monit_items, (data->nmonit_items + 1)
-		* sizeof(struct monit_item));
+	mitmp = realloc(data->monit_objects, (data->nmonit_objects + 1)
+		* sizeof(struct monit_object));
 	if (!mitmp) {
 		LOG("realloc() failed");
 		goto fail_realloc;
 	}
 
 	filter_dump(mi.expr, stdout);
-	/* copy name of monitoring item */
+	/* copy name of monitoring object */
 	strcpy(mi.name, miname);
 
-	data->monit_items = mitmp;
-	data->monit_items[data->nmonit_items] = mi;
-	data->nmonit_items++;
+	data->monit_objects = mitmp;
+	data->monit_objects[data->nmonit_objects] = mi;
+	data->nmonit_objects++;
 
 	ret = 1;
 
@@ -128,21 +128,21 @@ fail_open:
 }
 
 int
-monit_items_init(struct xe_data *data)
+monit_objects_init(struct xe_data *data)
 {
 	DIR *d;
 	struct dirent *dir;
 	int ret = 1;
-	char midir[PATH_MAX] = "monit_items";
+	char midir[PATH_MAX] = "monit_objects";
 	char mifile[PATH_MAX];
 
-	free(data->monit_items);
-	data->monit_items = NULL;
-	data->nmonit_items = 0;
+	free(data->monit_objects);
+	data->monit_objects = NULL;
+	data->nmonit_objects = 0;
 
 	d = opendir(midir);
 	if (!d) {
-		LOG("Can't open directory with monitoring items '%s': %s",
+		LOG("Can't open directory with monitoring objects '%s': %s",
 			midir, strerror(errno));
 		goto fail_opendir;
 	}
@@ -157,10 +157,10 @@ monit_items_init(struct xe_data *data)
 			continue;
 		}
 
-		sprintf(mifile, "%s/%s/info.json", midir, dir->d_name);
-		LOG("Adding monitoring item '%s'", dir->d_name);
+		sprintf(mifile, "%s/%s/mo.conf", midir, dir->d_name);
+		LOG("Adding monitoring object '%s'", dir->d_name);
 
-		if (!monit_item_info_parse(data, dir->d_name, mifile)) {
+		if (!monit_object_info_parse(data, dir->d_name, mifile)) {
 			continue;
 		}
 	}

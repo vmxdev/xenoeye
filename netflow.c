@@ -289,8 +289,8 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			flow_dump(data, debug_flow_str);
 		}
 
-		for (t_id=0; t_id<data->nmonit_items; t_id++) {
-			table_process(data, data->monit_items[t_id].expr,
+		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
+			table_process(data, data->monit_objects[t_id].expr,
 				&flow);
 		}
 	}
@@ -499,8 +499,8 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			flow_dump(data, debug_flow_str);
 		}
 
-		for (t_id=0; t_id<data->nmonit_items; t_id++) {
-			table_process(data, data->monit_items[t_id].expr,
+		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
+			table_process(data, data->monit_objects[t_id].expr,
 				&flow);
 		}
 

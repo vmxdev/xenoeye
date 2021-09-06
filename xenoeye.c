@@ -437,8 +437,8 @@ main(int argc, char *argv[])
 		LOG("Dump flows: no");
 	}
 
-	if (!monit_items_init(&data)) {
-		LOG("Can't init monitoring items, exiting");
+	if (!monit_objects_init(&data)) {
+		LOG("Can't init monitoring objects, exiting");
 		return EXIT_FAILURE;
 	}
 
