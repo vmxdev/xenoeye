@@ -51,6 +51,7 @@ fail_filter_malloc:
 	return 0;
 }
 
+/* TODO: make one function for IPv4 and IPv6 */
 static int
 filter_id_to_addr4(struct filter_input *f, char *host,
 	struct ipv4_addr_and_mask *am)
@@ -58,18 +59,18 @@ filter_id_to_addr4(struct filter_input *f, char *host,
 	int rc;
 	struct in6_addr hostaddr;
 	char *mask_sym;
-	int mask = -1; /* assuming no mask by default */
 	char host_tmp[TOKEN_MAX_SIZE];
 
 	strcpy(host_tmp, host);
 
+	am->mask_len = -1;
 	mask_sym = strchr(host_tmp, '/');
 	if (mask_sym) {
 		char *endptr;
 
 		*mask_sym = '\0';
 		mask_sym++;
-		mask = strtol(mask_sym, &endptr, 10);
+		am->mask_len = strtol(mask_sym, &endptr, 10);
 		if (*endptr != '\0') {
 			mkerror(f, "Incorrect network mask");
 			return 0;
@@ -80,7 +81,7 @@ filter_id_to_addr4(struct filter_input *f, char *host,
 	rc = inet_pton(AF_INET, host_tmp, &hostaddr);
 	if (rc == 1) {
 		memcpy(&am->addr, &hostaddr, 4);
-		if (mask < 0) {
+		if (am->mask_len < 0) {
 			/* no mask, set all bits to 1 */
 			am->mask = ~(am->mask & 0);
 		} else {
@@ -89,7 +90,7 @@ filter_id_to_addr4(struct filter_input *f, char *host,
 
 			am->mask = 0;
 
-			for (i=0; i<mask; i++) {
+			for (i=0; i<am->mask_len; i++) {
 				am->mask |= 1UL << i;
 			}
 		}
@@ -107,18 +108,18 @@ filter_id_to_addr6(struct filter_input *f, char *host,
 	int rc;
 	struct in6_addr hostaddr;
 	char *mask_sym;
-	int mask = -1; /* assuming no mask by default */
 	char host_tmp[TOKEN_MAX_SIZE];
 
 	strcpy(host_tmp, host);
 
+	am->mask_len = -1;
 	mask_sym = strchr(host_tmp, '/');
 	if (mask_sym) {
 		char *endptr;
 
 		*mask_sym = '\0';
 		mask_sym++;
-		mask = strtol(mask_sym, &endptr, 10);
+		am->mask_len = strtol(mask_sym, &endptr, 10);
 		if (*endptr != '\0') {
 			mkerror(f, "Incorrect network mask");
 			return 0;
@@ -128,7 +129,7 @@ filter_id_to_addr6(struct filter_input *f, char *host,
 	rc = inet_pton(AF_INET6, host_tmp, &hostaddr);
 	if (rc == 1) {
 		memcpy(&am->addr, &hostaddr, 16);
-		if (mask < 0) {
+		if (am->mask_len < 0) {
 			/* no mask */
 			am->mask = ~(am->mask & 0);
 		} else {
@@ -136,7 +137,7 @@ filter_id_to_addr6(struct filter_input *f, char *host,
 
 			am->mask = 0;
 
-			for (i=0; i<mask; i++) {
+			for (i=0; i<am->mask_len; i++) {
 				am->mask |= 1UL << i;
 			}
 		}
@@ -478,37 +479,31 @@ filter_free(struct filter_expr *e)
 	free(e);
 }
 
+
 static void
-filter_dump_addr4(struct ipv4_addr_and_mask *ipv4, FILE *f)
+filter_dump_addr(FILE *f, int version, uint8_t *aptr, int mask)
 {
 	int i;
-	uint8_t *aptr = (uint8_t *)&ipv4->addr;
 
 	fprintf(f, " ");
 
-	for (i=0; i<4; i++) {
-		fprintf(f, "%u", aptr[i]);
-		if (i != 3) {
-			fprintf(f, ".");
+	if (version == 4) {
+		for (i=0; i<4; i++) {
+			fprintf(f, "%u", aptr[i]);
+			if (i != 3) {
+				fprintf(f, ".");
+			}
 		}
-	}
-}
-
-static void
-filter_dump_addr6(struct ipv6_addr_and_mask *ipv6, FILE *f)
-{
-	int i;
-	uint8_t *aptr = (uint8_t *)&ipv6->addr;
-
-	fprintf(f, " ");
-
-	for (i=0; i<16; i++) {
-		fprintf(f, "%u", aptr[i]);
-		if (i != 15) {
-			fprintf(f, ":");
+	} else {
+		for (i=0; i<16; i++) {
+			fprintf(f, "%u", aptr[i]);
+			if (i != 15) {
+				fprintf(f, ":");
+			}
 		}
 	}
 
+	fprintf(f, "/%d", mask);
 }
 
 
@@ -542,11 +537,15 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 
 	if (fb->type == FILTER_BASIC_ADDR4) {
 		for (i=0; i<fb->n; i++) {
-			filter_dump_addr4(&(fb->data[i].ipv4), f);
+			filter_dump_addr(f, 4,
+				(uint8_t *)&(fb->data[i].ipv4.addr),
+				fb->data[i].ipv4.mask_len);
 		}
 	} else if (fb->type == FILTER_BASIC_ADDR6) {
 		for (i=0; i<fb->n; i++) {
-			filter_dump_addr6(&(fb->data[i].ipv6), f);
+			filter_dump_addr(f, 6,
+				(uint8_t *)&(fb->data[i].ipv6.addr),
+				fb->data[i].ipv6.mask_len);
 		}
 	} else if (fb->type == FILTER_BASIC_RANGE) {
 		for (i=0; i<fb->n; i++) {

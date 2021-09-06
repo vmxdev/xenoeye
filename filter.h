@@ -12,12 +12,14 @@ struct nf_flow_info;
 
 struct ipv4_addr_and_mask
 {
+	int mask_len;
 	uint32_t addr;
 	uint32_t mask;
 };
 
 struct ipv6_addr_and_mask
 {
+	int mask_len;
 	xe_ip addr;
 	xe_ip mask;
 };
