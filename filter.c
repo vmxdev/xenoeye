@@ -80,20 +80,22 @@ filter_id_to_addr4(struct filter_input *f, char *host,
 	/* TODO: add getaddrinfo */
 	rc = inet_pton(AF_INET, host_tmp, &hostaddr);
 	if (rc == 1) {
+		int i;
+		/* TODO: check mask_len */
+
 		memcpy(&am->addr, &hostaddr, 4);
 		if (am->mask_len < 0) {
-			/* no mask, set all bits to 1 */
-			am->mask = ~(am->mask & 0);
-		} else {
-			/* TODO: check mask size */
-			int i;
-
-			am->mask = 0;
-
-			for (i=0; i<am->mask_len; i++) {
-				am->mask |= 1UL << i;
-			}
+			am->mask_len = 32;
 		}
+
+		am->mask = 0;
+
+		for (i=0; i<am->mask_len; i++) {
+			am->mask |= 1UL << i;
+		}
+
+		/* apply mask to address */
+		am->addr &= am->mask;
 		return 1;
 	}
 
@@ -223,19 +225,19 @@ static int
 filter_basic_match_addr4(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	size_t i;
-	void *addr4;
-	void *addr4_second = NULL;
+	uint32_t *addr4;
+	uint32_t *addr4_second = NULL;
 
 	switch (fb->name) {
 #define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
 		case FILTER_BASIC_NAME_##NAME:                               \
 			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
-				addr4 = flow->SRC;                           \
+				addr4 = (uint32_t *)flow->SRC;               \
 			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
-				addr4 = flow->DST;                           \
+				addr4 = (uint32_t *)flow->DST;               \
 			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
-				addr4 = flow->SRC;                           \
-				addr4_second = flow->DST;                    \
+				addr4 = (uint32_t *)flow->SRC;               \
+				addr4_second = (uint32_t *)flow->DST;        \
 			} else {                                             \
 				return 0;                                    \
 			}                                                    \
@@ -245,20 +247,23 @@ filter_basic_match_addr4(struct filter_basic *fb, struct nf_flow_info *flow)
 			return 0;
 	}
 
-	/* TODO: add mask */
 	for (i=0; i<fb->n; i++) {
 		if (fb->direction == FILTER_BASIC_DIR_BOTH) {
-			if (memcmp(addr4,
-				&fb->data[i].ipv4.addr, 4) == 0) {
+			if ((*addr4 & fb->data[i].ipv4.mask)
+				== fb->data[i].ipv4.addr) {
+
 				return 1;
 			}
-			if (memcmp(addr4_second,
-				&fb->data[i].ipv4.addr, 4) == 0) {
+
+			if ((*addr4_second & fb->data[i].ipv4.mask)
+				== fb->data[i].ipv4.addr) {
+
 				return 1;
 			}
 		} else {
-			if (memcmp(addr4,
-				&fb->data[i].ipv4.addr, 4) == 0) {
+			if ((*addr4 & fb->data[i].ipv4.mask)
+				== fb->data[i].ipv4.addr) {
+
 				return 1;
 			}
 		}
@@ -429,20 +434,20 @@ filter_match(struct filter_expr *expr, struct nf_flow_info *flow)
 				if (sp < 1) {
 					return 0;
 				}
-				stack[sp] = ~stack[sp];
+				stack[sp - 1] = ~stack[sp - 1];
 				break;
 			case FILTER_OP_AND:
 				if (sp < 2) {
 					return 0;
 				}
-				stack[sp - 1] &= stack[sp];
+				stack[sp - 2] &= stack[sp - 1];
 				sp--;
 				break;
 			case FILTER_OP_OR:
 				if (sp < 2) {
 					return 0;
 				}
-				stack[sp - 1] |= stack[sp];
+				stack[sp - 2] |= stack[sp - 1];
 				sp--;
 				break;
 			default:

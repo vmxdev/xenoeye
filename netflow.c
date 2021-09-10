@@ -80,7 +80,7 @@ table_process(struct xe_data *data, struct filter_expr *expr,
 	int ret;
 
 	ret = filter_match(expr, flow);
-/*	LOG("MATCH: %d", ret);*/
+	LOG("MATCH: %d", ret);
 	return ret;
 }
 
