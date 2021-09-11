@@ -297,7 +297,7 @@ scapture_thread(void *arg)
 
 			addr = (struct sockaddr_in *)&nfpkt.src_addr;
 			/* we're supporting only IPv4 */
-			LOG("src_addr: %s", inet_ntoa(addr->sin_addr));
+			/*LOG("src_addr: %s", inet_ntoa(addr->sin_addr));*/
 
 			nfpkt.src_addr_ipv4 =
 				 *((uint32_t *)&(addr->sin_addr));

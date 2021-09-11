@@ -12,10 +12,20 @@ typedef __int128_t xe_ip;
 struct nf_flow_info;
 struct filter_expr;
 
+/* debug options */
+struct xe_debug
+{
+	int dump_flows;
+	int dump_to_syslog;
+	FILE *dump_out;
+};
+
 struct monit_object
 {
 	char name[PATH_MAX];
 	struct filter_expr *expr;
+
+	struct xe_debug debug;
 };
 
 enum XENOEYE_CAPTURE_TYPE
@@ -41,16 +51,6 @@ struct capture
 	unsigned int port;
 };
 
-
-/* debug options */
-struct xe_debug
-{
-	int dump_flows;
-	int dump_to_syslog;
-	FILE *dump_out;
-};
-
-
 struct xe_data
 {
 	size_t nmonit_objects;
@@ -64,7 +64,6 @@ struct xe_data
 	char templates_db[PATH_MAX];
 
 	struct xe_debug debug;
-
 };
 
 /* helper struct for passing data to capture threads */
