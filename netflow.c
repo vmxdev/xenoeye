@@ -76,27 +76,22 @@ template_dump(struct template_key *tkey)
 }
 
 static int
-table_process(struct xe_data *data, struct filter_expr *expr,
-	struct nf_flow_info *flow)
+table_process(struct xe_data *data, struct monit_object *mo,
+	struct nf_flow_info *flow, const char *debug_flow_str)
 {
-	int ret;
+	int match;
 
-	ret = filter_match(expr, flow);
-	LOG("MATCH: %d", ret);
-	return ret;
-}
-
-#if 0
-static void
-flow_dump(struct xe_data *data, const char *flow_str)
-{
-	if (data->debug.dump_to_syslog) {
-		LOG("%s", flow_str);
-	} else {
-		fprintf(data->debug.dump_out, "%s\n", flow_str);
+	match = filter_match(mo->expr, flow);
+	if (!match) {
+		return 0;
 	}
+
+	if (mo->debug.print_flows) {
+		flow_print_str(&mo->debug, debug_flow_str);
+	}
+	return 1;
 }
-#endif
+
 
 static void
 flow_parse(struct nf_flow_info *flow,
@@ -194,11 +189,13 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	fptr = (*ptr);
 	for (cnt=0; cnt<count; cnt++) {
 		struct nf_flow_info flow;
+		uint8_t *tmpfptr;
 		char debug_flow_str[1024];
 
-		memset(&flow, 0, sizeof(struct nf_flow_info));
-
 		debug_flow_str[0] = '\0';
+
+		memset(&flow, 0, sizeof(struct nf_flow_info));
+		tmpfptr = fptr;
 
 		/*LOG("Flowset #%d", cnt);*/
 		for (i=0; i<template_field_count; i++) {
@@ -208,8 +205,6 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			ftype = ntohs(tmpl->typelen[i].type);
 
 			flow_parse(&flow, flength, ftype, fptr);
-			flow_debug_add_field(&data->debug, flength, ftype,
-				fptr, debug_flow_str);
 
 			fptr += flength;
 
@@ -218,11 +213,32 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			}
 		}
 
-		flow_dump_str(&data->debug, debug_flow_str);
+		/* debug print */
+		if (data->prepare_text_flows) {
+			for (i=0; i<template_field_count; i++) {
+				int flength, ftype;
+
+				flength = ntohs(tmpl->typelen[i].length);
+				ftype = ntohs(tmpl->typelen[i].type);
+
+				flow_debug_add_field(flength, ftype, tmpfptr,
+					debug_flow_str);
+
+				tmpfptr += flength;
+
+				if ((tmpfptr - (*ptr)) >= length) {
+					break;
+				}
+			}
+		}
+
+		if (data->debug.print_flows) {
+			flow_print_str(&data->debug, debug_flow_str);
+		}
 
 		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
-			table_process(data, data->monit_objects[t_id].expr,
-				&flow);
+			table_process(data, &data->monit_objects[t_id],
+				&flow, debug_flow_str);
 		}
 	}
 	(*ptr) += length;
@@ -395,10 +411,12 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	template_field_count = ntohs(tmpl->header.field_count);
 
 	fptr = (*ptr);
-
 	while (!stop) {
 		struct nf_flow_info flow;
+		uint8_t *tmpfptr;
 		char debug_flow_str[1024];
+
+		debug_flow_str[0] = '\0';
 
 		if ((length - (fptr - (*ptr))) < template_field_count) {
 			break;
@@ -406,7 +424,7 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 
 		/*LOG("flow #%d", flow_num);*/
 		memset(&flow, 0, sizeof(struct nf_flow_info));
-		debug_flow_str[0] = '\0';
+		tmpfptr = fptr;
 
 		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
@@ -415,8 +433,6 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			ftype = ntohs(tmpl->elements[i].id);
 
 			flow_parse(&flow, flength, ftype, fptr);
-			flow_debug_add_field(&data->debug, flength, ftype,
-				fptr, debug_flow_str);
 
 			fptr += flength;
 
@@ -426,11 +442,33 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			}
 		}
 
-		flow_dump_str(&data->debug, debug_flow_str);
+		if (data->prepare_text_flows) {
+			for (i=0; i<template_field_count; i++) {
+				int flength, ftype;
+
+				flength = ntohs(tmpl->elements[i].length);
+				ftype = ntohs(tmpl->elements[i].id);
+
+				flow_debug_add_field(flength, ftype, tmpfptr,
+					debug_flow_str);
+
+				tmpfptr += flength;
+
+				if ((tmpfptr - (*ptr)) >= length) {
+					stop = 1;
+					break;
+				}
+			}
+		}
+
+		if (data->debug.print_flows) {
+			flow_print_str(&data->debug, debug_flow_str);
+		}
+
 
 		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
-			table_process(data, data->monit_objects[t_id].expr,
-				&flow);
+			table_process(data, &data->monit_objects[t_id],
+				&flow, debug_flow_str);
 		}
 
 		flow_num++;

@@ -16,13 +16,14 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <errno.h>
 #include "netflow.h"
 #include "utils.h"
 
 #include "flow_debug.h"
 
 static void
-flow_field_dump_bytes(char *str, int flength, char *desc, uint8_t *fptr)
+flow_field_print_bytes(char *str, int flength, char *desc, uint8_t *fptr)
 {
 	int i;
 
@@ -33,11 +34,11 @@ flow_field_dump_bytes(char *str, int flength, char *desc, uint8_t *fptr)
 }
 
 static void
-flow_field_dump(char *str, enum NF_FIELD_TYPE type, int flength,
+flow_field_print(char *str, enum NF_FIELD_TYPE type, int flength,
 	char *desc, uint8_t *fptr)
 {
 	if (type == NF_FIELD_BYTES) {
-		flow_field_dump_bytes(str, flength, desc, fptr);
+		flow_field_print_bytes(str, flength, desc, fptr);
 		return;
 	}
 
@@ -66,19 +67,15 @@ flow_field_dump(char *str, enum NF_FIELD_TYPE type, int flength,
 			*(fptr + 8), *(fptr + 9), *(fptr + 10), *(fptr + 11),
 			*(fptr + 12), *(fptr + 13), *(fptr + 14), *(fptr + 15));
 	} else {
-		flow_field_dump_bytes(str, flength, desc, fptr);
+		flow_field_print_bytes(str, flength, desc, fptr);
 	}
 }
 
 void
-flow_debug_add_field(struct xe_debug *debug, int flength, int ftype,
-	uint8_t *fptr, char *debug_flow_str)
+flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
+	char *debug_flow_str)
 {
 	char flow_str[128];
-
-	if (!debug->dump_flows) {
-		return;
-	}
 
 	if (debug_flow_str[0]) {
 		strcat(debug_flow_str, "; ");
@@ -87,7 +84,7 @@ flow_debug_add_field(struct xe_debug *debug, int flength, int ftype,
 	if (0) {
 #define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
 } else if (ftype == FLDID) {                                                  \
-	flow_field_dump(flow_str, FLDTYPE, flength, DESC, fptr);
+	flow_field_print(flow_str, FLDTYPE, flength, DESC, fptr);
 #include "netflow.def"
 	} else {
 		int i;
@@ -102,16 +99,41 @@ flow_debug_add_field(struct xe_debug *debug, int flength, int ftype,
 }
 
 void
-flow_dump_str(struct xe_debug *debug, const char *flow_str)
+flow_print_str(struct xe_debug *debug, const char *flow_str)
 {
-	if (!debug->dump_flows) {
-		return;
-	}
-
-	if (debug->dump_to_syslog) {
+	if (debug->print_to_syslog) {
 		LOG("%s", flow_str);
 	} else {
-		fprintf(debug->dump_out, "%s\n", flow_str);
+		fprintf(debug->fout, "%s\n", flow_str);
 	}
 }
+
+#define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
+
+int
+flow_debug_config(struct aajson *a, aajson_val *value, struct xe_debug *debug)
+{
+	if (STRCMP(a, 2, "dump-flows") == 0) {
+		debug->print_flows = 1;
+
+		if (strcmp(value->str, "none") == 0) {
+			debug->print_flows = 0;
+		} else if (strcmp(value->str, "syslog") == 0) {
+			debug->print_to_syslog = 1;
+		} else if (strcmp(value->str, "stdout") == 0) {
+			debug->fout = stdout;
+		} else {
+			/* file */
+			debug->fout = fopen(value->str, "a");
+			if (!debug->fout) {
+				LOG("Can't open file '%s': %s", value->str,
+					strerror(errno));
+				return 0;
+			}
+		}
+	}
+
+	return 1;
+}
+#undef STRCMP
 

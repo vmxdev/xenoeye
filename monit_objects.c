@@ -23,19 +23,20 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 
+#include "aajson/aajson.h"
 
 #include "utils.h"
 #include "xenoeye.h"
 #include "filter.h"
-#include "aajson/aajson.h"
+#include "flow_debug.h"
 
 static int
 monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
-	struct monit_object *mi;
+	struct monit_object *mo;
 	char *key = a->path_stack[a->path_stack_pos].data.path_item;
 
-	mi = (struct monit_object *)user;
+	mo = (struct monit_object *)user;
 
 	if (a->path_stack_pos == 1) {
 		if (strcmp(key, "filter") == 0) {
@@ -43,18 +44,24 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 
 			memset(&input, 0, sizeof(input));
 			input.s = value->str;
-			mi->expr = parse_filter(&input);
+			mo->expr = parse_filter(&input);
 			if (input.error) {
 				LOG("Parse error: %s", input.errmsg);
 				return 0;
 			}
 		}
 	}
+
+	if (strcmp(a->path_stack[1].data.path_item, "debug") == 0) {
+		return flow_debug_config(a, value, &mo->debug);
+	}
+
 	return 1;
 }
 
 static int
-monit_object_info_parse(struct xe_data *data, const char *miname, const char *fn)
+monit_object_info_parse(struct xe_data *data, const char *miname,
+	const char *fn)
 {
 	FILE *f;
 	struct stat st;
@@ -90,6 +97,7 @@ monit_object_info_parse(struct xe_data *data, const char *miname, const char *fn
 		goto fail_fread;
 	}
 
+	memset(&mi, 0, sizeof(struct monit_object));
 	/* parse */
 	aajson_init(&a, json);
 	aajson_parse(&a, &monit_object_json_callback, &mi);
@@ -106,6 +114,9 @@ monit_object_info_parse(struct xe_data *data, const char *miname, const char *fn
 	}
 
 	filter_dump(mi.expr, stdout);
+
+	data->prepare_text_flows |= mi.debug.print_flows;
+
 	/* copy name of monitoring object */
 	strcpy(mi.name, miname);
 

@@ -28,11 +28,13 @@
 #include <pthread.h>
 #include <signal.h>
 
+#include "aajson/aajson.h"
+
 #include "utils.h"
 #include "netflow.h"
 #include "netflow_templates.h"
+#include "flow_debug.h"
 #include "xenoeye.h"
-#include "aajson/aajson.h"
 
 #define DEFAULT_CONFIG_FILE "xeconfig.json"
 #define DEFAULT_TEMPLATES_FILE "templates.tkv"
@@ -89,31 +91,6 @@ config_templates(struct aajson *a, aajson_val *value, struct xe_data *data)
 	return 1;
 }
 
-static int
-config_debug(struct aajson *a, aajson_val *value, struct xe_data *data)
-{
-	if (STRCMP(a, 2, "dump-flows") == 0) {
-		data->debug.dump_flows = 1;
-
-		if (strcmp(value->str, "none") == 0) {
-			data->debug.dump_flows = 0;
-		} else if (strcmp(value->str, "syslog") == 0) {
-			data->debug.dump_to_syslog = 1;
-		} else if (strcmp(value->str, "stdout") == 0) {
-			data->debug.dump_out = stdout;
-		} else {
-			/* file */
-			data->debug.dump_out = fopen(value->str, "a");
-			if (!data->debug.dump_out) {
-				LOG("Can't open file '%s': %s", value->str,
-					strerror(errno));
-				return 0;
-			}
-		}
-	}
-
-	return 1;
-}
 
 static int
 config_callback(struct aajson *a, aajson_val *value, void *user)
@@ -130,7 +107,7 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 	}
 
 	if (STRCMP(a, 1, "debug") == 0) {
-		return config_debug(a, value, data);
+		return flow_debug_config(a, value, &data->debug);
 	}
 
 	if (STRCMP(a, 1, "capture") != 0) {
@@ -430,12 +407,8 @@ main(int argc, char *argv[])
 	LOG("Templates DB: '%s'", data.templates_db);
 	LOG("Allow templates in future: %s",
 		data.allow_templates_in_future ? "yes": "no");
-	if (data.debug.dump_flows) {
-		LOG("Dump flows: yes (syslog: %s)",
-			data.debug.dump_to_syslog ? "yes": "no");
-	} else {
-		LOG("Dump flows: no");
-	}
+
+	data.prepare_text_flows |= data.debug.print_flows;
 
 	if (!monit_objects_init(&data)) {
 		LOG("Can't init monitoring objects, exiting");

@@ -15,9 +15,9 @@ struct filter_expr;
 /* debug options */
 struct xe_debug
 {
-	int dump_flows;
-	int dump_to_syslog;
-	FILE *dump_out;
+	int print_flows;
+	int print_to_syslog;
+	FILE *fout;
 };
 
 struct monit_object
@@ -63,6 +63,7 @@ struct xe_data
 	int allow_templates_in_future;
 	char templates_db[PATH_MAX];
 
+	int prepare_text_flows;
 	struct xe_debug debug;
 };
 
