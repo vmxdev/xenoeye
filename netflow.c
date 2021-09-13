@@ -76,19 +76,9 @@ template_dump(struct template_key *tkey)
 }
 
 static int
-table_process(struct xe_data *data, struct monit_object *mo,
-	struct nf_flow_info *flow, const char *debug_flow_str)
+mo_process(struct xe_data *data, struct monit_object *mo,
+	struct nf_flow_info *flow)
 {
-	int match;
-
-	match = filter_match(mo->expr, flow);
-	if (!match) {
-		return 0;
-	}
-
-	if (mo->debug.print_flows) {
-		flow_print_str(&mo->debug, debug_flow_str);
-	}
 	return 1;
 }
 
@@ -162,6 +152,31 @@ parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
 	return 1;
 }
 
+static void
+print_netflow_v9_flowset(struct nf9_template_item *tmpl,
+	int template_field_count,
+	uint8_t **ptr, uint8_t *fptr, int length,
+	char *debug_flow_str)
+{
+	int i;
+
+	debug_flow_str[0] = '\0';
+	for (i=0; i<template_field_count; i++) {
+		int flength, ftype;
+
+		flength = ntohs(tmpl->typelen[i].length);
+		ftype = ntohs(tmpl->typelen[i].type);
+
+		flow_debug_add_field(flength, ftype, fptr, debug_flow_str);
+
+		fptr += flength;
+
+		if ((fptr - (*ptr)) >= length) {
+			break;
+		}
+	}
+}
+
 static int
 parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	uint8_t **ptr, int flowset_id, int length, int count)
@@ -190,9 +205,6 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	for (cnt=0; cnt<count; cnt++) {
 		struct nf_flow_info flow;
 		uint8_t *tmpfptr;
-		char debug_flow_str[1024];
-
-		debug_flow_str[0] = '\0';
 
 		memset(&flow, 0, sizeof(struct nf_flow_info));
 		tmpfptr = fptr;
@@ -214,31 +226,33 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 		}
 
 		/* debug print */
-		if (data->prepare_text_flows) {
-			for (i=0; i<template_field_count; i++) {
-				int flength, ftype;
-
-				flength = ntohs(tmpl->typelen[i].length);
-				ftype = ntohs(tmpl->typelen[i].type);
-
-				flow_debug_add_field(flength, ftype, tmpfptr,
-					debug_flow_str);
-
-				tmpfptr += flength;
-
-				if ((tmpfptr - (*ptr)) >= length) {
-					break;
-				}
-			}
-		}
-
 		if (data->debug.print_flows) {
+			char debug_flow_str[1024];
+
+			print_netflow_v9_flowset(tmpl, template_field_count,
+				ptr, tmpfptr, length, debug_flow_str);
+
 			flow_print_str(&data->debug, debug_flow_str);
 		}
 
 		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
-			table_process(data, &data->monit_objects[t_id],
-				&flow, debug_flow_str);
+			struct monit_object *mo = &data->monit_objects[t_id];
+
+			if (!filter_match(mo->expr, &flow)) {
+				continue;
+			}
+
+			if (mo->debug.print_flows) {
+				char debug_flow_str[1024];
+
+				print_netflow_v9_flowset(tmpl,
+					template_field_count, ptr, tmpfptr,
+					length, debug_flow_str);
+
+				flow_print_str(&mo->debug, debug_flow_str);
+			}
+
+			mo_process(data, mo, &flow);
 		}
 	}
 	(*ptr) += length;
@@ -383,6 +397,31 @@ parse_ipfix_template(struct xe_data *data, struct nf_packet_info *npi,
 	return 1;
 }
 
+static void
+print_ipfix_flowset(struct ipfix_stored_template *tmpl,
+	int template_field_count,
+	uint8_t **ptr, uint8_t *fptr, int length,
+	char *debug_flow_str)
+{
+	int i;
+
+	debug_flow_str[0] = '\0';
+	for (i=0; i<template_field_count; i++) {
+		int flength, ftype;
+
+		flength = ntohs(tmpl->elements[i].length);
+		ftype = ntohs(tmpl->elements[i].id);
+
+		flow_debug_add_field(flength, ftype, fptr, debug_flow_str);
+
+		fptr += flength;
+
+		if ((fptr - (*ptr)) >= length) {
+			break;
+		}
+	}
+}
+
 static int
 parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	uint8_t **ptr, int flowset_id, int length)
@@ -414,9 +453,6 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 	while (!stop) {
 		struct nf_flow_info flow;
 		uint8_t *tmpfptr;
-		char debug_flow_str[1024];
-
-		debug_flow_str[0] = '\0';
 
 		if ((length - (fptr - (*ptr))) < template_field_count) {
 			break;
@@ -442,33 +478,34 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 			}
 		}
 
-		if (data->prepare_text_flows) {
-			for (i=0; i<template_field_count; i++) {
-				int flength, ftype;
-
-				flength = ntohs(tmpl->elements[i].length);
-				ftype = ntohs(tmpl->elements[i].id);
-
-				flow_debug_add_field(flength, ftype, tmpfptr,
-					debug_flow_str);
-
-				tmpfptr += flength;
-
-				if ((tmpfptr - (*ptr)) >= length) {
-					stop = 1;
-					break;
-				}
-			}
-		}
-
 		if (data->debug.print_flows) {
+			char debug_flow_str[1024];
+
+			print_ipfix_flowset(tmpl, template_field_count,
+				ptr, tmpfptr, length, debug_flow_str);
+
 			flow_print_str(&data->debug, debug_flow_str);
 		}
 
 
 		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
-			table_process(data, &data->monit_objects[t_id],
-				&flow, debug_flow_str);
+			struct monit_object *mo = &data->monit_objects[t_id];
+
+			if (!filter_match(mo->expr, &flow)) {
+				continue;
+			}
+
+			if (mo->debug.print_flows) {
+				char debug_flow_str[1024];
+
+				print_ipfix_flowset(tmpl,
+					template_field_count, ptr, tmpfptr,
+					length, debug_flow_str);
+
+				flow_print_str(&mo->debug, debug_flow_str);
+			}
+
+			mo_process(data, mo, &flow);
 		}
 
 		flow_num++;

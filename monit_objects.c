@@ -115,8 +115,6 @@ monit_object_info_parse(struct xe_data *data, const char *miname,
 
 	filter_dump(mi.expr, stdout);
 
-	data->prepare_text_flows |= mi.debug.print_flows;
-
 	/* copy name of monitoring object */
 	strcpy(mi.name, miname);
 

@@ -408,8 +408,6 @@ main(int argc, char *argv[])
 	LOG("Allow templates in future: %s",
 		data.allow_templates_in_future ? "yes": "no");
 
-	data.prepare_text_flows |= data.debug.print_flows;
-
 	if (!monit_objects_init(&data)) {
 		LOG("Can't init monitoring objects, exiting");
 		return EXIT_FAILURE;
