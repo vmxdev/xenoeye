@@ -139,6 +139,47 @@ id_sym(int c)
 	return 1;
 }
 
+static int
+read_str_token(const char *sample, enum TOKEN_ID *id)
+{
+#define MATCH(S) strcasecmp(sample, S) == 0
+
+	if (MATCH("src")) {
+		*id = SRC;
+	} else if (MATCH("dst")) {
+		*id = DST;
+
+#define FIELD(NAME, STR, TYPE, SRC, DST)                      \
+		} else if (MATCH(STR)) {                      \
+			*id = NAME;
+#include "filter.def"
+
+	} else if (MATCH("or")) {
+		*id = OR;
+	} else if (MATCH("and")) {
+		*id = AND;
+	} else if (MATCH("not")) {
+		*id = NOT;
+	} else if (MATCH("asc")) {
+		/*filter fields*/
+		*id = ASC;
+	} else if (MATCH("desc")) {
+		*id = DESC;
+	} else if (MATCH("packets")) {
+		*id = PACKETS;
+	} else if (MATCH("octets")) {
+		*id = OCTETS;
+	} else if (MATCH("bits")) {
+		*id = BITS;
+	} else {
+		/* unknown string */
+		return 0;
+	}
+
+	return 1;
+#undef MATCH
+}
+
 void
 read_token(struct filter_input *q)
 {
@@ -163,25 +204,9 @@ read_token(struct filter_input *q)
 
 		q->current_token.data.str[q->current_token.str_len] = '\0';
 
-#define MATCH(S) strcasecmp(q->current_token.data.str, S) == 0
+		if (!read_str_token(q->current_token.data.str,
+			&q->current_token.id)) {
 
-		if (MATCH("src")) {
-			q->current_token.id = SRC;
-		} else if (MATCH("dst")) {
-			q->current_token.id = DST;
-
-#define FIELD(NAME, STR, TYPE, SRC, DST)                      \
-		} else if (MATCH(STR)) {                      \
-			q->current_token.id = NAME;
-		#include "filter.def"
-
-		} else if (MATCH("or")) {
-			q->current_token.id = OR;
-		} else if (MATCH("and")) {
-			q->current_token.id = AND;
-		} else if (MATCH("not")) {
-			q->current_token.id = NOT;
-		} else {
 			/* check if it int or range */
 			char *endptr;
 			long int res;
@@ -209,10 +234,6 @@ read_token(struct filter_input *q)
 				q->current_token.id = ID;
 			}
 		}
-
-#undef MATCH
 	}
-
-	/*printf("token: '%s', id: %d\n", q->current_token.data.str, q->current_token.id);*/
 }
 

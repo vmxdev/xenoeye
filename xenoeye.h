@@ -12,6 +12,8 @@ typedef __int128_t xe_ip;
 struct nf_flow_info;
 struct filter_expr;
 
+struct mo_fwm;
+
 /* debug options */
 struct xe_debug
 {
@@ -26,6 +28,10 @@ struct monit_object
 	struct filter_expr *expr;
 
 	struct xe_debug debug;
+
+	/* fixed windows in memory */
+	size_t nfwm;
+	struct mo_fwm *fwms;
 };
 
 enum XENOEYE_CAPTURE_TYPE

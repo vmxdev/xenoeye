@@ -334,7 +334,6 @@ ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 		struct ipfix_inf_element_enterprise *ent;
 
 		ent = (struct ipfix_inf_element_enterprise *)(*ptr);
-		/*LOG("id: %d, length: %d", ntohs(ent->id), ntohs(ent->length));*/
 		if ((ntohs(ent->id) >> 15) & 1) {
 			/* enterprise */
 			tmpl->elements[i].id = ent->id;

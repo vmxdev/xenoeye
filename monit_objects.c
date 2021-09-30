@@ -30,6 +30,79 @@
 #include "filter.h"
 #include "flow_debug.h"
 
+
+struct mo_fieldset
+{
+	/* all fields */
+	size_t n;
+	struct field *fields;
+
+	/* key fields (without packets/octets) */
+	size_t nkey;
+	struct field *key;
+};
+
+struct mo_fwm
+{
+	char name[TOKEN_MAX_SIZE];
+	struct mo_fieldset fieldset;
+	int time;
+};
+
+#define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
+
+static int
+fixed_window_mem_config(struct aajson *a, aajson_val *value,
+	struct monit_object *mo)
+{
+	size_t i;
+	struct mo_fwm *window;
+
+	if (a->path_stack[2].type != AAJSON_PATH_ITEM_ARRAY) {
+		LOG("'fwn' must be array");
+		return 0;
+	}
+
+	i = a->path_stack[2].data.array_idx;
+	if (i <= mo->nfwm) {
+		struct mo_fwm *tmp;
+
+		/* append new window */
+		tmp = realloc(mo->fwms, (i + 1) * sizeof(struct mo_fwm));
+		if (!tmp) {
+			LOG("Insufficient memory");
+			return 0;
+		}
+		memset(&tmp[i], 0, sizeof(struct mo_fwm));
+
+		mo->fwms = tmp;
+		mo->nfwm = i + 1;;
+	}
+
+	window = &mo->fwms[i];
+
+	if (STRCMP(a, 3, "name") == 0) {
+		strcpy(window->name, value->str);
+	} else if (STRCMP(a, 3, "fields") == 0) {
+		/* append field */
+		struct field fld;
+		char err[ERR_MSG_LEN];
+
+		if (!parse_field(value->str, &fld, err)) {
+			LOG("Can't parse field '%s': %s", value->str, err);
+			return 0;
+		}
+	} else if (STRCMP(a, 3, "time") == 0) {
+		window->time = atoi(value->str);
+		if (window->time < 0) {
+			LOG("Incorrect time '%s'", value->str);
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
 static int
 monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
@@ -52,12 +125,19 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 		}
 	}
 
-	if (strcmp(a->path_stack[1].data.path_item, "debug") == 0) {
+	if (STRCMP(a, 1, "debug") == 0) {
 		return flow_debug_config(a, value, &mo->debug);
+	}
+
+	if (STRCMP(a, 1, "fwm") == 0) {
+		/* fixed window in memory */
+		return fixed_window_mem_config(a, value, mo);
 	}
 
 	return 1;
 }
+
+#undef STRCMP
 
 static int
 monit_object_info_parse(struct xe_data *data, const char *miname,
@@ -102,7 +182,8 @@ monit_object_info_parse(struct xe_data *data, const char *miname,
 	aajson_init(&a, json);
 	aajson_parse(&a, &monit_object_json_callback, &mi);
 	if (a.error) {
-		LOG("Can't parse json file '%s': %s", fn, a.errmsg);
+		LOG("Can't parse config file '%s' (line: %lu, col: %lu): %s",
+			fn, a.line, a.col, a.errmsg);
 		goto fail_parse;
 	}
 

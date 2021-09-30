@@ -49,7 +49,14 @@ enum TOKEN_ID
 #include "filter.def"
 
 	SRC,
-	DST
+	DST,
+
+	/* windows fields */
+	PACKETS,
+	OCTETS,
+	BITS,
+	ASC,
+	DESC
 };
 
 struct token
@@ -136,7 +143,16 @@ struct filter_input
 
 };
 
+struct field
+{
+	int descending;
+	int direction;
+	enum FILTER_BASIC_TYPE type;
+	char name[TOKEN_MAX_SIZE];
+};
+
 struct filter_expr *parse_filter(struct filter_input *f);
+int parse_field(char *s, struct field *f, char *err);
 void mkerror(struct filter_input *f, char *msg);
 
 void read_token(struct filter_input *f);
