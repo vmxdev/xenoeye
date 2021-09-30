@@ -20,6 +20,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <alloca.h>
+#include <errno.h>
 
 #include "utils.h"
 #include "netflow_templates.h"
@@ -51,7 +52,8 @@ netflow_templates_init(struct xe_data *data)
 {
 	db = tkvdb_open(data->templates_db, NULL);
 	if (!db) {
-		LOG("Can't open database '%s'", data->templates_db);
+		LOG("Can't open database '%s': %s", data->templates_db,
+			strerror(errno));
 		goto fail_db;
 	}
 
