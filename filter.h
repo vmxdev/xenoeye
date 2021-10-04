@@ -146,9 +146,14 @@ struct filter_input
 struct field
 {
 	int descending;
-	int direction;
 	enum FILTER_BASIC_TYPE type;
-	char name[TOKEN_MAX_SIZE];
+	enum TOKEN_ID id;
+	size_t nf_offset;
+	int size;
+
+	/* aggregate fields */
+	int aggr;
+	int scale;
 };
 
 struct filter_expr *parse_filter(struct filter_input *f);

@@ -38,8 +38,12 @@ struct mo_fieldset
 	struct field *fields;
 
 	/* key fields (without packets/octets) */
-	size_t nkey;
-	struct field *key;
+	size_t n_naggr;
+	struct field *naggr;
+
+	/* aggregable fields */
+	size_t n_aggr;
+	struct field *aggr;
 };
 
 struct mo_fwm
@@ -48,6 +52,58 @@ struct mo_fwm
 	struct mo_fieldset fieldset;
 	int time;
 };
+
+static int
+do_field_append(struct field **fields, size_t *n, struct field *fld)
+{
+	struct field *tmp_fields;
+
+	tmp_fields = realloc(*fields, (*n + 1) * sizeof(struct field));
+	if (!tmp_fields) {
+		LOG("Insufficient memory");
+		return 0;
+	}
+	*fields = tmp_fields;
+	(*fields)[*n] = *fld;
+	(*n)++;
+
+	return 1;
+}
+
+static int
+config_field_append(char *s, struct mo_fwm *window)
+{
+	struct field fld;
+	char err[ERR_MSG_LEN];
+
+	if (!parse_field(s, &fld, err)) {
+		LOG("Can't parse field '%s': %s", s, err);
+		return 0;
+	}
+
+	if (!do_field_append(&window->fieldset.fields, &window->fieldset.n,
+		&fld)) {
+
+		return 0;
+	}
+
+	/* separate aggregatable and non-aggregatable fields */
+	if (fld.aggr) {
+		if (!do_field_append(&window->fieldset.aggr,
+			&window->fieldset.n_aggr, &fld)) {
+
+			return 0;
+		}
+	} else {
+		if (!do_field_append(&window->fieldset.naggr,
+			&window->fieldset.n_naggr, &fld)) {
+
+			return 0;
+		}
+	}
+
+	return 1;
+}
 
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
@@ -59,12 +115,12 @@ fixed_window_mem_config(struct aajson *a, aajson_val *value,
 	struct mo_fwm *window;
 
 	if (a->path_stack[2].type != AAJSON_PATH_ITEM_ARRAY) {
-		LOG("'fwn' must be array");
+		LOG("'fwm' must be array");
 		return 0;
 	}
 
 	i = a->path_stack[2].data.array_idx;
-	if (i <= mo->nfwm) {
+	if (i >= mo->nfwm) {
 		struct mo_fwm *tmp;
 
 		/* append new window */
@@ -76,7 +132,7 @@ fixed_window_mem_config(struct aajson *a, aajson_val *value,
 		memset(&tmp[i], 0, sizeof(struct mo_fwm));
 
 		mo->fwms = tmp;
-		mo->nfwm = i + 1;;
+		mo->nfwm = i + 1;
 	}
 
 	window = &mo->fwms[i];
@@ -84,12 +140,7 @@ fixed_window_mem_config(struct aajson *a, aajson_val *value,
 	if (STRCMP(a, 3, "name") == 0) {
 		strcpy(window->name, value->str);
 	} else if (STRCMP(a, 3, "fields") == 0) {
-		/* append field */
-		struct field fld;
-		char err[ERR_MSG_LEN];
-
-		if (!parse_field(value->str, &fld, err)) {
-			LOG("Can't parse field '%s': %s", value->str, err);
+		if (!config_field_append(value->str, window)) {
 			return 0;
 		}
 	} else if (STRCMP(a, 3, "time") == 0) {
