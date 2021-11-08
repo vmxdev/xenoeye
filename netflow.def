@@ -22,4 +22,5 @@ FIELD(ip6_dst_addr,        "IPv6 dst addr",      NF_FIELD_IP_ADDR,  28, 16, 16)
 FIELD(icmp_type,           "ICMP type",          NF_FIELD_INT,      32, 2,  2)
 FIELD(src_vlan,            "Src VLAN",           NF_FIELD_INT,      58, 2,  2)
 FIELD(ip_protocol_version, "IP version",         NF_FIELD_INT,      60, 1,  1)
+FIELD(if_name,             "Interface name",     NF_FIELD_STRING,   82, 1,  16)
 #undef FIELD

@@ -19,6 +19,7 @@ enum NF_FIELD_TYPE
 {
 	NF_FIELD_IP_ADDR,
 	NF_FIELD_INT,
+	NF_FIELD_STRING,
 	NF_FIELD_BYTES
 };
 
@@ -119,7 +120,8 @@ struct nf_packet_info
 	uint8_t rawpacket[MAX_NF_PACKET_SIZE];
 };
 
-int netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len);
+int netflow_process(struct xe_data *data, size_t thread_id,
+	struct nf_packet_info *npi, int len);
 
 
 #endif

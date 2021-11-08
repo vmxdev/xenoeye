@@ -30,23 +30,6 @@
 static tkvdb *db;     /* templates database */
 static tkvdb_tr *tr;  /* transaction */
 
-static void
-dump(char *pfx, char *data, size_t len)
-{
-	size_t i;
-	char buf[512];
-
-	buf[0] = '\0';
-	for (i=0; i<len; i++) {
-		char sym[10];
-
-		sprintf(sym, "%02x ", (unsigned char)data[i]);
-		strcat(buf, sym);
-	}
-	LOG("%s: %s", pfx, buf);
-}
-
-
 int
 netflow_templates_init(struct xe_data *data)
 {

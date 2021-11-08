@@ -225,6 +225,8 @@ config_parse(struct xe_data *data, const char *conffile)
 		goto fail_parse;
 	}
 
+	data->nthreads = data->ncap;
+
 	ret = 1;
 
 fail_parse:
@@ -282,7 +284,7 @@ scapture_thread(void *arg)
 			nfpkt.src_addr_ipv4 = 0;
 		}
 
-		if (netflow_process(params.data, &nfpkt, len)) {
+		if (netflow_process(params.data, params.idx, &nfpkt, len)) {
 			/* ok */
 		}
 	}
@@ -398,6 +400,7 @@ main(int argc, char *argv[])
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
 	memset(&data, 0, sizeof(struct xe_data));
+	atomic_init(&data.stop, 0);
 	strcpy(data.templates_db, DEFAULT_TEMPLATES_FILE);
 
 	if (!config_parse(&data, conffile ? conffile : DEFAULT_CONFIG_FILE)) {

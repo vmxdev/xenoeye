@@ -109,10 +109,10 @@ struct sniff_udp
 
 
 static void
-pcap_packet(struct xe_data* data,
+pcap_packet(struct xe_data* data, size_t thread_id,
 	struct pcap_pkthdr *header, const unsigned char *packet)
 {
-	const struct sniff_ethernet *ethernet;  /* The ethernet header [1] */
+	/*const struct sniff_ethernet *ethernet;*/  /* The ethernet header [1] */
 	const struct sniff_ip *ip;              /* The IP header */
 	const struct sniff_udp *udp;            /* The UDP header */
 	const unsigned char *payload;           /* Packet payload */
@@ -121,9 +121,10 @@ pcap_packet(struct xe_data* data,
 
 	int size_ip;
 	int size_payload;
-	
+
+	(void)header;
 	/* define ethernet header */
-	ethernet = (struct sniff_ethernet *)(packet);
+	/*ethernet = (struct sniff_ethernet *)(packet);*/
 	
 	/* define/compute ip header offset */
 	ip = (struct sniff_ip *)(packet + SIZE_ETHERNET);
@@ -167,7 +168,7 @@ pcap_packet(struct xe_data* data,
 	}
 
 	memcpy(nfpkt.rawpacket, payload, size_payload);
-	if (netflow_process(data, &nfpkt, size_payload)) {
+	if (netflow_process(data, thread_id, &nfpkt, size_payload)) {
 		/* ok */
 		/*data->packets_processed++;*/
 	}
@@ -195,7 +196,7 @@ pcapture_thread(void *arg)
 	for (;;) {
 		rc = pcap_next_ex(cap->pcap_handle, &header, &packet);
 		if (rc >= 0) {
-			pcap_packet(params.data, header, packet);
+			pcap_packet(params.data, params.idx, header, packet);
 		} else {
 			LOG("Error reading the packets: %s\n",
 				pcap_geterr(cap->pcap_handle));

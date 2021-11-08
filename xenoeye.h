@@ -65,25 +65,36 @@ struct xe_data
 	struct capture *cap;
 	size_t ncap;
 
+	/* numer of threads, nthreads == ncap */
+	size_t nthreads;
+
+	/* backgriund thread for fixed windows in memory */
+	pthread_t fwm_tid;
+
 	/* templates */
 	int allow_templates_in_future;
 	char templates_db[PATH_MAX];
 
 	struct xe_debug debug;
+
+	/* notify threads about stop */
+	atomic_int stop;
 };
 
 /* helper struct for passing data to capture threads */
 struct capture_thread_params
 {
 	struct xe_data *data;
-	size_t idx;                      /* index of capture section */
+	size_t idx; /* thread index */
 };
 
 
 int monit_objects_init(struct xe_data *data);
 int monit_objects_free(struct xe_data *data);
 
-int monit_object_match(struct monit_object *mi, struct nf_flow_info *fi);
+int monit_object_match(struct monit_object *mo, struct nf_flow_info *fi);
+int monit_object_process_nf(struct monit_object *mo, size_t thread_id,
+	struct nf_flow_info *flow);
 
 int pcapture_start(struct xe_data *data, size_t idx);
 

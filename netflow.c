@@ -75,14 +75,6 @@ template_dump(struct template_key *tkey)
 	LOG("%s", buf);
 }
 
-static int
-mo_process(struct xe_data *data, struct monit_object *mo,
-	struct nf_flow_info *flow)
-{
-	return 1;
-}
-
-
 static void
 flow_parse(struct nf_flow_info *flow,
 	int flength, int ftype, uint8_t *fptr)
@@ -95,7 +87,11 @@ if (ftype == FLDID) {                                                         \
 			"' field size (got %d, expected from %d to %d)",      \
 			flength, SIZEMIN, SIZEMAX);                           \
 	} else {                                                              \
-		memcpy(&flow->NAME, fptr, flength);                           \
+		if (FLDTYPE == NF_FIELD_STRING) {                             \
+			memcpy(&flow->NAME[0], fptr, flength);                \
+		} else {                                                      \
+			memcpy(&flow->NAME[SIZEMAX - flength], fptr, flength);\
+		}                                                             \
 		/*LOG("Field: '"#NAME"', length: %d", flength);*/             \
 		flow->has_##NAME = 1;                                         \
 		flow->NAME##_size = flength;                                  \
@@ -178,8 +174,9 @@ print_netflow_v9_flowset(struct nf9_template_item *tmpl,
 }
 
 static int
-parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
-	uint8_t **ptr, int flowset_id, int length, int count)
+parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id, 
+	struct nf_packet_info *npi, uint8_t **ptr,
+	int flowset_id, int length, int count)
 {
 	uint8_t *fptr;
 	int cnt, i;
@@ -252,7 +249,7 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 				flow_print_str(&mo->debug, debug_flow_str);
 			}
 
-			mo_process(data, mo, &flow);
+			monit_object_process_nf(mo, thread_id, &flow);
 		}
 	}
 	(*ptr) += length;
@@ -260,7 +257,8 @@ parse_netflow_v9_flowset(struct xe_data *data, struct nf_packet_info *npi,
 }
 
 static int
-parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
+parse_netflow_v9(struct xe_data *data, size_t thread_id,
+	struct nf_packet_info *npi, int len)
 {
 	struct nf9_header *header;
 	int flowset_id, flowset_id_host, length, count;
@@ -304,8 +302,8 @@ parse_netflow_v9(struct xe_data *data, struct nf_packet_info *npi, int len)
 			LOG("options template");
 			break;
 		} else {
-			if (!parse_netflow_v9_flowset(data, npi, &ptr,
-				flowset_id, length, count)) {
+			if (!parse_netflow_v9_flowset(data, thread_id, npi,
+				&ptr, flowset_id, length, count)) {
 
 				break;
 			}
@@ -422,8 +420,8 @@ print_ipfix_flowset(struct ipfix_stored_template *tmpl,
 }
 
 static int
-parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
-	uint8_t **ptr, int flowset_id, int length)
+parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
+	struct nf_packet_info *npi, uint8_t **ptr, int flowset_id, int length)
 {
 	uint8_t *fptr;
 	int i;
@@ -504,7 +502,7 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 				flow_print_str(&mo->debug, debug_flow_str);
 			}
 
-			mo_process(data, mo, &flow);
+			monit_object_process_nf(mo, thread_id, &flow);
 		}
 
 		flow_num++;
@@ -514,7 +512,8 @@ parse_ipfix_flowset(struct xe_data *data, struct nf_packet_info *npi,
 
 
 static int
-parse_ipfix(struct xe_data *data, struct nf_packet_info *npi, int len)
+parse_ipfix(struct xe_data *data, size_t thread_id,
+	struct nf_packet_info *npi, int len)
 {
 	struct ipfix_header *header;
 	int flowset_id, flowset_id_host, length;
@@ -559,7 +558,7 @@ parse_ipfix(struct xe_data *data, struct nf_packet_info *npi, int len)
 			LOG("options template ipfix, skipping");
 		} else if (flowset_id_host > 255) {
 			/* data */
-			if (!parse_ipfix_flowset(data, npi, &ptr,
+			if (!parse_ipfix_flowset(data, thread_id, npi, &ptr,
 				flowset_id, length)) {
 
 				break;
@@ -575,7 +574,8 @@ parse_ipfix(struct xe_data *data, struct nf_packet_info *npi, int len)
 }
 
 int
-netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len)
+netflow_process(struct xe_data *data, size_t thread_id,
+	struct nf_packet_info *npi, int len)
 {
 	uint16_t *version_ptr;
 	int version;
@@ -588,10 +588,10 @@ netflow_process(struct xe_data *data, struct nf_packet_info *npi, int len)
 			LOG("netflow v5 not supported yet");
 			break;
 		case 9:
-			ret = parse_netflow_v9(data, npi, len);
+			ret = parse_netflow_v9(data, thread_id, npi, len);
 			break;
 		case 10:
-			ret = parse_ipfix(data, npi, len);
+			ret = parse_ipfix(data, thread_id, npi, len);
 			break;
 		default:
 			LOG("Unknown netflow version %u", version);
