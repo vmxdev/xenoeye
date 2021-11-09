@@ -185,7 +185,7 @@ config_field_append(char *s, struct mo_fwm *window)
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
 static int
-fixed_window_mem_config(struct aajson *a, aajson_val *value,
+fwm_config(struct aajson *a, aajson_val *value,
 	struct monit_object *mo)
 {
 	size_t i;
@@ -259,7 +259,7 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 
 	if (STRCMP(a, 1, "fwm") == 0) {
 		/* fixed window in memory */
-		return fixed_window_mem_config(a, value, mo);
+		return fwm_config(a, value, mo);
 	}
 
 	return 1;
@@ -549,17 +549,35 @@ fwm_field_print(struct field *fld, char *s, uint8_t *data)
 }
 
 static int
-fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr)
+fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr)
 {
+	int ret = 0;
 	tkvdb_cursor *c;
+	FILE *f;
+	time_t t;
+	char path[PATH_MAX];
+
+	t = time(NULL);
+	if (t == ((time_t) -1)) {
+		LOG("time() failed: %s", strerror(errno));
+		goto time_fail;
+	}
+
+	sprintf(path, "%s_%llu.tsv", fwm->name, (long long unsigned)t);
+	f = fopen(path, "w");
+	if (!f) {
+		LOG("fopen() failed: %s", strerror(errno));
+		goto fopen_fail;
+	}
 
 	c = tkvdb_cursor_create(tr);
 	if (!c) {
 		LOG("tkvdb_cursor_create() failed");
-		return 0;
+		goto cursor_fail;
 	}
 
 	if (c->first(c) != TKVDB_OK) {
+		ret = 1;
 		goto empty;
 	}
 
@@ -568,32 +586,145 @@ fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr)
 		char line[4096];
 		char strval[128];
 
-		uint8_t *naggr = c->key(c);
-		uint64_t *aggr = c->val(c);
+		uint8_t *data = c->key(c);
 
 		line[0] = '\0';
+		/* parse key */
 		for (i=0; i<fwm->fieldset.n; i++) {
 			struct field *fld = &fwm->fieldset.fields[i];
 
 			if (fld->aggr) {
-				sprintf(strval, "%lu ", *aggr);
+				uint64_t v, *vptr;
+				vptr = (uint64_t *)data;
+
+				v = be64toh(*vptr);
+				if (fld->descending) {
+					/* invert value */
+					v = ~v;
+				}
+				sprintf(strval, "%lu\t", v);
 				strcat(line, strval);
+
+				data += sizeof(uint64_t);
+			} else {
+				if (fld->descending) {
+					int j;
+
+					for (j=0; j<fld->size; j++) {
+						/* invert value */
+						data[j] = ~data[j];
+					}
+				}
+
+				fwm_field_print(fld, strval, data);
+				strcat(line, strval);
+				strcat(line, "\t");
+
+				data += fld->size;
+			}
+		}
+
+		fprintf(f, "%s\n", line);
+	} while (c->next(c) == TKVDB_OK);
+
+	ret = 1;
+empty:
+	fclose(f);
+	c->free(c);
+
+fopen_fail:
+time_fail:
+cursor_fail:
+
+	return ret;
+}
+
+static int
+fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr)
+{
+	int ret = 0;
+	tkvdb_cursor *c;
+	tkvdb_tr *tr_merge;
+
+	c = tkvdb_cursor_create(tr);
+	if (!c) {
+		LOG("tkvdb_cursor_create() failed");
+		goto cursor_fail;
+	}
+
+	if (c->first(c) != TKVDB_OK) {
+		ret = 1;
+		goto empty;
+	}
+
+	tr_merge = tkvdb_tr_create(NULL, NULL);
+	if (!tr_merge) {
+		LOG("Can't create transaction");
+		goto tr_fail;
+	}
+
+	tr_merge->begin(tr_merge);
+
+	/* iterate over all set */
+	do {
+		size_t i;
+		uint8_t key[4096];
+		uint8_t *kptr = key;
+		tkvdb_datum dtk, dtv;
+		TKVDB_RES rc;
+
+		uint8_t *naggr = c->key(c);
+		uint64_t *aggr = c->val(c);
+
+		/* make key for correct sorting */
+		for (i=0; i<fwm->fieldset.n; i++) {
+			struct field *fld = &fwm->fieldset.fields[i];
+			if (fld->aggr) {
+				uint64_t v;
+				v = htobe64(*aggr);
+				if (fld->descending) {
+					/* invert value */
+					v = ~v;
+				}
+				memcpy(kptr, &v, sizeof(uint64_t));
+				kptr += sizeof(uint64_t);
 				aggr++;
 			} else {
-				fwm_field_print(fld, strval, naggr);
-				strcat(line, strval);
-				strcat(line, " ");
+				if (fld->descending) {
+					int j;
+
+					for (j=0; j<fld->size; j++) {
+						/* invert value */
+						naggr[j] = ~naggr[j];
+					}
+				}
+				memcpy(kptr, naggr, fld->size);
+				kptr += fld->size;
 				naggr += fld->size;
 			}
 		}
 
-		LOG("> %s", line);
+		dtk.data = key;
+		dtk.size = kptr - key;
+
+		dtv.size = 0;
+		dtv.data = NULL;
+		rc = tr_merge->put(tr_merge, &dtk, &dtv);
+		if (rc != TKVDB_OK) {
+			LOG("put() failed");
+		}
 	} while (c->next(c) == TKVDB_OK);
 
+	fwm_dump(fwm, tr_merge);
+	tr_merge->free(tr_merge);
+
+	ret = 1;
 empty:
+tr_fail:
 	c->free(c);
 
-	return 1;
+cursor_fail:
+	return ret;
 }
 
 static int
@@ -711,7 +842,6 @@ fwm_bg_thread(void *arg)
 			for (j=0; j<mo->nfwm; j++) {
 				struct mo_fwm *fwm = &mo->fwms[j];
 
-				LOG("mo: %lu, fwm: %lu", i, j);
 				if (!fwm_merge(fwm, data->nthreads)) {
 					break;
 				}
