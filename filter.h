@@ -145,6 +145,8 @@ struct filter_input
 
 struct field
 {
+	char name[TOKEN_MAX_SIZE];
+
 	int descending;
 	enum FILTER_BASIC_TYPE type;
 	enum TOKEN_ID id;

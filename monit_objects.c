@@ -549,7 +549,7 @@ fwm_field_print(struct field *fld, char *s, uint8_t *data)
 }
 
 static int
-fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr)
+fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -563,7 +563,8 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr)
 		goto time_fail;
 	}
 
-	sprintf(path, "%s_%llu.tsv", fwm->name, (long long unsigned)t);
+	sprintf(path, "%s_%s_%llu.tsv", mo_name, fwm->name,
+		(long long unsigned)t);
 	f = fopen(path, "w");
 	if (!f) {
 		LOG("fopen() failed: %s", strerror(errno));
@@ -640,7 +641,7 @@ cursor_fail:
 }
 
 static int
-fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr)
+fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -715,7 +716,7 @@ fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr)
 		}
 	} while (c->next(c) == TKVDB_OK);
 
-	fwm_dump(fwm, tr_merge);
+	fwm_dump(fwm, tr_merge, mo_name);
 	tr_merge->free(tr_merge);
 
 	ret = 1;
@@ -784,7 +785,7 @@ empty:
 }
 
 static int
-fwm_merge(struct mo_fwm *fwm, size_t nthreads)
+fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name)
 {
 	size_t i;
 	tkvdb_tr *tr_merge;
@@ -816,7 +817,7 @@ fwm_merge(struct mo_fwm *fwm, size_t nthreads)
 		fwm_merge_tr(fwm, tr_merge, tr);
 	}
 
-	fwm_sort_tr(fwm, tr_merge);
+	fwm_sort_tr(fwm, tr_merge, mo_name);
 
 	tr_merge->free(tr_merge);
 
@@ -842,7 +843,7 @@ fwm_bg_thread(void *arg)
 			for (j=0; j<mo->nfwm; j++) {
 				struct mo_fwm *fwm = &mo->fwms[j];
 
-				if (!fwm_merge(fwm, data->nthreads)) {
+				if (!fwm_merge(fwm, data->nthreads, mo->name)) {
 					break;
 				}
 			}
