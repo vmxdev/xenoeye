@@ -140,12 +140,11 @@ struct filter_input
 	char errmsg[ERR_MSG_LEN];
 
 	struct token current_token;
-
 };
 
 struct field
 {
-	char name[TOKEN_MAX_SIZE];
+	char name[TOKEN_MAX_SIZE], sql_name[TOKEN_MAX_SIZE];
 
 	int descending;
 	enum FILTER_BASIC_TYPE type;

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <ctype.h>
 
 #include "filter.h"
 #include "netflow.h"
@@ -254,6 +255,50 @@ field_without_direction(struct filter_input *in, struct field *fld, char *err,
 	return 0;
 }
 
+
+static void
+field_mk_names(struct filter_input *in, char *s,
+	struct field *fld, const char *sfx)
+{
+	size_t len;
+	size_t i;
+
+	len = in->s - s;
+	/* copy name */
+	memcpy(fld->name, s, len);
+	fld->name[len] = '\0';
+	if (sfx) {
+		/* remove suffix */
+		size_t slen = strlen(sfx);
+		if (strcasecmp(fld->name + len - slen, sfx) == 0) {
+			*(fld->name + len - slen) = '\0';
+		}
+		/* remove white space at string tail */
+		for (;;) {
+			size_t nlen = strlen(fld->name);
+			if (nlen <= 1) {
+				break;
+			}
+
+			if (fld->name[nlen - 1] != ' ') {
+				break;
+			}
+
+			fld->name[nlen - 1] = '\0';
+		}
+	}
+
+	len = strlen(fld->name);
+	for (i=0; i<len; i++) {
+		if (isalnum(fld->name[i])) {
+			fld->sql_name[i] = fld->name[i];
+		} else {
+			fld->sql_name[i] = '_';
+		}
+	}
+	fld->sql_name[len] = '\0';
+}
+
 static int
 field_without_order(struct filter_input *in, struct field *fld, char *err)
 {
@@ -324,8 +369,13 @@ parse_field(char *s, struct field *fld, char *err)
 	fld->descending = 0;
 	if (accept_(&in, DESC)) {
 		fld->descending = 1;
+		field_mk_names(&in, s, fld, "desc");
 	} else if (accept_(&in, ASC)) {
-		/* default */
+		/* default order */
+		field_mk_names(&in, s, fld, "asc");
+	} else {
+		/* no order */
+		field_mk_names(&in, s, fld, NULL);
 	}
 
 	if (!in.end) {

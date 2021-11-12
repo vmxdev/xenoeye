@@ -506,37 +506,40 @@ monit_object_process_nf(struct monit_object *mo, size_t thread_id,
 }
 
 static void
-fwm_field_print(struct field *fld, char *s, uint8_t *data)
+fwm_field_print(struct field *fld, FILE *f, uint8_t *data)
 {
 	uint16_t d16;
 	uint32_t d32;
 	uint64_t d64;
+	char s[INET6_ADDRSTRLEN + 1];
 
 	switch (fld->type) {
 		case FILTER_BASIC_ADDR4:
 			inet_ntop(AF_INET, data, s, INET_ADDRSTRLEN);
+			fprintf(f, " '%s' ", s);
 			break;
 
 		case FILTER_BASIC_ADDR6:
 			inet_ntop(AF_INET6, data, s, INET6_ADDRSTRLEN);
+			fprintf(f, " '%s' ", s);
 			break;
 
 		case FILTER_BASIC_RANGE:
 			switch (fld->size) {
 				case sizeof(uint8_t):
-					sprintf(s, "%u", data[0]);
+					fprintf(f, " %u ", data[0]);
 					break;
 				case sizeof(uint16_t):
 					d16 = *((uint16_t *)data);
-					sprintf(s, "%u", ntohs(d16));
+					fprintf(f, " %u ", ntohs(d16));
 					break;
 				case sizeof(uint32_t):
 					d32 = *((uint32_t *)data);
-					sprintf(s, "%u", ntohl(d32));
+					fprintf(f, " %u ", ntohl(d32));
 					break;
 				case sizeof(uint64_t):
 					d64 = *((uint64_t *)data);
-					sprintf(s, "%lu", be64toh(d64));
+					fprintf(f, " %lu ", be64toh(d64));
 					break;
 				default:
 					break;
@@ -556,6 +559,8 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 	FILE *f;
 	time_t t;
 	char path[PATH_MAX];
+	size_t i;
+	int first_field;
 
 	t = time(NULL);
 	if (t == ((time_t) -1)) {
@@ -563,7 +568,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 		goto time_fail;
 	}
 
-	sprintf(path, "%s_%s_%llu.tsv", mo_name, fwm->name,
+	sprintf(path, "%s_%s_%llu.sql", mo_name, fwm->name,
 		(long long unsigned)t);
 	f = fopen(path, "w");
 	if (!f) {
@@ -582,17 +587,46 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 		goto empty;
 	}
 
-	do {
-		size_t i;
-		char line[4096];
-		char strval[128];
+	/* generate CREATE TABLE statement */
+	fprintf(f, "create table if not exists %s (\n", fwm->name);
+	fprintf(f, "  time TIMESTAMPTZ,\n");
+	first_field = 1;
+	for (i=0; i<fwm->fieldset.n; i++) {
+		struct field *fld = &fwm->fieldset.fields[i];
 
+		if (!first_field) {
+			fprintf(f, ",\n");
+		} else {
+			first_field = 0;
+		}
+
+		if ((fld->type == FILTER_BASIC_ADDR4)
+			|| (fld->type == FILTER_BASIC_ADDR6)) {
+
+			fprintf(f, "  %s inet", fld->sql_name);
+		} else {
+			fprintf(f, "  %s int", fld->sql_name);
+		}
+	}
+	fprintf(f, ");\n\n");
+
+	do {
 		uint8_t *data = c->key(c);
 
-		line[0] = '\0';
+		fprintf(f, "insert into %s ", fwm->name);
+		fprintf(f, "values ( to_timestamp(%llu), ",
+			(long long unsigned)t);
+
+		first_field = 1;
 		/* parse key */
 		for (i=0; i<fwm->fieldset.n; i++) {
 			struct field *fld = &fwm->fieldset.fields[i];
+
+			if (!first_field) {
+				fprintf(f, ", ");
+			} else {
+				first_field = 0;
+			}
 
 			if (fld->aggr) {
 				uint64_t v, *vptr;
@@ -603,8 +637,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 					/* invert value */
 					v = ~v;
 				}
-				sprintf(strval, "%lu\t", v);
-				strcat(line, strval);
+				fprintf(f, " %lu ", v);
 
 				data += sizeof(uint64_t);
 			} else {
@@ -617,15 +650,13 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 					}
 				}
 
-				fwm_field_print(fld, strval, data);
-				strcat(line, strval);
-				strcat(line, "\t");
+				fwm_field_print(fld, f, data);
 
 				data += fld->size;
 			}
 		}
 
-		fprintf(f, "%s\n", line);
+		fprintf(f, ");\n");
 	} while (c->next(c) == TKVDB_OK);
 
 	ret = 1;
