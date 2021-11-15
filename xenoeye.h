@@ -6,33 +6,12 @@
 #include <pcap.h>
 #include <stdatomic.h>
 
-
-typedef __int128_t xe_ip;
+#include "utils.h"
+#include "xe-debug.h"
+#include "monit-objects.h"
 
 struct nf_flow_info;
 struct filter_expr;
-
-struct mo_fwm;
-
-/* debug options */
-struct xe_debug
-{
-	int print_flows;
-	int print_to_syslog;
-	FILE *fout;
-};
-
-struct monit_object
-{
-	char name[PATH_MAX];
-	struct filter_expr *expr;
-
-	struct xe_debug debug;
-
-	/* fixed windows in memory */
-	size_t nfwm;
-	struct mo_fwm *fwms;
-};
 
 enum XENOEYE_CAPTURE_TYPE
 {
@@ -88,16 +67,7 @@ struct capture_thread_params
 	size_t idx; /* thread index */
 };
 
-
-int monit_objects_init(struct xe_data *data);
-int monit_objects_free(struct xe_data *data);
-
-int monit_object_match(struct monit_object *mo, struct nf_flow_info *fi);
-int monit_object_process_nf(struct monit_object *mo, size_t thread_id,
-	struct nf_flow_info *flow);
-
 int pcapture_start(struct xe_data *data, size_t idx);
-
 
 #endif
 

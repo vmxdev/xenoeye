@@ -4,6 +4,8 @@
 #include <syslog.h>
 #include <stdio.h>
 
+#define TOKEN_MAX_SIZE 512
+
 #define LOG(...)                                               \
 do {                                                           \
 	char _buf[2048];                                       \
@@ -13,6 +15,7 @@ do {                                                           \
 		_buf, __FILE__, __LINE__, __func__);           \
 } while (0)
 
+typedef __int128_t xe_ip;
 
 #endif
 

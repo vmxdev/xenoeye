@@ -128,9 +128,12 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 	
 	/* define/compute ip header offset */
 	ip = (struct sniff_ip *)(packet + SIZE_ETHERNET);
+	if (!packet) {
+		return;
+	}
 	size_ip = IP_HL(ip)*4;
 	if (size_ip < 20) {
-		printf("   * Invalid IP header length: %u bytes\n", size_ip);
+		LOG("Invalid IP header length: %u bytes\n", size_ip);
 		return;
 	}
 
@@ -147,17 +150,7 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 	udp = (struct sniff_udp*)(packet + SIZE_ETHERNET + size_ip);
 
 	nfpkt.src_addr_ipv4 = ip->ip_src.s_addr;
-#if 0
-	/* print source and destination IP addresses */
-	printf("       From: %s\n", inet_ntoa(ip->ip_src));
-	printf("         To: %s\n", inet_ntoa(ip->ip_dst));
 
-	/* ports */
-	printf("   Src port: %d\n", ntohs(udp->uh_sport));
-	printf("   Dst port: %d\n", ntohs(udp->uh_dport));
-
-	printf("\n");
-#endif
 	/* define/compute udp payload (segment) offset */
 	payload = (u_char *)(packet + SIZE_ETHERNET + size_ip + SIZE_UDP);
 

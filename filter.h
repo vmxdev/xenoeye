@@ -5,7 +5,6 @@
 #include "xenoeye.h"
 
 #define ERR_MSG_LEN     1024
-#define TOKEN_MAX_SIZE  512
 
 struct nf_flow_info;
 
