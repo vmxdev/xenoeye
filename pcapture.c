@@ -133,7 +133,7 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 	}
 	size_ip = IP_HL(ip)*4;
 	if (size_ip < 20) {
-		LOG("Invalid IP header length: %u bytes\n", size_ip);
+		LOG("Invalid IP header length: %u bytes", size_ip);
 		return;
 	}
 
@@ -191,7 +191,7 @@ pcapture_thread(void *arg)
 		if (rc >= 0) {
 			pcap_packet(params.data, params.idx, header, packet);
 		} else {
-			LOG("Error reading the packets: %s\n",
+			LOG("Error reading the packets: %s",
 				pcap_geterr(cap->pcap_handle));
 		}
 	}
@@ -219,7 +219,7 @@ pcapture_start(struct xe_data *data, size_t idx)
 
 	cap->pcap_handle = pcap_open_live(cap->iface, BUFSIZ, 1, 1000, errbuf);
 	if (cap->pcap_handle == NULL) {
-		LOG("Couldn't open device %s: %s\n", cap->iface, errbuf);
+		LOG("Couldn't open device %s: %s", cap->iface, errbuf);
 
 		goto fail_pcap_open;
 	}
@@ -227,14 +227,14 @@ pcapture_start(struct xe_data *data, size_t idx)
 	if (pcap_compile(cap->pcap_handle, &fp, cap->filter,
 			1, PCAP_NETMASK_UNKNOWN) == -1) {
 
-		LOG("Couldn't parse filter '%s': %s\n", cap->filter,
+		LOG("Couldn't parse filter '%s': %s", cap->filter,
 			pcap_geterr(cap->pcap_handle));
 
 		goto fail_compile;
 	}
 
 	if (pcap_setfilter(cap->pcap_handle, &fp) == -1) {
-		LOG("Couldn't install filter %s: %s\n", cap->filter,
+		LOG("Couldn't install filter %s: %s", cap->filter,
 			pcap_geterr(cap->pcap_handle));
 
 		goto fail_setfilter;

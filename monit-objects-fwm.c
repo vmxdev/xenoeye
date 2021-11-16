@@ -246,6 +246,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 	size_t i;
 	int first_field;
 	int n;
+	int hit_limit = 0;
 
 	t = time(NULL);
 	if (t == ((time_t) -1)) {
@@ -296,6 +297,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 	fprintf(f, ");\n\n");
 
 	n = 0;
+
 	do {
 		uint8_t *data = c->key(c);
 
@@ -348,10 +350,72 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 		n++;
 		if (fwm->limit) {
 			if (n >= fwm->limit) {
+				hit_limit = 1;
 				break;
 			}
 		}
 	} while (c->next(c) == TKVDB_OK);
+
+	/* calculate others */
+	if (hit_limit) {
+		size_t j = 0;
+
+		uint64_t others[fwm->fieldset.n_aggr];
+		for (i=0; i<fwm->fieldset.n_aggr; i++) {
+			others[i] = 0;
+		}
+
+		while (c->next(c) == TKVDB_OK) {
+			uint8_t *data = c->key(c);
+
+			j = 0;
+			for (i=0; i<fwm->fieldset.n; i++) {
+				struct field *fld = &fwm->fieldset.fields[i];
+
+				if (fld->aggr) {
+					uint64_t v, *vptr;
+					vptr = (uint64_t *)data;
+
+					v = be64toh(*vptr);
+					if (fld->descending) {
+						/* invert value */
+						v = ~v;
+					}
+					others[j] += v;
+					j++;
+
+					data += sizeof(uint64_t);
+				} else {
+					data += fld->size;
+				}
+			}
+		}
+		/* print others */
+		fprintf(f, "insert into %s ", fwm->name);
+		fprintf(f, "values ( to_timestamp(%llu), ",
+			(long long unsigned)t);
+
+		first_field = 1;
+		j = 0;
+		for (i=0; i<fwm->fieldset.n; i++) {
+			struct field *fld = &fwm->fieldset.fields[i];
+
+			if (!first_field) {
+				fprintf(f, ", ");
+			} else {
+				first_field = 0;
+			}
+
+			if (fld->aggr) {
+				fprintf(f, " %lu ", others[j]);
+				j++;
+			} else {
+				fprintf(f, " NULL ");
+			}
+		}
+
+		fprintf(f, ");\n");
+	}
 
 	ret = 1;
 empty:
