@@ -615,3 +615,52 @@ fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name)
 	return 1;
 }
 
+void *
+fwm_bg_thread(void *arg)
+{
+	struct xe_data *data = (struct xe_data *)arg;
+
+	for (;;) {
+		time_t t;
+		size_t i, j;
+		int need_sleep = 1;
+
+		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
+			/* stop */
+			break;
+		}
+
+		t = time(NULL);
+		if (t == ((time_t)-1)) {
+			LOG("time() failed: %s", strerror(errno));
+			return NULL;
+		}
+
+		for (i=0; i<data->nmonit_objects; i++) {
+			struct monit_object *mo = &data->monit_objects[i];
+
+			for (j=0; j<mo->nfwm; j++) {
+				struct mo_fwm *fwm = &mo->fwms[j];
+
+				if ((fwm->last_export + fwm->time) <= t) {
+					/* time to export */
+					if (fwm_merge(fwm, data->nthreads,
+						mo->name)) {
+
+						fwm->last_export = t;
+						need_sleep = 0;
+					} else {
+						continue;
+					}
+				}
+			}
+		}
+
+		if (need_sleep) {
+			sleep(1);
+		}
+	}
+
+	return NULL;
+}
+

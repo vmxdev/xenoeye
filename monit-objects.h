@@ -7,6 +7,8 @@
 
 #include "tkvdb.h"
 
+#define FWM_DEFAULT_TIMEOUT 30
+
 struct xe_data;
 struct nf_flow_info;
 
@@ -43,7 +45,10 @@ struct mo_fwm
 {
 	char name[TOKEN_MAX_SIZE];
 	struct mo_fieldset fieldset;
+
+	time_t last_export;
 	int time;
+
 	int limit;
 
 	/* each thread has it's own data */
@@ -73,6 +78,7 @@ int monit_object_process_nf(struct monit_object *mo, size_t thread_id,
 int fwm_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
 int fwm_fields_init(size_t nthreads, struct mo_fwm *window);
 int fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name);
+void *fwm_bg_thread(void *);
 
 #endif
 
