@@ -423,6 +423,11 @@ filter_match(struct filter_expr *expr, struct nf_flow_info *flow)
 	int *stack = alloca(expr->n * sizeof(int));
 	size_t sp = 0;
 
+	if (expr->n == 0) {
+		/* empty filter, match all */
+		return 1;
+	}
+
 	for (i=0; i<expr->n; i++) {
 		struct filter_op *op = &expr->filter[i];
 		switch (op->op) {
