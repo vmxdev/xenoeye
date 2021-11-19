@@ -106,6 +106,12 @@ struct nf_flow_info
 	int NAME##_size;                                    \
 	int has_##NAME;
 #include "netflow.def"
+	/* pseudo-fields for export devices */
+	uint8_t dev_ip[4];
+	int dev_ip_size;
+
+	uint8_t dev_id[4];
+	int dev_id_size;
 };
 
 struct nf_packet_info
@@ -115,8 +121,6 @@ struct nf_packet_info
 
 	uint32_t source_id;
 	uint32_t epoch;
-	uint32_t uptime;
-	time_t tmin, tmax;
 	uint8_t rawpacket[MAX_NF_PACKET_SIZE];
 };
 

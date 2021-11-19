@@ -5,4 +5,6 @@ FIELD(HOST6,	"host6",	ADDR6,	ip6_src_addr,	ip6_dst_addr)
 FIELD(NET6,	"net6",		ADDR6,	ip6_src_addr,   ip6_dst_addr)
 FIELD(PORT,	"port",		RANGE,	l4_src_port,	l4_dst_port)
 FIELD(PROTO,	"proto",	RANGE,	protocol,	protocol)
+FIELD(DEV_IP,	"dev-ip",	ADDR4,	dev_ip,		dev_ip)
+FIELD(DEV_ID,	"dev-id",	RANGE,	dev_id,		dev_id)
 #undef FIELD

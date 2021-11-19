@@ -101,6 +101,15 @@ if (ftype == FLDID) {                                                         \
 
 }
 
+static void
+pseudo_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
+{
+	memcpy(&flow->dev_ip[0], &npi->src_addr_ipv4, sizeof(uint32_t));
+	flow->dev_ip_size = sizeof(uint32_t);
+
+	memcpy(&flow->dev_id[0], &npi->source_id, sizeof(uint32_t));
+	flow->dev_id_size = sizeof(uint32_t);
+}
 
 static int
 parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
@@ -120,7 +129,6 @@ parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
 		/* packet too short */
 		LOG("Template is too short (size: %d, packet length %d)",
 			template_size, length);
-		LOG("******************");
 		return 0;
 	}
 /*
@@ -221,6 +229,8 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 				break;
 			}
 		}
+		/* pseudo-fields */
+		pseudo_fields_init(&flow, npi);
 
 		/* debug print */
 		if (data->debug.print_flows) {
@@ -229,7 +239,7 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 			print_netflow_v9_flowset(tmpl, template_field_count,
 				ptr, tmpfptr, length, debug_flow_str);
 
-			flow_print_str(&data->debug, debug_flow_str);
+			flow_print_str(&data->debug, &flow, debug_flow_str);
 		}
 
 		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
@@ -246,7 +256,8 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 					template_field_count, ptr, tmpfptr,
 					length, debug_flow_str);
 
-				flow_print_str(&mo->debug, debug_flow_str);
+				flow_print_str(&mo->debug, &flow,
+					debug_flow_str);
 			}
 
 			monit_object_process_nf(mo, thread_id, &flow);
@@ -264,13 +275,9 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
 	int flowset_id, flowset_id_host, length, count;
 	uint8_t *ptr;
 
-	npi->tmin = 0;
-	npi->tmax = 0;
-
 	header = (struct nf9_header *)npi->rawpacket;
 	npi->source_id = header->source_id;
 	npi->epoch = header->unix_secs;
-	npi->uptime = htonl(header->sys_uptime);
 /*
 	LOG("got v9, package sequence: %u, source id %u, length %d",
 		ntohl(header->package_sequence),
@@ -474,6 +481,8 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 				break;
 			}
 		}
+		/* pseudo-fields */
+		pseudo_fields_init(&flow, npi);
 
 		if (data->debug.print_flows) {
 			char debug_flow_str[1024];
@@ -481,7 +490,8 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 			print_ipfix_flowset(tmpl, template_field_count,
 				ptr, tmpfptr, length, debug_flow_str);
 
-			flow_print_str(&data->debug, debug_flow_str);
+			flow_print_str(&data->debug, &flow,
+				debug_flow_str);
 		}
 
 
@@ -499,7 +509,8 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 					template_field_count, ptr, tmpfptr,
 					length, debug_flow_str);
 
-				flow_print_str(&mo->debug, debug_flow_str);
+				flow_print_str(&mo->debug, &flow,
+					debug_flow_str);
 			}
 
 			monit_object_process_nf(mo, thread_id, &flow);
@@ -519,13 +530,9 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 	int flowset_id, flowset_id_host, length;
 	uint8_t *ptr;
 
-	npi->tmin = 0;
-	npi->tmax = 0;
-
 	header = (struct ipfix_header *)npi->rawpacket;
 	npi->source_id = header->observation_domain;
 	npi->epoch = header->export_time;
-	npi->uptime = 0;
 /*
 	LOG("got ipfix, package sequence: %u, source id %u, length %d",
 		ntohl(header->sequence_number),
