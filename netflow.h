@@ -112,6 +112,8 @@ struct nf_flow_info
 
 	uint8_t dev_id[4];
 	int dev_id_size;
+
+	uint32_t sampling_rate;
 };
 
 struct nf_packet_info
@@ -122,6 +124,8 @@ struct nf_packet_info
 	uint32_t source_id;
 	uint32_t epoch;
 	uint8_t rawpacket[MAX_NF_PACKET_SIZE];
+
+	int sampling_rate;
 };
 
 int netflow_process(struct xe_data *data, size_t thread_id,

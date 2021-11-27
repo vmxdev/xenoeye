@@ -106,10 +106,11 @@ flow_print_str(struct xe_debug *debug, struct nf_flow_info *fi, char *flow_str)
 
 	memcpy(&dev_id, &fi->dev_id[0], sizeof(uint32_t));
 
-	sprintf(devinfo, "; *dev-ip: %d.%d.%d.%d; *dev-id: %d",
+	sprintf(devinfo, "; *dev-ip: %d.%d.%d.%d; *dev-id: %d, *rate: %u",
 		fi->dev_ip[0], fi->dev_ip[1],
 		fi->dev_ip[2], fi->dev_ip[3],
-		ntohl(dev_id));
+		ntohl(dev_id),
+		fi->sampling_rate);
 
 	strcat(flow_str, devinfo);
 

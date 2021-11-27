@@ -35,6 +35,7 @@
 #include "netflow_templates.h"
 #include "flow_debug.h"
 #include "xenoeye.h"
+#include "devices.h"
 
 #define DEFAULT_CONFIG_FILE "xeconfig.json"
 #define DEFAULT_TEMPLATES_FILE "templates.tkv"
@@ -405,6 +406,11 @@ main(int argc, char *argv[])
 
 	if (!config_parse(&data, conffile ? conffile : DEFAULT_CONFIG_FILE)) {
 		return EXIT_FAILURE;
+	}
+
+	/* load devices with sampling rates */
+	if (!devices_load()) {
+		LOG("Devices list with sampling rates not loaded");
 	}
 
 	LOG("Templates DB: '%s'", data.templates_db);

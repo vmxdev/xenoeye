@@ -25,12 +25,11 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-/*#include "aajson/aajson.h"*/
-
 #include "utils.h"
 #include "xenoeye.h"
 #include "filter.h"
 #include "flow_debug.h"
+#include "netflow.h"
 
 #include "tkvdb.h"
 
@@ -289,7 +288,8 @@ monit_object_process_nf(struct monit_object *mo, size_t thread_id,
 				struct field *fld = &fwm->fieldset.aggr[j];
 				uint64_t val = monit_object_nf_val(flow, fld);
 
-				vals[j] += val * fld->scale;
+				vals[j] += val * fld->scale
+					* flow->sampling_rate;
 			}
 		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
 			/* try to add new key-value pair */
@@ -299,7 +299,8 @@ monit_object_process_nf(struct monit_object *mo, size_t thread_id,
 				struct field *fld = &fwm->fieldset.aggr[j];
 				uint64_t val = monit_object_nf_val(flow, fld);
 
-				fdata->val[j] = val * fld->scale;
+				fdata->val[j] = val * fld->scale
+					* flow->sampling_rate;
 			}
 
 			dtval.data = fdata->val;

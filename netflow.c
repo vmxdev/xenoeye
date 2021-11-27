@@ -37,6 +37,7 @@
 #include "xenoeye.h"
 #include "filter.h"
 #include "flow_debug.h"
+#include "devices.h"
 
 
 /* construct template key, used as key in persistent k-v templates storage */
@@ -109,6 +110,28 @@ pseudo_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
 
 	memcpy(&flow->dev_id[0], &npi->source_id, sizeof(uint32_t));
 	flow->dev_id_size = sizeof(uint32_t);
+
+	flow->sampling_rate = npi->sampling_rate;
+}
+
+static void
+sampling_rate_init(struct nf_packet_info *npi)
+{
+	struct device dev;
+
+	/* FIXME: add IPv6 */
+	dev.ip_ver = 4;
+	dev.ip = 0;
+	memcpy(&dev.ip, &npi->src_addr_ipv4, 4);
+
+	dev.id = npi->source_id;
+
+	if (device_get_sampling_rate(&dev)) {
+		npi->sampling_rate = dev.sampling_rate;
+	} else {
+		/* device not found in database */
+		npi->sampling_rate = 1;
+	}
 }
 
 static int
@@ -278,6 +301,8 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
 	header = (struct nf9_header *)npi->rawpacket;
 	npi->source_id = header->source_id;
 	npi->epoch = header->unix_secs;
+
+	sampling_rate_init(npi);
 /*
 	LOG("got v9, package sequence: %u, source id %u, length %d",
 		ntohl(header->package_sequence),
@@ -533,6 +558,8 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 	header = (struct ipfix_header *)npi->rawpacket;
 	npi->source_id = header->observation_domain;
 	npi->epoch = header->export_time;
+
+	sampling_rate_init(npi);
 /*
 	LOG("got ipfix, package sequence: %u, source id %u, length %d",
 		ntohl(header->sequence_number),

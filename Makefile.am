@@ -9,7 +9,8 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	aajson/aajson.h \
 	filter.c filter.h filter_lexer.c filter_parser.c \
 	pcapture.c monit-objects.c monit-objects.h monit-objects-fwm.c \
-	flow_debug.h flow_debug.c
+	flow_debug.h flow_debug.c \
+	devices.h devices.c
 
 #xemkrep_SOURCES = xemkrep.c \
 #	tkvdb/tkvdb.c tkvdb/tkvdb.h
