@@ -7,6 +7,8 @@
 	"templates": {
 		"db": "templates.tkvdb",
 		"allow-templates-in-future": false
-	}
+	},
+
+	"devices": "/etc/xenoeye/devices.conf"
 }
 

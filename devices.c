@@ -109,18 +109,17 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 #undef STRCMP
 
 int
-devices_load(void)
+devices_load(const char *filename)
 {
 	FILE *f;
 	long len;
 	struct aajson conf_json;
-	char *conffile = "devices.conf";
 	int ret = 0;
 	char *file;
 
-	f = fopen(conffile, "rb");
+	f = fopen(filename, "rb");
 	if (!f) {
-		LOG("Can't open config file '%s'", conffile);
+		LOG("Can't open config file '%s'", filename);
 		goto fail_open;
 	}
 
@@ -135,7 +134,7 @@ devices_load(void)
 	}
 
 	if (fread(file, 1, len, f) != (size_t)len) {
-		LOG("Can't read config file '%s'", conffile);
+		LOG("Can't read config file '%s'", filename);
 		goto fail_read;
 	}
 
@@ -144,7 +143,7 @@ devices_load(void)
 
 	if (conf_json.error) {
 		LOG("Can't parse config file '%s': line %lu, col %lu: %s",
-			conffile, conf_json.line, conf_json.col,
+			filename, conf_json.line, conf_json.col,
 			conf_json.errmsg);
 
 		free(devices.devices);

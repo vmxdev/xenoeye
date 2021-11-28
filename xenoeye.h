@@ -54,7 +54,11 @@ struct xe_data
 	int allow_templates_in_future;
 	char templates_db[PATH_MAX];
 
+	/* debug settings */
 	struct xe_debug debug;
+
+	/* path to devices list */
+	char devices[PATH_MAX];
 
 	/* notify threads about stop */
 	atomic_int stop;

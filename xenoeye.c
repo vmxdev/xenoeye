@@ -99,6 +99,10 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 	struct xe_data *data = user;
 	size_t idx;
 
+	if (STRCMP(a, 1, "devices") == 0) {
+		strcpy(data->devices, value->str);
+	}
+
 	if (a->path_stack_pos < 2) {
 		return 1;
 	}
@@ -277,7 +281,6 @@ scapture_thread(void *arg)
 
 			addr = (struct sockaddr_in *)&nfpkt.src_addr;
 			/* we're supporting only IPv4 */
-			/*LOG("src_addr: %s", inet_ntoa(addr->sin_addr));*/
 
 			nfpkt.src_addr_ipv4 =
 				 *((uint32_t *)&(addr->sin_addr));
@@ -409,8 +412,13 @@ main(int argc, char *argv[])
 	}
 
 	/* load devices with sampling rates */
-	if (!devices_load()) {
-		LOG("Devices list with sampling rates not loaded");
+	if (*data.devices) {
+		if (!devices_load(data.devices)) {
+			LOG("Devices list with sampling rates not loaded");
+		}
+	} else {
+		LOG("Devices file is not set in config, sampling rate of "
+			"all devices will be 1");
 	}
 
 	LOG("Templates DB: '%s'", data.templates_db);

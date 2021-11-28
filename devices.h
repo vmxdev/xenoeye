@@ -16,7 +16,7 @@ struct device
 	int sampling_rate;
 };
 
-int devices_load(void);
+int devices_load(const char *filename);
 
 int device_get_sampling_rate(struct device *d);
 
