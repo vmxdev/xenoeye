@@ -9,6 +9,8 @@
 		"allow-templates-in-future": false
 	},
 
-	"devices": "/etc/xenoeye/devices.conf"
+	"devices": "/etc/xenoeye/devices.conf",
+
+	"mo-dir": "/var/lib/xenoeye/mo"
 }
 

@@ -60,6 +60,9 @@ struct xe_data
 	/* path to devices list */
 	char devices[PATH_MAX];
 
+	/* path to monitoring objects */
+	char mo_dir[PATH_MAX];
+
 	/* notify threads about stop */
 	atomic_int stop;
 };

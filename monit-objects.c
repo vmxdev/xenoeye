@@ -158,17 +158,16 @@ monit_objects_init(struct xe_data *data)
 	DIR *d;
 	struct dirent *dir;
 	int ret = 0;
-	char modir[PATH_MAX] = "monit_objects";
 	int thread_err;
 
 	free(data->monit_objects);
 	data->monit_objects = NULL;
 	data->nmonit_objects = 0;
 
-	d = opendir(modir);
+	d = opendir(data->mo_dir);
 	if (!d) {
 		LOG("Can't open directory with monitoring objects '%s': %s",
-			modir, strerror(errno));
+			data->mo_dir, strerror(errno));
 		goto fail_opendir;
 	}
 
@@ -186,7 +185,7 @@ monit_objects_init(struct xe_data *data)
 			continue;
 		}
 
-		sprintf(mofile, "%s/%s/mo.conf", modir, dir->d_name);
+		sprintf(mofile, "%s/%s/mo.conf", data->mo_dir, dir->d_name);
 		LOG("Adding monitoring object '%s'", dir->d_name);
 
 		if (!monit_object_info_parse(data, dir->d_name, mofile)) {

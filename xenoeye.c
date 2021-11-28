@@ -103,6 +103,10 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		strcpy(data->devices, value->str);
 	}
 
+	if (STRCMP(a, 1, "mo-dir") == 0) {
+		strcpy(data->mo_dir, value->str);
+	}
+
 	if (a->path_stack_pos < 2) {
 		return 1;
 	}
@@ -426,8 +430,7 @@ main(int argc, char *argv[])
 		data.allow_templates_in_future ? "yes": "no");
 
 	if (!monit_objects_init(&data)) {
-		LOG("Can't init monitoring objects, exiting");
-		return EXIT_FAILURE;
+		LOG("Can't init monitoring objects");
 	}
 
 	if (!netflow_templates_init(&data)) {
