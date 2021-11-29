@@ -37,8 +37,9 @@
 #include "xenoeye.h"
 #include "devices.h"
 
-#define DEFAULT_CONFIG_FILE "xeconfig.json"
-#define DEFAULT_TEMPLATES_FILE "templates.tkv"
+#define DEFAULT_CONFIG_FILE "/etc/xenoeye/xenoeye.conf"
+#define DEFAULT_TEMPLATES_FILE "/var/lib/xenoeye/templates.tkv"
+#define DEFAULT_EXPORT_DIR "/var/lib/xenoeye/exp/"
 
 static void
 print_usage(const char *progname)
@@ -105,6 +106,10 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 
 	if (STRCMP(a, 1, "mo-dir") == 0) {
 		strcpy(data->mo_dir, value->str);
+	}
+
+	if (STRCMP(a, 1, "export-dir") == 0) {
+		strcpy(data->exp_dir, value->str);
 	}
 
 	if (a->path_stack_pos < 2) {
@@ -409,7 +414,6 @@ main(int argc, char *argv[])
 
 	memset(&data, 0, sizeof(struct xe_data));
 	atomic_init(&data.stop, 0);
-	strcpy(data.templates_db, DEFAULT_TEMPLATES_FILE);
 
 	if (!config_parse(&data, conffile ? conffile : DEFAULT_CONFIG_FILE)) {
 		return EXIT_FAILURE;
@@ -425,7 +429,20 @@ main(int argc, char *argv[])
 			"all devices will be 1");
 	}
 
-	LOG("Templates DB: '%s'", data.templates_db);
+	/* check exports directory */
+	if (!*data.exp_dir) {
+		strcpy(data.exp_dir, DEFAULT_EXPORT_DIR);
+		LOG("Export dir is not set, using default '%s'",
+			DEFAULT_EXPORT_DIR);
+	}
+
+	/* templates database */
+	if (!*data.templates_db) {
+		strcpy(data.templates_db, DEFAULT_TEMPLATES_FILE);
+		LOG("Templates DB file is not set, using default '%s'",
+			DEFAULT_TEMPLATES_FILE);
+	}
+
 	LOG("Allow templates in future: %s",
 		data.allow_templates_in_future ? "yes": "no");
 

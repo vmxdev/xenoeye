@@ -77,7 +77,6 @@ int monit_object_process_nf(struct monit_object *mo, size_t thread_id,
 /* fixed windows in memory */
 int fwm_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
 int fwm_fields_init(size_t nthreads, struct mo_fwm *window);
-int fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name);
 void *fwm_bg_thread(void *);
 
 #endif

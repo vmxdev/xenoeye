@@ -236,7 +236,8 @@ fwm_field_print(struct field *fld, FILE *f, uint8_t *data)
 
 
 static int
-fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
+fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
+	const char *exp_dir)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -247,6 +248,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 	int first_field;
 	int n;
 	int hit_limit = 0;
+	char table_name[PATH_MAX];
 
 	t = time(NULL);
 	if (t == ((time_t) -1)) {
@@ -254,7 +256,9 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 		goto time_fail;
 	}
 
-	sprintf(path, "%s_%s_%llu.sql", mo_name, fwm->name,
+	sprintf(table_name, "%s_%s", mo_name, fwm->name);
+
+	sprintf(path, "%s/%s_%llu.sql", exp_dir, table_name,
 		(long long unsigned)t);
 	f = fopen(path, "w");
 	if (!f) {
@@ -274,7 +278,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 	}
 
 	/* generate CREATE TABLE statement */
-	fprintf(f, "create table if not exists %s (\n", fwm->name);
+	fprintf(f, "create table if not exists \"%s\" (\n", table_name);
 	fprintf(f, "  time TIMESTAMPTZ,\n");
 	first_field = 1;
 	for (i=0; i<fwm->fieldset.n; i++) {
@@ -301,7 +305,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 	do {
 		uint8_t *data = c->key(c);
 
-		fprintf(f, "insert into %s ", fwm->name);
+		fprintf(f, "insert into \"%s\" ", table_name);
 		fprintf(f, "values ( to_timestamp(%llu), ",
 			(long long unsigned)t);
 
@@ -391,7 +395,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 			}
 		}
 		/* print others */
-		fprintf(f, "insert into %s ", fwm->name);
+		fprintf(f, "insert into \"%s\" ", table_name);
 		fprintf(f, "values ( to_timestamp(%llu), ",
 			(long long unsigned)t);
 
@@ -430,7 +434,8 @@ cursor_fail:
 }
 
 static int
-fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
+fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
+	const char *exp_dir)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -505,7 +510,7 @@ fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name)
 		}
 	} while (c->next(c) == TKVDB_OK);
 
-	fwm_dump(fwm, tr_merge, mo_name);
+	fwm_dump(fwm, tr_merge, mo_name, exp_dir);
 	tr_merge->free(tr_merge);
 
 	ret = 1;
@@ -575,8 +580,9 @@ empty:
 	return 1;
 }
 
-int
-fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name)
+static int
+fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
+	const char *exp_dir)
 {
 	size_t i;
 	tkvdb_tr *tr_merge;
@@ -608,7 +614,7 @@ fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name)
 		fwm_merge_tr(fwm, tr_merge, tr);
 	}
 
-	fwm_sort_tr(fwm, tr_merge, mo_name);
+	fwm_sort_tr(fwm, tr_merge, mo_name, exp_dir);
 
 	tr_merge->free(tr_merge);
 
@@ -645,7 +651,7 @@ fwm_bg_thread(void *arg)
 				if ((fwm->last_export + fwm->time) <= t) {
 					/* time to export */
 					if (fwm_merge(fwm, data->nthreads,
-						mo->name)) {
+						mo->name, data->exp_dir)) {
 
 						fwm->last_export = t;
 						need_sleep = 0;
