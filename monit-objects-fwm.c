@@ -262,7 +262,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 		(long long unsigned)t);
 	f = fopen(path, "w");
 	if (!f) {
-		LOG("fopen() failed: %s", strerror(errno));
+		LOG("fopen('%s') failed: %s", path, strerror(errno));
 		goto fopen_fail;
 	}
 
