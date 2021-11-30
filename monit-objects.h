@@ -51,6 +51,8 @@ struct mo_fwm
 
 	int limit;
 
+	int dont_create_index;
+
 	/* each thread has it's own data */
 	struct fwm_data *data;
 };

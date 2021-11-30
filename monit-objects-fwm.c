@@ -181,6 +181,12 @@ fwm_config(struct aajson *a, aajson_val *value,
 			LOG("Incorrect limit '%s'", value->str);
 			return 0;
 		}
+	} else if (STRCMP(a, 3, "create-index") == 0) {
+		if ((value->type == AAJSON_VALUE_FALSE)
+			|| (strcmp(value->str, "off") == 0)) {
+
+			window->dont_create_index = 1;
+		}
 	}
 
 	return 1;
@@ -280,6 +286,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	/* generate CREATE TABLE statement */
 	fprintf(f, "create table if not exists \"%s\" (\n", table_name);
 	fprintf(f, "  time TIMESTAMPTZ,\n");
+
 	first_field = 1;
 	for (i=0; i<fwm->fieldset.n; i++) {
 		struct field *fld = &fwm->fieldset.fields[i];
@@ -299,6 +306,13 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 		}
 	}
 	fprintf(f, ");\n\n");
+
+	/* index */
+	if (!fwm->dont_create_index) {
+		fprintf(f, "create index concurrently if not exists "
+			"\"%s_idx\" on \"%s\"(time);\n\n",
+			table_name, table_name);
+	}
 
 	n = 0;
 
