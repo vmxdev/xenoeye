@@ -22,7 +22,7 @@ test_filters_SOURCES = tests/test_filters.c \
 TESTS = $(check_PROGRAMS)
 
 # config file
-dist_sysconf_DATA = xenoeye.conf
+dist_sysconf_DATA = xenoeye.conf devices.conf
 
 # data directories
 install-data-local:
