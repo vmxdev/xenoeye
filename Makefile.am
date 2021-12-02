@@ -20,3 +20,12 @@ check_PROGRAMS = test_filters
 test_filters_SOURCES = tests/test_filters.c \
 	filter.c filter_lexer.c filter_parser.c
 TESTS = $(check_PROGRAMS)
+
+# config file
+dist_sysconf_DATA = xenoeye.conf
+
+# data directories
+install-data-local:
+	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/mo"
+	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/exp"
+	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/expfailed"
