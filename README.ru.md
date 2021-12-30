@@ -18,13 +18,13 @@
 
 ### Поддерживаемые netflow-поля
 
-можно посмотреть в файле `[netflow.def](netflow.def)`.
+можно посмотреть в файле [`netflow.def`](netflow.def).
 
 
 ### Фильтры
 
 Фильтры задаются BPF-подобными правилами. Например, фильтр "`src net 1.2.3.4/28 and proto 17`" выберет только фловы с UDP-трафиком, идущим из сети `1.2.3.4/28`.
-Текущий набор полей, по которым работает фильтрация, можно посмотреть в файле `[filter.def](filter.def)`.
+Текущий набор полей, по которым работает фильтрация, можно посмотреть в файле [`filter.def`](filter.def).
 
 
 Если вы хотите добавить новое netflow-поле или поле фильтрации, смотрите ниже ("Добавление полей")
@@ -69,7 +69,7 @@ $ make
 $ sudo make install
 ```
 
-make install копирует бинарный файл xenoeye в /usr/local/bin, конфигурационные файлы xenoeye.conf и devices.conf в /etc/xenoeye и создает каталоги /var/lib/xenoeye/mo, /var/lib/xenoeye/exp и /var/lib/xenoeye/expfailed.
+`make install` копирует бинарный файл xenoeye в /usr/local/bin, конфигурационные файлы xenoeye.conf и devices.conf в /etc/xenoeye и создает каталоги /var/lib/xenoeye/mo, /var/lib/xenoeye/exp и /var/lib/xenoeye/expfailed.
 
 Каталог `/var/lib/xenoeye` должен быть доступен для записи процессу xenoeye
 
