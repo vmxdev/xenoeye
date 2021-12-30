@@ -1,5 +1,5 @@
 # xenoeye
-Netflow collector and analyzer
+Коллектор Netflow
 
 [![Build Status](https://app.travis-ci.com/vmxdev/xenoeye.svg?branch=master)](https://app.travis-ci.com/vmxdev/xenoeye)
 
@@ -119,6 +119,7 @@ IPv4 src addr: 1.2.3.4; IPv4 dst addr: 5.6.7.8; Src TOS: 0; Protocol: 6; Src por
 
 Для установки частоты сэмплирования отредактируйте файл `devices.conf`. Это JSON-массив, каждый элемент - запись об устройстве-источнике netflow (роутере).
 
+``` json
 [
         {
                 "ip": "1.2.3.4",
@@ -130,6 +131,7 @@ IPv4 src addr: 1.2.3.4; IPv4 dst addr: 5.6.7.8; Src TOS: 0; Protocol: 6; Src por
                 "sampling-rate": 1000
         }
 ]
+```
 
 Частоту можно установить для IP адреса устройства и, если нужно, то и для source ID (его можно увидеть в текстовом дампе флова, виртуальное поле `*dev-id`. Коллектор показывает частоту сэмплирования в каждом флове, в виртуальном поле `*rate`.
 
@@ -144,12 +146,12 @@ IPv4 src addr: 1.2.3.4; IPv4 dst addr: 5.6.7.8; Src TOS: 0; Protocol: 6; Src por
 Чтобы создать объект мониторинга, создайте подкаталог с именем этого объекта.
 
 ```sh
-$ mkdir -p /var/lib/xenoeye/mo/test
+$ mkdir -p /var/lib/xenoeye/mo/monit_object1
 ```
 
 И создайте там файл с описанием объекта мониторинга. Файл должен называться `mo.conf` и имеет такую структуру:
 
-```
+``` json
 {
 	/* В объекте UDP трафик из сети 10.11.12.0/24 */
 	"filter": "src net 10.11.12.0/24 and proto udp",
