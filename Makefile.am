@@ -19,7 +19,7 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 # checks
 check_PROGRAMS = test_filters
 test_filters_SOURCES = tests/test_filters.c \
-	filter.c filter_lexer.c filter_parser.c
+	filter.c filter_lexer.c filter_parser.c iplist.c
 TESTS = $(check_PROGRAMS)
 
 # config file
