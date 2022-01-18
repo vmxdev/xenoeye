@@ -25,6 +25,19 @@
 
 #include "iplist.h"
 
+struct bitwise_trie_node
+{
+	uint32_t next[2];
+	int is_leaf;
+};
+
+struct iplist
+{
+	char name[PATH_MAX];
+	struct bitwise_trie_node *nodes;
+	size_t n;
+};
+
 static struct iplist *iplists = NULL;
 size_t n_iplists = 0;
 

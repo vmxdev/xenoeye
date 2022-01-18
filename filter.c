@@ -156,7 +156,7 @@ filter_add_to_basic_filter(struct filter_input *f,
 {
 	struct filter_op *fo;
 	struct filter_basic *fb;
-	union filter_basic_data *tmpfbd;
+	struct filter_basic_data *tmpfbd;
 
 	if (e->n < 1) {
 		return 0;
@@ -169,29 +169,41 @@ filter_add_to_basic_filter(struct filter_input *f,
 
 	fb = fo->arg;
 	tmpfbd = realloc(fb->data,
-		sizeof(union filter_basic_data) * (fb->n + 1));
+		sizeof(struct filter_basic_data) * (fb->n + 1));
 	if (!tmpfbd) {
 		return 0;
 	}
 
 	fb->data = tmpfbd;
+
+	fb->data[fb->n].is_list = 0;
+
 	if (tok->id == ID) {
 		if (type == FILTER_BASIC_ADDR4) {
-			if (!filter_id_to_addr4(f, tok->data.str,
-				&(fb->data[fb->n].ipv4))) {
+			struct iplist *tmpiplist;
 
-				return 0;
+			/* try to parse as iplist */
+			tmpiplist = iplist_get_by_name(tok->data.str);
+			if (tmpiplist) {
+				fb->data[fb->n].data.addr_list = tmpiplist;
+				fb->data[fb->n].is_list = 1;
+			} else {
+				if (!filter_id_to_addr4(f, tok->data.str,
+					&(fb->data[fb->n].data.ipv4))) {
+
+					return 0;
+				}
 			}
-		} else if (type == FILTER_BASIC_ADDR4) {
+		} else if (type == FILTER_BASIC_ADDR6) {
 			if (!filter_id_to_addr6(f, tok->data.str,
-				&(fb->data[fb->n].ipv6))) {
+				&(fb->data[fb->n].data.ipv6))) {
 
 				return 0;
 			}
 		}
 	} else if (tok->id == INT_RANGE) {
-		fb->data[fb->n].range.low = tok->data.range.low;
-		fb->data[fb->n].range.high = tok->data.range.high;
+		fb->data[fb->n].data.range.low = tok->data.range.low;
+		fb->data[fb->n].data.range.high = tok->data.range.high;
 	} else {
 		return 0;
 	}
@@ -249,22 +261,44 @@ filter_basic_match_addr4(struct filter_basic *fb, struct nf_flow_info *flow)
 
 	for (i=0; i<fb->n; i++) {
 		if (fb->direction == FILTER_BASIC_DIR_BOTH) {
-			if ((*addr4 & fb->data[i].ipv4.mask)
-				== fb->data[i].ipv4.addr) {
+			if (fb->data[i].is_list) {
+				/* check against IP list */
+				if (iplist_match4(fb->data[i].data.addr_list,
+					*addr4)) {
 
-				return 1;
-			}
+					return 1;
+				}
+				if (iplist_match4(fb->data[i].data.addr_list,
+					*addr4_second)) {
 
-			if ((*addr4_second & fb->data[i].ipv4.mask)
-				== fb->data[i].ipv4.addr) {
+					return 1;
+				}
+			} else {
+				if ((*addr4 & fb->data[i].data.ipv4.mask)
+					== fb->data[i].data.ipv4.addr) {
 
-				return 1;
+					return 1;
+				}
+
+				if ((*addr4_second & fb->data[i].data.ipv4.mask)
+					== fb->data[i].data.ipv4.addr) {
+
+					return 1;
+				}
 			}
 		} else {
-			if ((*addr4 & fb->data[i].ipv4.mask)
-				== fb->data[i].ipv4.addr) {
+			if (fb->data[i].is_list) {
+				if (iplist_match4(fb->data[i].data.addr_list,
+					*addr4)) {
 
-				return 1;
+					return 1;
+				}
+			} else {
+				if ((*addr4 & fb->data[i].data.ipv4.mask)
+					== fb->data[i].data.ipv4.addr) {
+
+					return 1;
+				}
 			}
 		}
 	}
@@ -302,16 +336,16 @@ filter_basic_match_addr6(struct filter_basic *fb, struct nf_flow_info *flow)
 	for (i=0; i<fb->n; i++) {
 		if (fb->direction == FILTER_BASIC_DIR_BOTH) {
 			if (memcmp(addr6,
-				&fb->data[i].ipv6.addr, 16) == 0) {
+				&fb->data[i].data.ipv6.addr, 16) == 0) {
 				return 1;
 			}
 			if (memcmp(addr6_second,
-				&fb->data[i].ipv6.addr, 16) == 0) {
+				&fb->data[i].data.ipv6.addr, 16) == 0) {
 				return 1;
 			}
 		} else {
 			if (memcmp(addr6,
-				&fb->data[i].ipv6.addr, 16) == 0) {
+				&fb->data[i].data.ipv6.addr, 16) == 0) {
 				return 1;
 			}
 		}
@@ -377,17 +411,17 @@ filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
 
 	for (i=0; i<fb->n; i++) {
 		if (fb->direction != FILTER_BASIC_DIR_BOTH) {
-			if ((r1 >= fb->data[i].range.low)
-				&& (r1 <= fb->data[i].range.high)) {
+			if ((r1 >= fb->data[i].data.range.low)
+				&& (r1 <= fb->data[i].data.range.high)) {
 				return 1;
 			}
 		} else {
-			if ((r1 >= fb->data[i].range.low)
-				&& (r1 <= fb->data[i].range.high)) {
+			if ((r1 >= fb->data[i].data.range.low)
+				&& (r1 <= fb->data[i].data.range.high)) {
 				return 1;
 			}
-			if ((r2 >= fb->data[i].range.low)
-				&& (r2 <= fb->data[i].range.high)) {
+			if ((r2 >= fb->data[i].data.range.low)
+				&& (r2 <= fb->data[i].data.range.high)) {
 				return 1;
 			}
 		}
@@ -548,19 +582,19 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 	if (fb->type == FILTER_BASIC_ADDR4) {
 		for (i=0; i<fb->n; i++) {
 			filter_dump_addr(f, 4,
-				(uint8_t *)&(fb->data[i].ipv4.addr),
-				fb->data[i].ipv4.mask_len);
+				(uint8_t *)&(fb->data[i].data.ipv4.addr),
+				fb->data[i].data.ipv4.mask_len);
 		}
 	} else if (fb->type == FILTER_BASIC_ADDR6) {
 		for (i=0; i<fb->n; i++) {
 			filter_dump_addr(f, 6,
-				(uint8_t *)&(fb->data[i].ipv6.addr),
-				fb->data[i].ipv6.mask_len);
+				(uint8_t *)&(fb->data[i].data.ipv6.addr),
+				fb->data[i].data.ipv6.mask_len);
 		}
 	} else if (fb->type == FILTER_BASIC_RANGE) {
 		for (i=0; i<fb->n; i++) {
-			fprintf(f, " %d-%d", fb->data[i].range.low,
-				fb->data[i].range.high);
+			fprintf(f, " %d-%d", fb->data[i].data.range.low,
+				fb->data[i].data.range.high);
 		}
 	} else {
 		fprintf(f, "<Unknown type %d>", fb->type);

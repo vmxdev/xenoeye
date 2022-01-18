@@ -66,6 +66,9 @@ struct xe_data
 	/* path to export files dir */
 	char exp_dir[PATH_MAX];
 
+	/* path to IP lists */
+	char iplists_dir[PATH_MAX];
+
 	/* notify threads about stop */
 	atomic_int stop;
 };

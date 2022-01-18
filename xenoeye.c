@@ -40,6 +40,7 @@
 #define DEFAULT_CONFIG_FILE "/etc/xenoeye/xenoeye.conf"
 #define DEFAULT_TEMPLATES_FILE "/var/lib/xenoeye/templates.tkv"
 #define DEFAULT_EXPORT_DIR "/var/lib/xenoeye/exp/"
+#define DEFAULT_IPLISTS_DIR "/var/lib/xenoeye/iplists/"
 
 static void
 print_usage(const char *progname)
@@ -110,6 +111,10 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 
 	if (STRCMP(a, 1, "export-dir") == 0) {
 		strcpy(data->exp_dir, value->str);
+	}
+
+	if (STRCMP(a, 1, "iplists-dir") == 0) {
+		strcpy(data->iplists_dir, value->str);
 	}
 
 	if (a->path_stack_pos < 2) {
@@ -434,6 +439,17 @@ main(int argc, char *argv[])
 		strcpy(data.exp_dir, DEFAULT_EXPORT_DIR);
 		LOG("Export dir is not set, using default '%s'",
 			DEFAULT_EXPORT_DIR);
+	}
+
+	/* IP lists directory */
+	if (!*data.iplists_dir) {
+		strcpy(data.iplists_dir, DEFAULT_IPLISTS_DIR);
+		LOG("IP lists dir is not set, using default '%s'",
+			DEFAULT_IPLISTS_DIR);
+	}
+	if (!iplists_load(data.iplists_dir)) {
+		LOG("Can't load IP lists from '%s': %s", data.iplists_dir,
+			strerror(errno));
 	}
 
 	/* templates database */

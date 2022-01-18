@@ -155,11 +155,10 @@ term(struct filter_input *f, struct filter_expr *e)
 static int
 expression(struct filter_input *f, struct filter_expr *e)
 {
+	int inverse = 0;
+
 	if (accept_(f, NOT)) {
-		/* inverse */
-		if (!filter_add_op(e, FILTER_OP_NOT)) {
-			return 0;
-		}
+		inverse = 1;
 	}
 
 	if (!term(f, e)) {
@@ -171,6 +170,12 @@ expression(struct filter_input *f, struct filter_expr *e)
 			return 0;
 		}
 		filter_add_op(e, FILTER_OP_OR);
+	}
+
+	if (inverse) {
+		if (!filter_add_op(e, FILTER_OP_NOT)) {
+			return 0;
+		}
 	}
 
 	return 1;

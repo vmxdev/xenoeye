@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "xenoeye.h"
+#include "iplist.h"
 
 #define ERR_MSG_LEN     1024
 
@@ -75,11 +76,16 @@ struct token
 #define FILTER_BASIC_DIR_DST  2
 #define FILTER_BASIC_DIR_BOTH (FILTER_BASIC_DIR_SRC | FILTER_BASIC_DIR_DST)
 
-union filter_basic_data
+struct filter_basic_data
 {
-	struct int_range range;
-	struct ipv4_addr_and_mask ipv4;
-	struct ipv6_addr_and_mask ipv6;
+	int is_list;
+	union filter_basic_data_union
+	{
+		struct int_range range;
+		struct ipv4_addr_and_mask ipv4;
+		struct ipv6_addr_and_mask ipv6;
+		struct iplist *addr_list;
+	} data;
 };
 
 enum FILTER_BASIC_TYPE
@@ -105,7 +111,7 @@ struct filter_basic
 	int direction;
 
 	size_t n;
-	union filter_basic_data *data;
+	struct filter_basic_data *data;
 };
 
 enum FILTER_OP

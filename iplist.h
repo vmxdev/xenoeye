@@ -5,19 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct bitwise_trie_node
-{
-	uint32_t next[2];
-	int is_leaf;
-};
-
-struct iplist
-{
-	char name[PATH_MAX];
-	struct bitwise_trie_node *nodes;
-	size_t n;
-};
-
+struct iplist;
 
 int iplists_load(const char *dirname);
 
