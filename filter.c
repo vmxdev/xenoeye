@@ -234,22 +234,83 @@ fail_realloc:
 }
 
 static int
+filter_basic_match_single_addr4(int direction, struct filter_basic_data *fbd,
+	uint32_t *addr, uint32_t *addr2)
+{
+	if (direction == FILTER_BASIC_DIR_BOTH) {
+		if (fbd->is_list) {
+			/* check against IP list */
+			if (addr) {
+				if (iplist_match4(fbd->data.addr_list, *addr)) {
+					return 1;
+				}
+			}
+
+			if (addr2) {
+				if (iplist_match4(fbd->data.addr_list, *addr2)) {
+					return 1;
+				}
+			}
+		} else {
+			if (addr) {
+				if ((*addr & fbd->data.ipv4.mask)
+					== fbd->data.ipv4.addr) {
+					return 1;
+				}
+			}
+
+			if (addr2) {
+				if ((*addr2 & fbd->data.ipv4.mask)
+					== fbd->data.ipv4.addr) {
+
+					return 1;
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	if (fbd->is_list) {
+		if (iplist_match4(fbd->data.addr_list, *addr)) {
+			return 1;
+		}
+	} else {
+		if ((*addr & fbd->data.ipv4.mask) == fbd->data.ipv4.addr) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int
 filter_basic_match_addr4(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	size_t i;
-	uint32_t *addr4;
+	uint32_t *addr4 = NULL;
 	uint32_t *addr4_second = NULL;
 
 	switch (fb->name) {
 #define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
 		case FILTER_BASIC_NAME_##NAME:                               \
 			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
+				if (!flow->has_##SRC) {                      \
+					return 0;                            \
+				}                                            \
 				addr4 = (uint32_t *)flow->SRC;               \
 			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
+				if (!flow->has_##DST) {                      \
+					return 0;                            \
+				}                                            \
 				addr4 = (uint32_t *)flow->DST;               \
 			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
-				addr4 = (uint32_t *)flow->SRC;               \
-				addr4_second = (uint32_t *)flow->DST;        \
+				if (flow->has_##SRC) {                       \
+					addr4 = (uint32_t *)flow->SRC;       \
+				}                                            \
+				if (flow->has_##DST) {                       \
+					addr4_second = (uint32_t *)flow->DST;\
+				}                                            \
 			} else {                                             \
 				return 0;                                    \
 			}                                                    \
@@ -259,47 +320,15 @@ filter_basic_match_addr4(struct filter_basic *fb, struct nf_flow_info *flow)
 			return 0;
 	}
 
+	if ((!addr4) && (!addr4_second)) {
+		return 0;
+	}
+
 	for (i=0; i<fb->n; i++) {
-		if (fb->direction == FILTER_BASIC_DIR_BOTH) {
-			if (fb->data[i].is_list) {
-				/* check against IP list */
-				if (iplist_match4(fb->data[i].data.addr_list,
-					*addr4)) {
+		if (filter_basic_match_single_addr4(fb->direction,
+			&(fb->data[i]), addr4, addr4_second)) {
 
-					return 1;
-				}
-				if (iplist_match4(fb->data[i].data.addr_list,
-					*addr4_second)) {
-
-					return 1;
-				}
-			} else {
-				if ((*addr4 & fb->data[i].data.ipv4.mask)
-					== fb->data[i].data.ipv4.addr) {
-
-					return 1;
-				}
-
-				if ((*addr4_second & fb->data[i].data.ipv4.mask)
-					== fb->data[i].data.ipv4.addr) {
-
-					return 1;
-				}
-			}
-		} else {
-			if (fb->data[i].is_list) {
-				if (iplist_match4(fb->data[i].data.addr_list,
-					*addr4)) {
-
-					return 1;
-				}
-			} else {
-				if ((*addr4 & fb->data[i].data.ipv4.mask)
-					== fb->data[i].data.ipv4.addr) {
-
-					return 1;
-				}
-			}
+			return 1;
 		}
 	}
 

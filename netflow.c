@@ -108,9 +108,11 @@ pseudo_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
 {
 	memcpy(&flow->dev_ip[0], &npi->src_addr_ipv4, sizeof(uint32_t));
 	flow->dev_ip_size = sizeof(uint32_t);
+	flow->has_dev_ip = 1;
 
 	memcpy(&flow->dev_id[0], &npi->source_id, sizeof(uint32_t));
 	flow->dev_id_size = sizeof(uint32_t);
+	flow->has_dev_id = 1;
 
 	flow->sampling_rate = npi->sampling_rate;
 }

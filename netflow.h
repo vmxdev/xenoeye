@@ -109,9 +109,11 @@ struct nf_flow_info
 	/* pseudo-fields for export devices */
 	uint8_t dev_ip[4];
 	int dev_ip_size;
+	int has_dev_ip;
 
 	uint8_t dev_id[4];
 	int dev_id_size;
+	int has_dev_id;
 
 	uint32_t sampling_rate;
 };
