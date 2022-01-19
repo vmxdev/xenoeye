@@ -61,23 +61,6 @@ make_template_key(struct template_key *tkey, uint16_t template_id,
 }
 
 static void
-template_dump(struct template_key *tkey)
-{
-	size_t i;
-	char buf[512];
-	unsigned char *data = (unsigned char *)tkey;
-
-	buf[0] = '\0';
-	for (i=0; i<sizeof(struct template_key); i++) {
-		char sym[5];
-
-		sprintf(sym, "%02x ", data[i]);
-		strcat(buf, sym);
-	}
-	LOG("%s", buf);
-}
-
-static void
 flow_parse(struct nf_flow_info *flow,
 	int flength, int ftype, uint8_t *fptr)
 {
@@ -170,7 +153,6 @@ parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
 
 	if (!tmplitem) {
 		LOG("Unknown template, id %d", ntohs(template_id));
-		template_dump(&tkey);
 		return netflow_template_add(&tkey, ptmpl, template_size);
 	}
 
