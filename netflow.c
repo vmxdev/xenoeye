@@ -56,7 +56,8 @@ make_template_key(struct template_key *tkey, uint16_t template_id,
 	memcpy(&tkey->source_ip, &addr, sizeof(xe_ip));
 
 	tkey->source_id = npi->source_id;
-	tkey->epoch = npi->epoch;
+	/*tkey->epoch = npi->epoch;*/
+	tkey->epoch = time(NULL);
 }
 
 static void
@@ -395,8 +396,10 @@ parse_ipfix_template(struct xe_data *data, struct nf_packet_info *npi,
 	template_id = tmpl_header->template_id;
 	field_count = ntohs(tmpl_header->field_count);
 
+/*
 	LOG("ipfix: template id %d, field count: %u", ntohs(template_id),
 		field_count);
+*/
 
 	/* search for template in database */
 	if (field_count < 1) {
