@@ -57,6 +57,29 @@ struct mo_fwm
 	struct fwm_data *data;
 };
 
+/* moving average */
+struct mavg_minmax
+{
+	__float128 min, max;
+};
+
+struct mavg_data
+{
+	size_t nvals;
+	struct mavg_minmax *vals;
+};
+
+struct mo_mavg
+{
+	char name[TOKEN_MAX_SIZE];
+	uint32_t size_secs;
+	struct mo_fieldset fieldset;
+
+	uint64_t time_ns;
+
+	struct mavg_data *data;
+};
+
 struct monit_object
 {
 	char name[PATH_MAX];
@@ -67,6 +90,10 @@ struct monit_object
 	/* fixed windows in memory */
 	size_t nfwm;
 	struct mo_fwm *fwms;
+
+	/* moving averages */
+	size_t nmavg;
+	struct mo_mavg *mavgs;
 };
 
 int monit_objects_init(struct xe_data *data);
