@@ -55,7 +55,7 @@ Actual building
 
 ```sh
 $ autoreconf -i
-$ /configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib
+$ ./configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib
 $ make
 ```
 

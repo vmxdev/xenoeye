@@ -53,7 +53,7 @@ $ git submodule update --init --recursive
 
 ```sh
 $ autoreconf -i
-$ /configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib
+$ ./configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib
 $ make
 ```
 
@@ -295,19 +295,47 @@ insert into "monit_object1_rep1" values ( to_timestamp(1639725910),  6 ,  '4.5.6
 
 Скрипт можно запускать из командной строки (в бесконечном цикле `while true; do ./fill-db.sh ; sleep 10; done`) или из крона.
 
+#### Установка и настройка PostgreSQL на сервере с коллектором
+
+``` sh
+$ sudo apt -y install postgresql
+#
+$ sudo su - postgres -c "createuser -P xenoeye"
+Enter password for new role:
+Enter it again:
+$ sudo su - postgres -c "createdb xenoeyedb"
+$ sudo su - postgres -c "psql -d xenoeyedb -c 'GRANT ALL PRIVILEGES ON DATABASE xenoeyedb TO xenoeye;'"
+```
+
+``` sh
+$ vi scripts/fill-db.sh
+```
+
+Редактируем параметры подключения:
+  `psql postgresql://user:password@127.0.0.1:5432/database -f "$sqlscript"`
+
+заменяем на
+
+  `psql postgresql://xenoeye:password@localhost/xenoeyedb -f "$sqlscript"`
 
 ### Визуализация с помощью Grafana
 
-(TBW)
-
-Запрос
-
-```sql
+``` sql
 SELECT
-  $__timeGroup(time, '20s') as time,
+  time AS "time",
+  octets
+FROM ingress_all
+WHERE
+  $__timeFilter(time)
+ORDER BY 1
+```
+
+```
+SELECT
+  time AS "time",
   sum(octets) AS ip,
-  COALESCE (dst_net::text, 'Other') as ips
-FROM monit_object1_rep1
+  COALESCE (src_host::text, 'Other') as ips
+FROM ingress_bytes_by_src
 WHERE
   $__timeFilter(time)
 GROUP BY time, ips
