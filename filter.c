@@ -51,10 +51,10 @@ fail_filter_malloc:
 	return 0;
 }
 
-/* TODO: make one function for IPv4 and IPv6 */
+
 static int
-filter_id_to_addr4(struct filter_input *f, char *host,
-	struct ipv4_addr_and_mask *am)
+filter_id_to_addr(struct filter_input *f, char *host,
+	struct ip_addr_and_mask *am)
 {
 	int rc;
 	struct in6_addr hostaddr;
@@ -78,75 +78,46 @@ filter_id_to_addr4(struct filter_input *f, char *host,
 	}
 
 	/* TODO: add getaddrinfo */
-	rc = inet_pton(AF_INET, host_tmp, &hostaddr);
+	if (am->version == 4) {
+		rc = inet_pton(AF_INET, host_tmp, &hostaddr);
+	} else {
+		rc = inet_pton(AF_INET6, host_tmp, &hostaddr);
+	}
 	if (rc == 1) {
 		int i;
 		/* TODO: check mask_len */
 
-		memcpy(&am->addr, &hostaddr, 4);
-		if (am->mask_len < 0) {
-			am->mask_len = 32;
+		if (am->version == 4) {
+			memcpy(&am->ip.v4.addr, &hostaddr, 4);
+			if (am->mask_len < 0) {
+				am->mask_len = 32;
+			}
+			am->ip.v4.mask = 0;
+
+			for (i=0; i<am->mask_len; i++) {
+				am->ip.v4.mask |= 1UL << i;
+			}
+
+			/* apply mask to address */
+			am->ip.v4.addr &= am->ip.v4.mask;
+		} else {
+			memcpy(&am->ip.v6.addr, &hostaddr, 16);
+			if (am->mask_len < 0) {
+				am->mask_len = 16 * 8;
+			}
+			am->ip.v6.mask = 0;
+
+			for (i=0; i<am->mask_len; i++) {
+				am->ip.v6.mask |= 1UL << i;
+			}
+
+			am->ip.v6.addr &= am->ip.v6.mask;
 		}
 
-		am->mask = 0;
-
-		for (i=0; i<am->mask_len; i++) {
-			am->mask |= 1UL << i;
-		}
-
-		/* apply mask to address */
-		am->addr &= am->mask;
 		return 1;
 	}
 
 	mkerror(f, "Can't parse IP address");
-	return 0;
-}
-
-static int
-filter_id_to_addr6(struct filter_input *f, char *host,
-	struct ipv6_addr_and_mask *am)
-{
-	int rc;
-	struct in6_addr hostaddr;
-	char *mask_sym;
-	char host_tmp[TOKEN_MAX_SIZE];
-
-	strcpy(host_tmp, host);
-
-	am->mask_len = -1;
-	mask_sym = strchr(host_tmp, '/');
-	if (mask_sym) {
-		char *endptr;
-
-		*mask_sym = '\0';
-		mask_sym++;
-		am->mask_len = strtol(mask_sym, &endptr, 10);
-		if (*endptr != '\0') {
-			mkerror(f, "Incorrect network mask");
-			return 0;
-		}
-	}
-
-	rc = inet_pton(AF_INET6, host_tmp, &hostaddr);
-	if (rc == 1) {
-		memcpy(&am->addr, &hostaddr, 16);
-		if (am->mask_len < 0) {
-			/* no mask */
-			am->mask = ~(am->mask & 0);
-		} else {
-			int i;
-
-			am->mask = 0;
-
-			for (i=0; i<am->mask_len; i++) {
-				am->mask |= 1UL << i;
-			}
-		}
-		return 1;
-	}
-
-	mkerror(f, "Can't parse address");
 	return 0;
 }
 
@@ -188,15 +159,17 @@ filter_add_to_basic_filter(struct filter_input *f,
 				fb->data[fb->n].data.addr_list = tmpiplist;
 				fb->data[fb->n].is_list = 1;
 			} else {
-				if (!filter_id_to_addr4(f, tok->data.str,
-					&(fb->data[fb->n].data.ipv4))) {
+				fb->data[fb->n].data.ip.version = 4;
+				if (!filter_id_to_addr(f, tok->data.str,
+					&(fb->data[fb->n].data.ip))) {
 
 					return 0;
 				}
 			}
 		} else if (type == FILTER_BASIC_ADDR6) {
-			if (!filter_id_to_addr6(f, tok->data.str,
-				&(fb->data[fb->n].data.ipv6))) {
+			fb->data[fb->n].data.ip.version = 6;
+			if (!filter_id_to_addr(f, tok->data.str,
+				&(fb->data[fb->n].data.ip))) {
 
 				return 0;
 			}
@@ -253,15 +226,15 @@ filter_basic_match_single_addr4(int direction, struct filter_basic_data *fbd,
 			}
 		} else {
 			if (addr) {
-				if ((*addr & fbd->data.ipv4.mask)
-					== fbd->data.ipv4.addr) {
+				if ((*addr & fbd->data.ip.ip.v4.mask)
+					== fbd->data.ip.ip.v4.addr) {
 					return 1;
 				}
 			}
 
 			if (addr2) {
-				if ((*addr2 & fbd->data.ipv4.mask)
-					== fbd->data.ipv4.addr) {
+				if ((*addr2 & fbd->data.ip.ip.v4.mask)
+					== fbd->data.ip.ip.v4.addr) {
 
 					return 1;
 				}
@@ -276,7 +249,9 @@ filter_basic_match_single_addr4(int direction, struct filter_basic_data *fbd,
 			return 1;
 		}
 	} else {
-		if ((*addr & fbd->data.ipv4.mask) == fbd->data.ipv4.addr) {
+		if ((*addr & fbd->data.ip.ip.v4.mask)
+			== fbd->data.ip.ip.v4.addr) {
+
 			return 1;
 		}
 	}
@@ -336,22 +311,94 @@ filter_basic_match_addr4(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
+filter_basic_match_single_addr6(int direction, struct filter_basic_data *fbd,
+	xe_ip *addr, xe_ip *addr2)
+{
+	if (direction == FILTER_BASIC_DIR_BOTH) {
+		if (fbd->is_list) {
+			/* check against IP list */
+			/* TODO: add ipv6 lists */
+/*
+			if (addr) {
+				if (iplist_match4(fbd->data.addr_list, *addr)) {
+					return 1;
+				}
+			}
+
+			if (addr2) {
+				if (iplist_match4(fbd->data.addr_list, *addr2)) {
+					return 1;
+				}
+			}
+*/
+			return 0;
+		} else {
+			if (addr) {
+				if ((*addr & fbd->data.ip.ip.v6.mask)
+					== fbd->data.ip.ip.v6.addr) {
+					return 1;
+				}
+			}
+
+			if (addr2) {
+				if ((*addr2 & fbd->data.ip.ip.v6.mask)
+					== fbd->data.ip.ip.v6.addr) {
+
+					return 1;
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	if (fbd->is_list) {
+		/* TODO: add IPv6 lists */
+/*
+		if (iplist_match4(fbd->data.addr_list, *addr)) {
+			return 1;
+		}
+*/
+		return 0;
+	} else {
+		if ((*addr & fbd->data.ip.ip.v6.mask)
+			== fbd->data.ip.ip.v6.addr) {
+
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+
+static int
 filter_basic_match_addr6(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	size_t i;
-	void *addr6;
-	void *addr6_second = NULL;
+	xe_ip *addr6 = NULL;
+	xe_ip *addr6_second = NULL;
 
 	switch (fb->name) {
 #define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
 		case FILTER_BASIC_NAME_##NAME:                               \
 			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
-				addr6 = flow->SRC;                           \
+				if (!flow->has_##SRC) {                      \
+					return 0;                            \
+				}                                            \
+				addr6 = (xe_ip *)flow->SRC;                  \
 			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
-				addr6 = flow->DST;                           \
+				if (!flow->has_##DST) {                      \
+					return 0;                            \
+				}                                            \
+				addr6 = (xe_ip *)flow->DST;                  \
 			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
-				addr6 = flow->SRC;                           \
-				addr6_second = flow->DST;                    \
+				if (flow->has_##SRC) {                       \
+					addr6 = (xe_ip *)flow->SRC;          \
+				}                                            \
+				if (flow->has_##DST) {                       \
+					addr6_second = (xe_ip *)flow->DST;   \
+				}                                            \
 			} else {                                             \
 				return 0;                                    \
 			}                                                    \
@@ -361,22 +408,15 @@ filter_basic_match_addr6(struct filter_basic *fb, struct nf_flow_info *flow)
 			return 0;
 	}
 
-	/* TODO: add mask */
+	if ((!addr6) && (!addr6_second)) {
+		return 0;
+	}
+
 	for (i=0; i<fb->n; i++) {
-		if (fb->direction == FILTER_BASIC_DIR_BOTH) {
-			if (memcmp(addr6,
-				&fb->data[i].data.ipv6.addr, 16) == 0) {
-				return 1;
-			}
-			if (memcmp(addr6_second,
-				&fb->data[i].data.ipv6.addr, 16) == 0) {
-				return 1;
-			}
-		} else {
-			if (memcmp(addr6,
-				&fb->data[i].data.ipv6.addr, 16) == 0) {
-				return 1;
-			}
+		if (filter_basic_match_single_addr6(fb->direction,
+			&(fb->data[i]), addr6, addr6_second)) {
+
+			return 1;
 		}
 	}
 
@@ -611,14 +651,14 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 	if (fb->type == FILTER_BASIC_ADDR4) {
 		for (i=0; i<fb->n; i++) {
 			filter_dump_addr(f, 4,
-				(uint8_t *)&(fb->data[i].data.ipv4.addr),
-				fb->data[i].data.ipv4.mask_len);
+				(uint8_t *)&(fb->data[i].data.ip.ip.v4.addr),
+				fb->data[i].data.ip.mask_len);
 		}
 	} else if (fb->type == FILTER_BASIC_ADDR6) {
 		for (i=0; i<fb->n; i++) {
 			filter_dump_addr(f, 6,
-				(uint8_t *)&(fb->data[i].data.ipv6.addr),
-				fb->data[i].data.ipv6.mask_len);
+				(uint8_t *)&(fb->data[i].data.ip.ip.v6.addr),
+				fb->data[i].data.ip.mask_len);
 		}
 	} else if (fb->type == FILTER_BASIC_RANGE) {
 		for (i=0; i<fb->n; i++) {

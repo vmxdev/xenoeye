@@ -10,20 +10,27 @@
 struct nf_flow_info;
 
 
-struct ipv4_addr_and_mask
+struct ip_addr_and_mask_4
 {
-	int mask_len;
 	uint32_t addr;
 	uint32_t mask;
 };
 
-struct ipv6_addr_and_mask
+struct ip_addr_and_mask_6
 {
-	int mask_len;
 	xe_ip addr;
 	xe_ip mask;
 };
 
+struct ip_addr_and_mask
+{
+	int version;
+	int mask_len;
+	union ip_addr_and_mask_addr {
+		struct ip_addr_and_mask_4 v4;
+		struct ip_addr_and_mask_6 v6;
+	} ip;
+};
 
 struct int_range
 {
@@ -66,8 +73,7 @@ struct token
 	union token_data {
 		char str[TOKEN_MAX_SIZE];
 		struct int_range range;
-		struct ipv4_addr_and_mask ipv4;
-		struct ipv6_addr_and_mask ipv6;
+		struct ip_addr_and_mask ip;
 	} data;
 };
 
@@ -79,11 +85,9 @@ struct token
 struct filter_basic_data
 {
 	int is_list;
-	union filter_basic_data_union
-	{
+	union filter_basic_data_union {
 		struct int_range range;
-		struct ipv4_addr_and_mask ipv4;
-		struct ipv6_addr_and_mask ipv6;
+		struct ip_addr_and_mask ip;
 		struct iplist *addr_list;
 	} data;
 };
