@@ -249,12 +249,12 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	tkvdb_cursor *c;
 	FILE *f;
 	time_t t;
-	char path[PATH_MAX];
+	char path[PATH_MAX * 2];
 	size_t i;
 	int first_field;
 	int n;
 	int hit_limit = 0;
-	char table_name[PATH_MAX];
+	char table_name[PATH_MAX + 512];
 
 	t = time(NULL);
 	if (t == ((time_t) -1)) {

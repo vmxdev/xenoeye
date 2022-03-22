@@ -174,7 +174,7 @@ monit_objects_init(struct xe_data *data)
 	while ((dir = readdir(d)) != NULL) {
 		size_t i;
 		struct monit_object *mo;
-		char mofile[PATH_MAX];
+		char mofile[PATH_MAX + 512];
 
 		if (dir->d_name[0] == '.') {
 			/* skip hidden files */
