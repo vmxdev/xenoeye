@@ -542,7 +542,7 @@ filter_match(struct filter_expr *expr, struct nf_flow_info *flow)
 				if (sp < 1) {
 					return 0;
 				}
-				stack[sp - 1] = ~stack[sp - 1];
+				stack[sp - 1] = !stack[sp - 1];
 				break;
 			case FILTER_OP_AND:
 				if (sp < 2) {
