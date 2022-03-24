@@ -56,9 +56,9 @@ id(struct filter_input *f, struct filter_expr *e, enum FILTER_BASIC_TYPE type)
 
 	READ_TOKEN_CHECK(f);
 
-	/* optional OR's */
 	for (;;) {
 		if (!accept_(f, OR)) {
+			/* optional OR's */
 			break;
 		}
 

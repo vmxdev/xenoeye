@@ -53,7 +53,8 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 			input.s = value->str;
 			mo->expr = parse_filter(&input);
 			if (input.error) {
-				LOG("Parse error: %s", input.errmsg);
+				LOG("Can't parse filter. Parse error: %s",
+					input.errmsg);
 				return 0;
 			}
 		}
@@ -129,7 +130,7 @@ monit_object_info_parse(struct xe_data *data, const char *moname,
 		goto fail_realloc;
 	}
 
-	/*filter_dump(mo.expr, stdout);*/
+	filter_dump(mo.expr, stdout);
 
 	/* copy name of monitoring object */
 	strcpy(mo.name, moname);

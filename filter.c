@@ -167,11 +167,19 @@ filter_add_to_basic_filter(struct filter_input *f,
 				}
 			}
 		} else if (type == FILTER_BASIC_ADDR6) {
-			fb->data[fb->n].data.ip.version = 6;
-			if (!filter_id_to_addr(f, tok->data.str,
-				&(fb->data[fb->n].data.ip))) {
+			struct iplist *tmpiplist;
 
-				return 0;
+			tmpiplist = iplist_get_by_name(tok->data.str);
+			if (tmpiplist) {
+				fb->data[fb->n].data.addr_list = tmpiplist;
+				fb->data[fb->n].is_list = 1;
+			} else {
+				fb->data[fb->n].data.ip.version = 6;
+				if (!filter_id_to_addr(f, tok->data.str,
+					&(fb->data[fb->n].data.ip))) {
+
+					return 0;
+				}
 			}
 		}
 	} else if (tok->id == INT_RANGE) {
@@ -317,20 +325,18 @@ filter_basic_match_single_addr6(int direction, struct filter_basic_data *fbd,
 	if (direction == FILTER_BASIC_DIR_BOTH) {
 		if (fbd->is_list) {
 			/* check against IP list */
-			/* TODO: add ipv6 lists */
-/*
 			if (addr) {
-				if (iplist_match4(fbd->data.addr_list, *addr)) {
+				if (iplist_match6(fbd->data.addr_list, addr)) {
 					return 1;
 				}
 			}
 
 			if (addr2) {
-				if (iplist_match4(fbd->data.addr_list, *addr2)) {
+				if (iplist_match6(fbd->data.addr_list, addr2)) {
 					return 1;
 				}
 			}
-*/
+
 			return 0;
 		} else {
 			if (addr) {
@@ -353,12 +359,10 @@ filter_basic_match_single_addr6(int direction, struct filter_basic_data *fbd,
 	}
 
 	if (fbd->is_list) {
-		/* TODO: add IPv6 lists */
-/*
-		if (iplist_match4(fbd->data.addr_list, *addr)) {
+		if (iplist_match6(fbd->data.addr_list, addr)) {
 			return 1;
 		}
-*/
+
 		return 0;
 	} else {
 		if ((*addr & fbd->data.ip.ip.v6.mask)
@@ -650,15 +654,29 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 
 	if (fb->type == FILTER_BASIC_ADDR4) {
 		for (i=0; i<fb->n; i++) {
-			filter_dump_addr(f, 4,
-				(uint8_t *)&(fb->data[i].data.ip.ip.v4.addr),
-				fb->data[i].data.ip.mask_len);
+			struct filter_basic_data *fbd = &fb->data[i];
+
+			if (fbd->is_list) {
+				fprintf(f, " LIST '%s'",
+					iplist_name(fbd->data.addr_list));
+			} else {
+				filter_dump_addr(f, 4,
+					(uint8_t *)&(fbd->data.ip.ip.v4.addr),
+					fbd->data.ip.mask_len);
+			}
 		}
 	} else if (fb->type == FILTER_BASIC_ADDR6) {
 		for (i=0; i<fb->n; i++) {
-			filter_dump_addr(f, 6,
-				(uint8_t *)&(fb->data[i].data.ip.ip.v6.addr),
-				fb->data[i].data.ip.mask_len);
+			struct filter_basic_data *fbd = &fb->data[i];
+
+			if (fbd->is_list) {
+				fprintf(f, " LIST '%s'",
+					iplist_name(fbd->data.addr_list));
+			} else {
+				filter_dump_addr(f, 6,
+					(uint8_t *)&(fbd->data.ip.ip.v6.addr),
+					fbd->data.ip.mask_len);
+			}
 		}
 	} else if (fb->type == FILTER_BASIC_RANGE) {
 		for (i=0; i<fb->n; i++) {
