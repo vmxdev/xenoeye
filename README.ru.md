@@ -295,7 +295,7 @@ insert into "monit_object1_rep1" values ( to_timestamp(1639725910),  6 ,  '4.5.6
 
 Скрипт можно запускать из командной строки (в бесконечном цикле `while true; do ./fill-db.sh ; sleep 10; done`) или из крона.
 
-#### Установка и настройка PostgreSQL на сервере с коллектором
+#### Установка и настройка PostgreSQL на одном сервере с коллектором
 
 ``` sh
 $ sudo apt -y install postgresql
@@ -320,6 +320,21 @@ $ vi scripts/fill-db.sh
 
 ### Визуализация с помощью Grafana
 
+Данные о трафике из таблиц PostgreSQL можно визуализировать с помощью grafana https://grafana.com/
+
+Для этого подключите источник данных PostgreSQL.
+
+![Grafana PostgreSQL data source](docs-img/pg-data-source.png?raw=true "Grafana PostgreSQL data source")
+
+Создайте дашбоард и добавляйте к нему панели с графиками.
+
+
+Простой график с общим трафиком по объекту мониторинга:
+
+![Grafana chart 1](docs-img/grafana-1.png?raw=true "Grafana chart 1")
+
+SQL-запрос для такого графика:
+
 ``` sql
 SELECT
   time AS "time",
@@ -329,6 +344,12 @@ WHERE
   $__timeFilter(time)
 ORDER BY 1
 ```
+
+График с разбивкой по IP-адресам назначения:
+
+![Grafana chart 2](docs-img/grafana-2.png?raw=true "Grafana chart 2")
+
+SQL-запрос для графиков такого типа:
 
 ```
 SELECT
@@ -341,6 +362,18 @@ WHERE
 GROUP BY time, ips
 ORDER BY time, ip
 ```
+
+Еще несколько примеров графиков:
+
+
+![Grafana chart 3](docs-img/grafana-3.png?raw=true "Grafana chart 3")
+
+![Grafana chart 4](docs-img/grafana-4.png?raw=true "Grafana chart 4")
+
+![Grafana chart 5](docs-img/grafana-5.png?raw=true "Grafana chart 5")
+
+![Grafana chart 6](docs-img/grafana-6.png?raw=true "Grafana chart 6")
+
 
 ### Добавление netflow-полей и полей для фильтров
 
@@ -374,5 +407,4 @@ FIELD(ID,      "name",          TYPE,  src_netflow_field,   dst_netflow_field)
 ### Список вещей, которые планируется сделать до релиза
 
   * Netflow v5
-  * IPv6
   * Скользящее среднее
