@@ -106,7 +106,7 @@ Once the collector receives the template netflow packets, it can process the dat
 IPv4 src addr: 1.2.3.4; IPv4 dst addr: 5.6.7.8; Src TOS: 0; Protocol: 6; Src port: 7878; Dst port: 8787; ICMP type: 0; Input SNMP index: 111; Src VLAN: 222; Src mask: 16; Dst mask: 24; Src AS: 12345; Dst AS: 0; IPv4 next hop: 0.0.0.0; TCP flags: 24; Output SNMP index: 333; Bytes: 65522; Packets: 185; Min TTL: 51; Max TTL: 52; Unknown field 152: 0x00 0x00 0x01 0x77 0x0d 0x0c 0x07 0x00 ; Unknown field 153: 0x00 0x00 0x01 0x77 0x0d 0x0c 0xee 0x00 ; Unknown field 136: 0x02 ; Unknown field 61: 0xff ; Unknown field 243: 0x00 0x00 ; Unknown field 245: 0x00 0x00 ; Unknown field 54: 0x00 0x00 0x00 0x00 ; *dev-ip: 9.10.11.12; *dev-id: 555500, *rate: 1 [flow_debug.c, ...]
 ```
 
-The collector shows all the fields that are in the netflow packet. He knows some of the fields, some he does not know and shows as "`Unknown field NNN`: <bytes with data>". If you want to teach the collector to understand the new netflow field, see "Adding Fields" below.
+The collector shows all the fields that are in the netflow packet. He knows some of the fields, some he does not know and shows as "`Unknown field NNN: <bytes with data>`". If you want to teach the collector to understand the new netflow field, see "Adding Fields" below.
 
 Besides the netflow fields, the collector shows "virtual" fields with an asterisk: `*dev-ip: 1.2.3.4; *dev-id: 123456, *rate: 1`.
 
@@ -132,7 +132,7 @@ To set the sample rate, edit the `devices.conf` file. This is a JSON array, each
 ]
 ```
 
-The rate can be set for the IP address of the device and, if necessary, for the source ID (it can be seen in the text dump of the flow, the virtual field `*dev-id`. The collector shows the sample rate in each flow, in the virtual field `*rate`.
+The rate can be set for the IP address of the device and, if necessary, for the source ID (it can be seen in the text dump of the flow, the virtual field `*dev-id`). The collector shows the sample rate in each flow, in the virtual field `*rate`.
 
 Inside the collector, the sample rate is just a factor by which the number of octets and packets are multiplied.
 

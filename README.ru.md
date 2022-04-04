@@ -105,7 +105,7 @@ $ xenoeye -c /path/to/xenoeye.conf
 IPv4 src addr: 1.2.3.4; IPv4 dst addr: 5.6.7.8; Src TOS: 0; Protocol: 6; Src port: 7878; Dst port: 8787; ICMP type: 0; Input SNMP index: 111; Src VLAN: 222; Src mask: 16; Dst mask: 24; Src AS: 12345; Dst AS: 0; IPv4 next hop: 0.0.0.0; TCP flags: 24; Output SNMP index: 333; Bytes: 65522; Packets: 185; Min TTL: 51; Max TTL: 52; Unknown field 152: 0x00 0x00 0x01 0x77 0x0d 0x0c 0x07 0x00 ; Unknown field 153: 0x00 0x00 0x01 0x77 0x0d 0x0c 0xee 0x00 ; Unknown field 136: 0x02 ; Unknown field 61: 0xff ; Unknown field 243: 0x00 0x00 ; Unknown field 245: 0x00 0x00 ; Unknown field 54: 0x00 0x00 0x00 0x00 ; *dev-ip: 9.10.11.12; *dev-id: 555500, *rate: 1 [flow_debug.c, ...]
 ```
 
-Коллектор показывает все поля, которые есть в netflow-пакете. Часть полей он знает, часть не знает и показывает как "`Unknown field NNN`: <байты с данными>". Если хотите научить коллектор понимать новое netflow-поле, см. ниже ("Добавление полей").
+Коллектор показывает все поля, которые есть в netflow-пакете. Часть полей он знает, часть не знает и показывает как "`Unknown field NNN: <байты с данными>`". Если хотите научить коллектор понимать новое netflow-поле, см. ниже ("Добавление полей").
 
 Кроме полей netflow, коллектор показывает "виртуальные" поля со звездочкой: `*dev-ip: 1.2.3.4; *dev-id: 123456, *rate: 1`.
 
