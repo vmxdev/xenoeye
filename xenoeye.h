@@ -49,6 +49,8 @@ struct xe_data
 
 	/* backgriund thread for fixed windows in memory */
 	pthread_t fwm_tid;
+	/* moving averages */
+	pthread_t mavg_tid;
 
 	/* templates */
 	int allow_templates_in_future;

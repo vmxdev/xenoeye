@@ -193,54 +193,6 @@ fwm_config(struct aajson *a, aajson_val *value,
 }
 
 
-static void
-fwm_field_print(struct field *fld, FILE *f, uint8_t *data)
-{
-	uint16_t d16;
-	uint32_t d32;
-	uint64_t d64;
-	char s[INET6_ADDRSTRLEN + 1];
-
-	switch (fld->type) {
-		case FILTER_BASIC_ADDR4:
-			inet_ntop(AF_INET, data, s, INET_ADDRSTRLEN);
-			fprintf(f, " '%s' ", s);
-			break;
-
-		case FILTER_BASIC_ADDR6:
-			inet_ntop(AF_INET6, data, s, INET6_ADDRSTRLEN);
-			fprintf(f, " '%s' ", s);
-			break;
-
-		case FILTER_BASIC_RANGE:
-			switch (fld->size) {
-				case sizeof(uint8_t):
-					fprintf(f, " %u ", data[0]);
-					break;
-				case sizeof(uint16_t):
-					d16 = *((uint16_t *)data);
-					fprintf(f, " %u ", ntohs(d16));
-					break;
-				case sizeof(uint32_t):
-					d32 = *((uint32_t *)data);
-					fprintf(f, " %u ", ntohl(d32));
-					break;
-				case sizeof(uint64_t):
-					d64 = *((uint64_t *)data);
-					fprintf(f, " %lu ", be64toh(d64));
-					break;
-				default:
-					break;
-			}
-			break;
-
-		default:
-			break;
-	}
-}
-
-
-
 static int
 fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	const char *exp_dir)
@@ -356,7 +308,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 					}
 				}
 
-				fwm_field_print(fld, f, data);
+				monit_object_field_print(fld, f, data);
 
 				data += fld->size;
 			}
