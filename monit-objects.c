@@ -34,6 +34,7 @@
 #include "tkvdb.h"
 
 #include "monit-objects.h"
+#include "monit-objects-common.h"
 
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
@@ -218,6 +219,9 @@ monit_objects_init(struct xe_data *data)
 			if (!mavg_fields_init(data->nthreads, mavg)) {
 				return 0;
 			}
+			if (!mavg_limits_init(mavg)) {
+				return 0;
+			}
 			if (mavg->size_secs == 0) {
 				LOG("warning: time for '%s:%s' is not set"
 					", using default %d",
@@ -263,27 +267,6 @@ fail_fwmthread:
 	/* FIXME: free monitoring objects */
 fail_opendir:
 	return ret;
-}
-
-static uint64_t
-monit_object_nf_val(struct nf_flow_info *flow, struct field *fld)
-{
-	uint64_t val;
-	uintptr_t flow_fld = (uintptr_t)flow + fld->nf_offset;
-
-	switch (fld->size) {
-		case sizeof(uint64_t):
-			val = be64toh(*(uint64_t *)flow_fld);
-			break;
-		case sizeof(uint32_t):
-			val = be32toh(*(uint32_t *)flow_fld);
-			break;
-		default:
-			val = 0;
-			break;
-	}
-
-	return val;
 }
 
 void
@@ -332,101 +315,9 @@ monit_object_field_print(struct field *fld, FILE *f, uint8_t *data)
 	}
 }
 
-static int
-monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
-	struct nf_flow_info *flow)
-{
-	size_t i, j, f;
-
-	for (i=0; i<mo->nmavg; i++) {
-		tkvdb_tr *tr;
-		TKVDB_RES rc;
-		tkvdb_datum dtkey, dtval;
-
-		/* FIXME: move it to netflow parser */
-		struct timespec tmsp;
-		uint64_t time_ns;
-
-		struct mo_mavg *mavg = &mo->mavgs[i];
-		struct mavg_data *adata = &mavg->data[thread_id];
-
-		uint8_t *key = adata->key;
-
-		/* don't want high accuracy, using CLOCK_REALTIME_COARSE */
-		if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
-			LOG("clock_gettime() failed: %s", strerror(errno));
-			continue;
-		}
-		time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
-
-		/* make key */
-		for (f=0; f<mavg->fieldset.n_naggr; f++) {
-			struct field *fld = &mavg->fieldset.naggr[f];
-
-			uintptr_t flow_fld = (uintptr_t)flow + fld->nf_offset;
-			memcpy(key, (void *)flow_fld, fld->size);
-			key += fld->size;
-		}
-
-		/* get current database bank */
-		tr = atomic_load_explicit(&adata->tr, memory_order_relaxed);
-
-		dtkey.data = adata->key;
-		dtkey.size = adata->keysize;
-
-		/* search for key */
-		rc = tr->get(tr, &dtkey, &dtval);
-		if (rc == TKVDB_OK) {
-			/* update existing values */
-			struct mavg_val *vals = dtval.data;
-
-			for (j=0; j<mavg->fieldset.n_aggr; j++) {
-				struct field *fld = &mavg->fieldset.aggr[j];
-				__float128 val = monit_object_nf_val(flow, fld)
-					* fld->scale * flow->sampling_rate;
-
-				__float128 tmdiff = time_ns
-					- adata->val[j].time_prev;
-				__float128 window = mavg->size_secs * 1e9;
-
-				 vals[j].val = vals[j].val
-					- tmdiff / window * vals[j].val + val;
-				adata->val[j].time_prev = time_ns;
-			}
-
-		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
-			/* try to add new key-value pair */
-			for (j=0; j<mavg->fieldset.n_aggr; j++) {
-				struct field *fld = &mavg->fieldset.aggr[j];
-				__float128 val = monit_object_nf_val(flow, fld)
-					* fld->scale * flow->sampling_rate;
-
-				adata->val[j].val = val;
-				adata->val[j].time_prev = time_ns;
-			}
-
-			dtval.data = adata->val;
-			dtval.size = adata->valsize
-				* sizeof(struct mavg_val);
-
-			rc = tr->put(tr, &dtkey, &dtval);
-			if (rc == TKVDB_OK) {
-			} else if (rc == TKVDB_ENOMEM) {
-				LOG("Can't append key, not enough memory");
-			} else {
-				LOG("Can't append key, error code %d", rc);
-			}
-		} else {
-			LOG("Can't find key, error code %d", rc);
-		}
-	}
-
-	return 1;
-}
-
 int
 monit_object_process_nf(struct monit_object *mo, size_t thread_id,
-	struct nf_flow_info *flow)
+	uint64_t time_ns, struct nf_flow_info *flow)
 {
 	size_t i, j, f;
 
@@ -494,7 +385,7 @@ monit_object_process_nf(struct monit_object *mo, size_t thread_id,
 	}
 
 	/* moving average */
-	if (!monit_object_mavg_process_nf(mo, thread_id, flow)) {
+	if (!monit_object_mavg_process_nf(mo, thread_id, time_ns, flow)) {
 		return 0;
 	}
 

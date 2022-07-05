@@ -8,8 +8,11 @@
 #include "tkvdb.h"
 
 #define FWM_DEFAULT_TIMEOUT 30
+
 #define MAVG_DEFAULT_SIZE 5
-#define MAVG_MERGE_DEFAULT_TIMEOUT 10
+#define MAVG_MERGE_DEFAULT_TIMEOUT 2
+#define MAVG_NBANKS 3
+#define MAVG_DEFAULT_TR_SIZE (1024*1024*256)
 
 struct xe_data;
 struct nf_flow_info;
@@ -62,21 +65,29 @@ struct mo_fwm
 /* moving average */
 struct mavg_val
 {
-	__float128 val;
-	__float128 limit_min, limit_max;
-	uint64_t time_prev;
+	_Atomic __float128 val;
+	_Atomic uint64_t time_prev;
+	__float128 limits_max[1]; /* growing array (noverflow items) */
 };
 
 struct mavg_data
 {
-	tkvdb_tr *trs[2];
-
-	tkvdb_tr *_Atomic tr;
+	tkvdb_tr *trs[MAVG_NBANKS];
+	_Atomic size_t tr_idx;
 
 	uint8_t *key;
-	struct mavg_val *val;
+	uint8_t *val; /* array of struct mavg_val */
 
-	size_t keysize, valsize;
+	size_t keysize, valsize, val_itemsize;
+	int need_more_mem;
+};
+
+struct mavg_limit
+{
+	char name[PATH_MAX];
+	char file[PATH_MAX];
+	tkvdb_tr *db;
+	__float128 *def;
 };
 
 struct mo_mavg
@@ -86,8 +97,13 @@ struct mo_mavg
 	struct mo_fieldset fieldset;
 	int merge_secs;
 
-	time_t last_merge;
+	time_t last_merge, last_bankswap;
 
+	/* limits */
+	struct mavg_limit *overflow;
+	size_t noverflow;
+
+	/* each thread has it's own data */
 	struct mavg_data *data;
 };
 
@@ -107,12 +123,13 @@ struct monit_object
 	struct mo_mavg *mavgs;
 };
 
+
 int monit_objects_init(struct xe_data *data);
 int monit_objects_free(struct xe_data *data);
 
 int monit_object_match(struct monit_object *mo, struct nf_flow_info *fi);
 int monit_object_process_nf(struct monit_object *mo, size_t thread_id,
-	struct nf_flow_info *flow);
+	uint64_t time_ns, struct nf_flow_info *flow);
 
 void monit_object_field_print(struct field *fld, FILE *f, uint8_t *data);
 
@@ -124,6 +141,9 @@ void *fwm_bg_thread(void *);
 /* moving averages */
 int mavg_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
 int mavg_fields_init(size_t nthreads, struct mo_mavg *window);
+int mavg_limits_init(struct mo_mavg *window);
+int monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
+	uint64_t time_ns, struct nf_flow_info *flow);
 
 void *mavg_bg_thread(void *);
 

@@ -268,7 +268,8 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 					debug_flow_str);
 			}
 
-			monit_object_process_nf(mo, thread_id, &flow);
+			monit_object_process_nf(mo, thread_id, npi->time_ns,
+				&flow);
 		}
 	}
 	(*ptr) += length;
@@ -525,7 +526,8 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 					debug_flow_str);
 			}
 
-			monit_object_process_nf(mo, thread_id, &flow);
+			monit_object_process_nf(mo, thread_id, npi->time_ns,
+				&flow);
 		}
 
 		flow_num++;
@@ -600,7 +602,15 @@ netflow_process(struct xe_data *data, size_t thread_id,
 {
 	uint16_t *version_ptr;
 	int version;
+	struct timespec tmsp;
 	int ret = 0;
+
+	/* get time for moving averages */
+	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
+		LOG("clock_gettime() failed: %s", strerror(errno));
+		return 0;
+	}
+	npi->time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
 
 	version_ptr = (uint16_t *)npi->rawpacket;
 	version = ntohs(*version_ptr);

@@ -125,6 +125,7 @@ struct nf_packet_info
 
 	uint32_t source_id;
 	uint32_t epoch;
+	uint64_t time_ns; /* nanoseconds */
 	uint8_t rawpacket[MAX_NF_PACKET_SIZE];
 
 	int sampling_rate;

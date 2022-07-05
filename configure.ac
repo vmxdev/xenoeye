@@ -24,6 +24,10 @@ AC_SEARCH_LIBS([pcap_open_live], [pcap], [], [
   AC_MSG_ERROR([unable to find the pcap_open_live() function])
 ])
 
+AC_SEARCH_LIBS([__atomic_load_16], [atomic], [], [
+  AC_MSG_ERROR([unable to find the __atomic_load_16() function])
+])
+
 # pthreads
 
 AX_PTHREAD([
