@@ -308,7 +308,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 					}
 				}
 
-				monit_object_field_print(fld, f, data);
+				monit_object_field_print(fld, f, data, 1);
 
 				data += fld->size;
 			}

@@ -71,6 +71,9 @@ struct xe_data
 	/* path to IP lists */
 	char iplists_dir[PATH_MAX];
 
+	/* path to notification files */
+	char notif_dir[PATH_MAX];
+
 	/* notify threads about stop */
 	atomic_int stop;
 };

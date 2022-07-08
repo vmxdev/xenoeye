@@ -31,3 +31,4 @@ install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/mo"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/exp"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/expfailed"
+	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/notifications"

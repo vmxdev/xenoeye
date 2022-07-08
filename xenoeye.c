@@ -41,6 +41,7 @@
 #define DEFAULT_TEMPLATES_FILE "/var/lib/xenoeye/templates.tkv"
 #define DEFAULT_EXPORT_DIR "/var/lib/xenoeye/exp/"
 #define DEFAULT_IPLISTS_DIR "/var/lib/xenoeye/iplists/"
+#define DEFAULT_NOTIF_DIR "/var/lib/xenoeye/notifications/"
 
 static void
 print_usage(const char *progname)
@@ -115,6 +116,10 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 
 	if (STRCMP(a, 1, "iplists-dir") == 0) {
 		strcpy(data->iplists_dir, value->str);
+	}
+
+	if (STRCMP(a, 1, "notifications-dir") == 0) {
+		strcpy(data->notif_dir, value->str);
 	}
 
 	if (a->path_stack_pos < 2) {
@@ -450,6 +455,13 @@ main(int argc, char *argv[])
 	if (!iplists_load(data.iplists_dir)) {
 		LOG("Can't load IP lists from '%s': %s", data.iplists_dir,
 			strerror(errno));
+	}
+
+	/* notofications directory */
+	if (!*data.notif_dir) {
+		strcpy(data.notif_dir, DEFAULT_NOTIF_DIR);
+		LOG("notifications dir is not set, using default '%s'",
+			DEFAULT_NOTIF_DIR);
 	}
 
 	/* templates database */
