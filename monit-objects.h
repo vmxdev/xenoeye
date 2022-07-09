@@ -70,7 +70,7 @@ struct mavg_val
 {
 	_Atomic __float128 val;
 	_Atomic uint64_t time_prev;
-	__float128 limits_max[1]; /* growing array (noverflow items) */
+	__float128 limits_max[1]; /* growing array (noverlimit items) */
 };
 
 struct mavg_data
@@ -108,8 +108,8 @@ struct mo_mavg
 	time_t last_merge, last_bankswap;
 
 	/* limits */
-	struct mavg_limit *overflow;
-	size_t noverflow;
+	struct mavg_limit *overlimit;
+	size_t noverlimit;
 	/* global database of overlimited items */
 	tkvdb_tr *overlimited_db;
 

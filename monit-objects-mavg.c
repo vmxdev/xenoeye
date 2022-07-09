@@ -54,9 +54,9 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 		keysize += window->fieldset.naggr[i].size;
 	}
 
-	if (window->noverflow > 1) {
+	if (window->noverlimit > 1) {
 		val_itemsize = sizeof(struct mavg_val)
-			+ sizeof(__float128) * (window->noverflow - 1);
+			+ sizeof(__float128) * (window->noverlimit - 1);
 	} else {
 		val_itemsize = sizeof(struct mavg_val);
 	}
@@ -179,7 +179,7 @@ config_field_append(char *s, struct mo_mavg *window)
 
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
-/* parse config section 'overflow' */
+/* parse config section 'overlimit' */
 static int
 mavg_config_limit(struct aajson *a, aajson_val *value,
 	struct mo_mavg *window, size_t n_aggr)
@@ -188,16 +188,16 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 	struct mavg_limit *l;
 
 	if (a->path_stack[4].type != AAJSON_PATH_ITEM_ARRAY) {
-		LOG("'overflow' must be array");
+		LOG("'overlimit' must be array");
 		return 0;
 	}
 
 	i = a->path_stack[4].data.array_idx;
-	if (i >= window->noverflow) {
+	if (i >= window->noverlimit) {
 		struct mavg_limit *tmp;
 
-		/* append new overflow item */
-		tmp = realloc(window->overflow,
+		/* append new overlimit item */
+		tmp = realloc(window->overlimit,
 			(i + 1) * sizeof(struct mavg_limit));
 		if (!tmp) {
 			LOG("realloc() failed");
@@ -212,11 +212,11 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 			return 0;
 		}
 
-		window->overflow = tmp;
-		window->noverflow = i + 1;
+		window->overlimit = tmp;
+		window->noverlimit = i + 1;
 	}
 
-	l = &window->overflow[i];
+	l = &window->overlimit[i];
 
 	if (STRCMP(a, 5, "name") == 0) {
 		strcpy(l->name, value->str);
@@ -283,7 +283,7 @@ mavg_config(struct aajson *a, aajson_val *value,
 		}
 
 		window->merge_secs = tmp_time;
-	} else if (STRCMP(a, 3, "overflow") == 0) {
+	} else if (STRCMP(a, 3, "overlimit") == 0) {
 		if (!mavg_config_limit(a, value, window,
 			window->fieldset.n_aggr)) {
 
@@ -435,8 +435,8 @@ mavg_limits_init(struct mo_mavg *window)
 	params = tkvdb_params_create();
 	tkvdb_param_set(params, TKVDB_PARAM_ALIGNVAL, 16);
 
-	for (i=0; i<window->noverflow; i++) {
-		struct mavg_limit *l = &window->overflow[i];
+	for (i=0; i<window->noverlimit; i++) {
+		struct mavg_limit *l = &window->overlimit[i];
 
 		if (l->name[0] == '\0') {
 			sprintf(l->name, "%lu", i);
@@ -572,9 +572,9 @@ mavg_limits_check(struct mo_mavg *mavg, uint8_t *vptr, struct mavg_data *data)
 		pval = MAVG_VAL(vptr, i, data->valsize);
 		val = pval->val / (__float128)mavg->size_secs;
 
-		for (j=0; j<mavg->noverflow; j++) {
+		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
-				mavg_overlimit(mavg, data, &mavg->overflow[j],
+				mavg_overlimit(mavg, data, &mavg->overlimit[j],
 					val, pval->limits_max[j]);
 			}
 		}
@@ -644,10 +644,10 @@ mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
 		pval = MAVG_VAL(data->val, i, data->valsize);
 
 		/* setup limits */
-		for (j=0; j<mavg->noverflow; j++) {
+		for (j=0; j<mavg->noverlimit; j++) {
 			TKVDB_RES rc;
 			tkvdb_datum dtkey, dtval;
-			tkvdb_tr *tr = mavg->overflow[j].db;
+			tkvdb_tr *tr = mavg->overlimit[j].db;
 
 			dtkey.data = data->key;
 			dtkey.size = data->keysize;
@@ -659,7 +659,7 @@ mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
 				pval->limits_max[j] = *limptr;
 			} else {
 				/* not found, using default */
-				pval->limits_max[j] = mavg->overflow[j].def[i];
+				pval->limits_max[j] = mavg->overlimit[j].def[i];
 			}
 		}
 
