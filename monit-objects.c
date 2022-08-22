@@ -218,7 +218,7 @@ monit_objects_init(struct xe_data *data)
 			struct mo_mavg *mavg = &mo->mavgs[i];
 
 			/* make prefix for notification files */
-			sprintf(mavg->notif_pfx, "%s/%s-%s-",
+			sprintf(mavg->notif_pfx, "%s/%s-%s",
 				data->notif_dir, mo->name, mavg->name);
 
 			if (!mavg_fields_init(data->nthreads, mavg)) {

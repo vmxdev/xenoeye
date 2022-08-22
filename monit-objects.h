@@ -12,7 +12,6 @@
 #define MAVG_DEFAULT_SIZE 5
 #define MAVG_MERGE_DEFAULT_TIMEOUT 2
 
-#define MAVG_NBANKS 3
 #define MAVG_DEFAULT_TR_SIZE (1024*1024*256)
 
 #define MAVG_DEFAULT_LIMDB_SIZE (1024*1024)
@@ -75,17 +74,12 @@ struct mavg_val
 
 struct mavg_data
 {
-	tkvdb_tr *trs[MAVG_NBANKS];
-	_Atomic size_t tr_idx;
-
-	/* per-thread database of overlimited items */
-	tkvdb_tr *overlimited_db;
+	tkvdb_tr *tr;
 
 	uint8_t *key;
 	uint8_t *val; /* array of struct mavg_val */
 
 	size_t keysize, valsize, val_itemsize;
-	int need_more_mem;
 };
 
 struct mavg_limit
@@ -93,6 +87,8 @@ struct mavg_limit
 	char name[PATH_MAX];
 	char file[PATH_MAX];
 	tkvdb_tr *db;
+
+	/* default */
 	__float128 *def;
 };
 
@@ -101,7 +97,7 @@ struct mo_mavg
 	char notif_pfx[PATH_MAX]; /* prefix for notification files */
 
 	char name[TOKEN_MAX_SIZE];
-	uint32_t size_secs;
+	unsigned int size_secs;
 	struct mo_fieldset fieldset;
 	int merge_secs;
 
@@ -110,10 +106,13 @@ struct mo_mavg
 	/* limits */
 	struct mavg_limit *overlimit;
 	size_t noverlimit;
-	/* global database of overlimited items */
+
+	/* database of overlimited items */
 	tkvdb_tr *overlimited_db;
+	pthread_mutex_t overlimited_lock;
 
 	/* each thread has it's own data */
+	size_t nthreads;
 	struct mavg_data *data;
 };
 

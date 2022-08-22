@@ -34,7 +34,7 @@
 int
 mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 {
-	size_t i, j, keysize, valsize, val_itemsize;
+	size_t i, keysize, valsize, val_itemsize;
 	tkvdb_params *params, *limdb_params;
 
 	params = tkvdb_params_create();
@@ -63,7 +63,7 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 
 	valsize = window->fieldset.n_aggr * val_itemsize;
 
-	/* init "global" database with limits */
+	/* init database with limits */
 	window->overlimited_db = tkvdb_tr_create(NULL, limdb_params);
 	if (!window->overlimited_db) {
 		LOG("Can't create database for overlimited items");
@@ -71,6 +71,9 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 	}
 
 	window->overlimited_db->begin(window->overlimited_db);
+
+	/* init mutex for limits database */
+	pthread_mutex_init(&window->overlimited_lock, NULL);
 
 
 	window->data = calloc(nthreads, sizeof(struct mavg_data));
@@ -98,27 +101,15 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 		}
 
 		/* init database */
-		for (j=0; j<MAVG_NBANKS; j++) {
-			data->trs[j] = tkvdb_tr_create(NULL, params);
-			if (!data->trs[j]) {
-				LOG("tkvdb_tr_create() failed");
-				return 0;
-			}
-
-			data->trs[j]->begin(data->trs[j]);
-		}
-
-		atomic_init(&data->tr_idx, 0);
-
-		/* init database for overlimited items */
-		data->overlimited_db = tkvdb_tr_create(NULL, limdb_params);
-		if (!data->overlimited_db) {
-			LOG("Can't create database for overlimited items");
+		data->tr = tkvdb_tr_create(NULL, params);
+		if (!data->tr) {
+			LOG("tkvdb_tr_create() failed");
 			return 0;
 		}
 
-		data->overlimited_db->begin(data->overlimited_db);
+		data->tr->begin(data->tr);
 	}
+	window->nthreads = nthreads;
 
 	tkvdb_params_free(limdb_params);
 	tkvdb_params_free(params);
@@ -480,21 +471,28 @@ mavg_overlimit(struct mo_mavg *mavg, struct mavg_data *data,
 	dtk.data = data->key;
 	dtk.size = data->keysize;
 
+	pthread_mutex_lock(&mavg->overlimited_lock);
+	rc = mavg->overlimited_db->get(mavg->overlimited_db, &dtk, &dtv);
+	pthread_mutex_unlock(&mavg->overlimited_lock);
 
-	rc = data->overlimited_db->get(data->overlimited_db, &dtk, &dtv);
 	if (rc == TKVDB_OK) {
 		valptr = dtv.data;
 		if (*valptr) {
 			/* already in database */
 			return;
 		} else {
+			/* FIXME: store time? */
 			*valptr = 1;
 		}
 	} else {
 		dtv.data = &val;
 		dtv.size = sizeof(int);
-		rc = data->overlimited_db->put(data->overlimited_db, &dtk,
+
+		pthread_mutex_lock(&mavg->overlimited_lock);
+		rc = mavg->overlimited_db->put(mavg->overlimited_db, &dtk,
 			&dtv);
+		pthread_mutex_unlock(&mavg->overlimited_lock);
+
 		if (rc != TKVDB_OK) {
 			LOG("Can't append item to db with overlimited records");
 			return;
@@ -561,7 +559,8 @@ mavg_overlimit(struct mo_mavg *mavg, struct mavg_data *data,
 }
 
 static void
-mavg_limits_check(struct mo_mavg *mavg, uint8_t *vptr, struct mavg_data *data)
+mavg_limits_check(struct mo_mavg *mavg, struct mavg_data *data,
+	uint8_t *vptr, _Atomic __float128 *vals)
 {
 	size_t i, j;
 
@@ -570,7 +569,7 @@ mavg_limits_check(struct mo_mavg *mavg, uint8_t *vptr, struct mavg_data *data)
 		struct mavg_val *pval;
 
 		pval = MAVG_VAL(vptr, i, data->valsize);
-		val = pval->val / (__float128)mavg->size_secs;
+		val = vals[i] / (__float128)mavg->size_secs;
 
 		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
@@ -580,6 +579,30 @@ mavg_limits_check(struct mo_mavg *mavg, uint8_t *vptr, struct mavg_data *data)
 		}
 	}
 }
+
+static void
+mavg_recalc(_Atomic __float128 *oldval_p, _Atomic uint64_t *old_time_ns_p,
+	__float128 val, uint64_t time_ns, __float128 wndsize,
+	_Atomic __float128 *res)
+{
+	__float128 oldval, tmdiff;
+	uint64_t old_time_ns;
+
+	oldval = atomic_load_explicit(oldval_p, memory_order_relaxed);
+	old_time_ns = atomic_load_explicit(old_time_ns_p, memory_order_relaxed);
+
+	tmdiff = time_ns - old_time_ns;
+
+	if (tmdiff < wndsize) {
+		/* calculate and store new value */
+		atomic_store_explicit(res,
+			oldval - tmdiff / wndsize * oldval + val,
+			memory_order_relaxed);
+	} else {
+		atomic_store_explicit(res, val, memory_order_relaxed);
+	}
+}
+
 
 static void
 mavg_val_update(struct mo_mavg *mavg, struct nf_flow_info *flow,
@@ -627,7 +650,7 @@ mavg_val_update(struct mo_mavg *mavg, struct nf_flow_info *flow,
 
 static void
 mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
-	uint64_t time_ns, struct mavg_data *data)
+	uint64_t time_ns, struct mavg_data *data, _Atomic __float128 *vals)
 {
 	size_t i, j;
 
@@ -667,6 +690,8 @@ mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
 
 		atomic_store_explicit(&pval->time_prev, time_ns,
 			memory_order_relaxed);
+
+		atomic_store_explicit(&vals[i], val, memory_order_relaxed);
 	}
 }
 
@@ -675,18 +700,21 @@ int
 monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 	uint64_t time_ns, struct nf_flow_info *flow)
 {
-	size_t i, f;
+	size_t i, f, t;
 
 	for (i=0; i<mo->nmavg; i++) {
-		tkvdb_tr *tr, *tr_prev;
-		size_t tr_idx, tr_prev_idx;
+		tkvdb_tr *tr;
 		TKVDB_RES rc;
-		tkvdb_datum dtkey, dtval;
+		tkvdb_datum dtkey, dtval, nval;
+		__float128 wndsize;
 
 		struct mo_mavg *mavg = &mo->mavgs[i];
 		struct mavg_data *data = &mavg->data[thread_id];
 
 		uint8_t *key = data->key;
+
+		/* window size in nanoseconds */
+		wndsize = mavg->size_secs * 1e9;
 
 		/* make key */
 		for (f=0; f<mavg->fieldset.n_naggr; f++) {
@@ -697,16 +725,7 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 			key += fld->size;
 		}
 
-		/* get current database bank */
-		tr_idx = atomic_load_explicit(&data->tr_idx,
-			memory_order_relaxed);
-		tr_prev_idx = tr_idx - 1;
-
-		tr_idx %= MAVG_NBANKS;
-		tr_prev_idx %= MAVG_NBANKS;
-
-		tr = data->trs[tr_idx];
-		tr_prev = data->trs[tr_prev_idx];
+		tr = data->tr;
 
 		dtkey.data = data->key;
 		dtkey.size = data->keysize;
@@ -714,25 +733,54 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 		/* search for key */
 		rc = tr->get(tr, &dtkey, &dtval);
 		if (rc == TKVDB_OK) {
+			/* reserve space for merged values */
+			_Atomic __float128 *mvals = alloca(mavg->fieldset.n_aggr
+				* sizeof(__float128));
+
 			/* update existing values */
-			mavg_val_update(mavg, flow, dtval.data, time_ns, data);
-			mavg_limits_check(mavg, dtval.data, data);
-		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
-			/* search in "prev" bank */
-			rc = tr->get(tr_prev, &dtkey, &dtval);
-			if (rc == TKVDB_OK) {
-				/* found */
-				/* copy old values */
-				memcpy(data->val, dtval.data, data->valsize);
-				/* update */
-				mavg_val_update(mavg, flow, data->val,
-					time_ns, data);
-				mavg_limits_check(mavg, data->val, data);
-			} else {
-				/* try to add new key-value pair */
-				mavg_val_init(mavg, flow, time_ns, data);
-				mavg_limits_check(mavg, data->val, data);
+			for (i=0; i<mavg->fieldset.n_aggr; i++) {
+				struct field *fld = &mavg->fieldset.aggr[i];
+				__float128 val;
+				struct mavg_val *pval;
+
+				val = monit_object_nf_val(flow, fld)
+					* fld->scale * flow->sampling_rate;
+
+				pval = MAVG_VAL(((uint8_t *)dtval.data), i, data->valsize);
+				mavg_recalc(&pval->val, &pval->time_prev, val, time_ns, wndsize, &pval->val);
+				mvals[i] = pval->val;
 			}
+
+			/* values from another threads */
+			for (t=0; t<mavg->nthreads; t++) {
+				struct mavg_data *ndata;
+
+				if (t == thread_id) {
+					/* skip self thread */
+					continue;
+				}
+
+				ndata = &mavg->data[t];
+				rc = ndata->tr->get(ndata->tr, &dtkey, &nval);
+				if (rc == TKVDB_OK) {
+					for (i=0; i<mavg->fieldset.n_aggr; i++) {
+						struct mavg_val *pval;
+						pval = MAVG_VAL(((uint8_t *)nval.data), i, data->valsize);
+
+						mavg_recalc(&pval->val, &pval->time_prev, mvals[i], time_ns, wndsize, &mvals[i]);
+					}
+				}
+			}
+
+			mavg_limits_check(mavg, data, dtval.data, mvals);
+		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
+			_Atomic __float128 *mvals = alloca(mavg->fieldset.n_aggr
+				* sizeof(__float128));
+
+			/* try to add new key-value pair */
+			mavg_val_init(mavg, flow, time_ns, data, mvals);
+
+			mavg_limits_check(mavg, data, data->val, mvals);
 
 			dtval.data = data->val;
 			dtval.size = data->valsize;
@@ -740,11 +788,7 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 			rc = tr->put(tr, &dtkey, &dtval);
 			if (rc == TKVDB_OK) {
 			} else if (rc == TKVDB_ENOMEM) {
-				if (!data->need_more_mem) {
-					LOG("Can't insert data, "\
-						"not enough memory");
-					data->need_more_mem = 1;
-				}
+				/* FIXME: out of memory */
 			} else {
 				LOG("Can't insert data, error code %d", rc);
 			}
@@ -757,8 +801,7 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 }
 
 static int
-mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, const char *mo_name,
-	const char *exp_dir)
+mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize)
 {
 	size_t i;
 	int ret = 0;
@@ -779,7 +822,7 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, const char *mo_name,
 	printf("dump:\n");
 	do {
 		uint8_t *data = c->key(c);
-		struct mavg_val *val = c->val(c);
+		uint8_t *pval = c->val(c);
 
 		for (i=0; i<mavg->fieldset.n_naggr; i++) {
 			struct field *fld = &mavg->fieldset.naggr[i];
@@ -790,8 +833,21 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, const char *mo_name,
 
 		printf(" :: ");
 		for (i=0; i<mavg->fieldset.n_aggr; i++) {
-			printf("%g ", (double)val[i].val);
+			size_t j;
+			struct mavg_val *val;
+
+			val = MAVG_VAL(pval, i, val_itemsize);
+			printf("%g ", (double)val->val);
+
+			/* limits */
+			printf("(");
+			for (j=0; j<mavg->noverlimit; j++) {
+				/* */
+				printf("%g ", (double)val->limits_max[j]);
+			}
+			printf(")");
 		}
+
 		printf("\n");
 	} while (c->next(c) == TKVDB_OK);
 
@@ -804,10 +860,9 @@ cursor_fail:
 	return ret;
 }
 
-
 static int
 mavg_merge_tr(struct mo_mavg *mavg, size_t val_itemsize, tkvdb_tr *tr_merge,
-	tkvdb_tr *tr)
+	tkvdb_tr *tr, uint64_t time_ns)
 {
 	tkvdb_cursor *c;
 
@@ -835,7 +890,6 @@ mavg_merge_tr(struct mo_mavg *mavg, size_t val_itemsize, tkvdb_tr *tr_merge,
 			uint8_t *pvals = dtv.data;
 			uint8_t *pvals_add = c->val(c);
 
-
 			/* update data */
 			for (i=0; i<mavg->fieldset.n_aggr; i++) {
 				struct mavg_val *val = MAVG_VAL(pvals, i, val_itemsize);
@@ -843,7 +897,7 @@ mavg_merge_tr(struct mo_mavg *mavg, size_t val_itemsize, tkvdb_tr *tr_merge,
 
 				val->val +=
 					atomic_load_explicit(&val_add->val,
-					memory_order_relaxed);
+						memory_order_relaxed);
 			}
 		} else {
 			/* not found */
@@ -861,11 +915,6 @@ mavg_merge_tr(struct mo_mavg *mavg, size_t val_itemsize, tkvdb_tr *tr_merge,
 empty:
 	c->free(c);
 
-	/* reset transaction */
-/*
-	tr->rollback(tr);
-	tr->begin(tr);
-*/
 	return 1;
 }
 
@@ -876,6 +925,15 @@ mavg_merge(struct mo_mavg *mavg, size_t nthreads, const char *mo_name,
 	size_t i;
 	tkvdb_tr *tr_merge;
 	tkvdb_params *params;
+	struct timespec tmsp;
+	uint64_t time_ns;
+
+	/* get current timestamp */
+	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
+		LOG("clock_gettime() failed: %s", strerror(errno));
+		return 0;
+	}
+	time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
 
 	params = tkvdb_params_create();
 	tkvdb_param_set(params, TKVDB_PARAM_ALIGNVAL, 16);
@@ -894,16 +952,18 @@ mavg_merge(struct mo_mavg *mavg, size_t nthreads, const char *mo_name,
 	for (i=0; i<nthreads; i++) {
 		tkvdb_tr *tr;
 		size_t tr_idx;
-
+/*
 		tr_idx = atomic_load_explicit(&mavg->data[i].tr_idx,
 			memory_order_relaxed);
 
 		tr = mavg->data[i].trs[tr_idx];
 
-		mavg_merge_tr(mavg, mavg->data[i].val_itemsize, tr_merge, tr);
+		mavg_merge_tr(mavg, mavg->data[i].val_itemsize, tr_merge, tr,
+			time_ns);
+*/
 	}
 
-	mavg_dump_tr(mavg, tr_merge, mo_name, exp_dir);
+	mavg_dump_tr(mavg, tr_merge, mavg->data[0].val_itemsize);
 
 	tr_merge->free(tr_merge);
 
