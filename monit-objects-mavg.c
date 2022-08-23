@@ -44,7 +44,7 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 
 	/* limits database */
 	limdb_params = tkvdb_params_create();
-	tkvdb_param_set(limdb_params, TKVDB_PARAM_ALIGNVAL, sizeof(int));
+	tkvdb_param_set(limdb_params, TKVDB_PARAM_ALIGNVAL, sizeof(uint64_t));
 	tkvdb_param_set(limdb_params, TKVDB_PARAM_TR_DYNALLOC, 0);
 	tkvdb_param_set(limdb_params, TKVDB_PARAM_TR_LIMIT,
 		MAVG_DEFAULT_LIMDB_SIZE);
@@ -266,14 +266,14 @@ mavg_config(struct aajson *a, aajson_val *value,
 		}
 
 		window->size_secs = tmp_time;
-	} else if (STRCMP(a, 3, "merge") == 0) {
+	} else if (STRCMP(a, 3, "dump") == 0) {
 		int tmp_time = atoi(value->str);
 		if (tmp_time <= 0) {
-			LOG("Incorrect merge time '%s'", value->str);
+			LOG("Incorrect dump time '%s'", value->str);
 			return 0;
 		}
 
-		window->merge_secs = tmp_time;
+		window->dump_secs = tmp_time;
 	} else if (STRCMP(a, 3, "overlimit") == 0) {
 		if (!mavg_config_limit(a, value, window,
 			window->fieldset.n_aggr)) {
@@ -454,19 +454,18 @@ mavg_limits_init(struct mo_mavg *window)
 
 static void
 mavg_overlimit(struct mo_mavg *mavg, struct mavg_data *data,
-	struct mavg_limit *l, __float128 counterval, __float128 lim)
+	struct mavg_limit *l, __float128 counterval, __float128 lim,
+	uint64_t time_ns)
 {
 	TKVDB_RES rc;
 	tkvdb_datum dtk, dtv;
-	int val = 1, *valptr;
+	uint64_t val, *valptr;
 	size_t i;
 	uint8_t *flddata;
 
 	FILE *fname, *fcont, *f;
 	size_t fsize, csize;
 	char *fptr, *cptr;
-
-	struct stat st;
 
 	dtk.data = data->key;
 	dtk.size = data->keysize;
@@ -479,14 +478,18 @@ mavg_overlimit(struct mo_mavg *mavg, struct mavg_data *data,
 		valptr = dtv.data;
 		if (*valptr) {
 			/* already in database */
-			return;
+			/* update file no more than once per 3 seconds */
+			/* FIXME: move timeout to config? */
+			if ((time_ns - *valptr) < 3e9) {
+				return;
+			}
 		} else {
-			/* FIXME: store time? */
-			*valptr = 1;
+			*valptr = time_ns;
 		}
 	} else {
+		val = time_ns;
 		dtv.data = &val;
-		dtv.size = sizeof(int);
+		dtv.size = sizeof(val);
 
 		pthread_mutex_lock(&mavg->overlimited_lock);
 		rc = mavg->overlimited_db->put(mavg->overlimited_db, &dtk,
@@ -519,11 +522,6 @@ mavg_overlimit(struct mo_mavg *mavg, struct mavg_data *data,
 		flddata += fld->size;
 	}
 	fclose(fname);
-
-	/* check if file already exists */
-	if (stat(fptr, &st) == 0) {
-		return;
-	}
 
 	/* build file content */
 	fcont = open_memstream(&cptr, &csize);
@@ -560,7 +558,7 @@ mavg_overlimit(struct mo_mavg *mavg, struct mavg_data *data,
 
 static void
 mavg_limits_check(struct mo_mavg *mavg, struct mavg_data *data,
-	uint8_t *vptr, _Atomic __float128 *vals)
+	uint8_t *vptr, __float128 *vals, uint64_t time_ns)
 {
 	size_t i, j;
 
@@ -574,7 +572,7 @@ mavg_limits_check(struct mo_mavg *mavg, struct mavg_data *data,
 		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
 				mavg_overlimit(mavg, data, &mavg->overlimit[j],
-					val, pval->limits_max[j]);
+					val, pval->limits_max[j], time_ns);
 			}
 		}
 	}
@@ -605,52 +603,8 @@ mavg_recalc(_Atomic __float128 *oldval_p, _Atomic uint64_t *old_time_ns_p,
 
 
 static void
-mavg_val_update(struct mo_mavg *mavg, struct nf_flow_info *flow,
-	uint8_t *valptr, uint64_t time_ns, struct mavg_data *data)
-{
-	size_t i;
-
-	for (i=0; i<mavg->fieldset.n_aggr; i++) {
-		struct field *fld = &mavg->fieldset.aggr[i];
-		__float128 val, oldval, tmdiff, window;
-		uint64_t time_prev_ns;
-		struct mavg_val *pval;
-
-		val = monit_object_nf_val(flow, fld)
-			* fld->scale * flow->sampling_rate;
-
-		pval = MAVG_VAL(valptr, i, data->valsize);
-
-		/* load previous values */
-		oldval = atomic_load_explicit(&pval->val,
-			memory_order_relaxed);
-
-		time_prev_ns = atomic_load_explicit(&pval->time_prev,
-			memory_order_relaxed);
-
-		tmdiff = time_ns - time_prev_ns;
-		window = mavg->size_secs * 1e9;
-
-		if (tmdiff < window) {
-			/* calculate and store new value */
-			atomic_store_explicit(&pval->val,
-				oldval - tmdiff / window * oldval + val,
-				memory_order_relaxed);
-		} else {
-			atomic_store_explicit(&pval->val,
-				val,
-				memory_order_relaxed);
-		}
-
-		atomic_store_explicit(&pval->time_prev, time_ns,
-			memory_order_relaxed);
-
-	}
-}
-
-static void
 mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
-	uint64_t time_ns, struct mavg_data *data, _Atomic __float128 *vals)
+	uint64_t time_ns, struct mavg_data *data, __float128 *vals)
 {
 	size_t i, j;
 
@@ -713,6 +667,10 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 
 		uint8_t *key = data->key;
 
+		/* reserve space for merged values */
+		__float128 *mvals = alloca(mavg->fieldset.n_aggr
+			* sizeof(__float128));
+
 		/* window size in nanoseconds */
 		wndsize = mavg->size_secs * 1e9;
 
@@ -733,10 +691,6 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 		/* search for key */
 		rc = tr->get(tr, &dtkey, &dtval);
 		if (rc == TKVDB_OK) {
-			/* reserve space for merged values */
-			_Atomic __float128 *mvals = alloca(mavg->fieldset.n_aggr
-				* sizeof(__float128));
-
 			/* update existing values */
 			for (i=0; i<mavg->fieldset.n_aggr; i++) {
 				struct field *fld = &mavg->fieldset.aggr[i];
@@ -767,20 +721,27 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 						struct mavg_val *pval;
 						pval = MAVG_VAL(((uint8_t *)nval.data), i, data->valsize);
 
-						mavg_recalc(&pval->val, &pval->time_prev, mvals[i], time_ns, wndsize, &mvals[i]);
+						mavg_recalc(&pval->val, &pval->time_prev, mvals[i], time_ns, wndsize, (_Atomic __float128 *)&mvals[i]);
 					}
 				}
 			}
 
-			mavg_limits_check(mavg, data, dtval.data, mvals);
+			mavg_limits_check(mavg, data, dtval.data, mvals, time_ns);
 		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
-			_Atomic __float128 *mvals = alloca(mavg->fieldset.n_aggr
-				* sizeof(__float128));
-
+			size_t j;
 			/* try to add new key-value pair */
+
+			/*
+			 * FIXME: it's not really needed, trying to suppress
+			 * valgring warning
+			*/
+			for (j=0; j<mavg->fieldset.n_aggr; j++) {
+				mvals[j] = 0.0f;
+			}
+
 			mavg_val_init(mavg, flow, time_ns, data, mvals);
 
-			mavg_limits_check(mavg, data, data->val, mvals);
+			mavg_limits_check(mavg, data, data->val, mvals, time_ns);
 
 			dtval.data = data->val;
 			dtval.size = data->valsize;
@@ -801,7 +762,8 @@ monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
 }
 
 static int
-mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize)
+mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
+	const char *mo_name)
 {
 	size_t i;
 	int ret = 0;
@@ -819,7 +781,7 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize)
 	}
 
 	/* iterate over all set */
-	printf("dump:\n");
+	printf("dump %s:%s\n", mo_name, mavg->name);
 	do {
 		uint8_t *data = c->key(c);
 		uint8_t *pval = c->val(c);
@@ -860,112 +822,17 @@ cursor_fail:
 	return ret;
 }
 
-static int
-mavg_merge_tr(struct mo_mavg *mavg, size_t val_itemsize, tkvdb_tr *tr_merge,
-	tkvdb_tr *tr, uint64_t time_ns)
-{
-	tkvdb_cursor *c;
-
-	c = tkvdb_cursor_create(tr);
-	if (!c) {
-		LOG("tkvdb_cursor_create() failed");
-		return 0;
-	}
-
-	if (c->first(c) != TKVDB_OK) {
-		/* empty set */
-		goto empty;
-	}
-
-	do {
-		TKVDB_RES rc;
-		tkvdb_datum dtk, dtv;
-
-		dtk.data = c->key(c);
-		dtk.size = c->keysize(c);
-
-		rc = tr_merge->get(tr_merge, &dtk, &dtv);
-		if (rc == TKVDB_OK) {
-			size_t i;
-			uint8_t *pvals = dtv.data;
-			uint8_t *pvals_add = c->val(c);
-
-			/* update data */
-			for (i=0; i<mavg->fieldset.n_aggr; i++) {
-				struct mavg_val *val = MAVG_VAL(pvals, i, val_itemsize);
-				struct mavg_val *val_add = MAVG_VAL(pvals_add, i, val_itemsize);
-
-				val->val +=
-					atomic_load_explicit(&val_add->val,
-						memory_order_relaxed);
-			}
-		} else {
-			/* not found */
-			dtv.data = c->val(c);
-			dtv.size = c->valsize(c);
-
-			rc = tr_merge->put(tr_merge, &dtk, &dtv);
-			if (rc != TKVDB_OK) {
-				LOG("put() failed");
-				break;
-			}
-		}
-	} while (c->next(c) == TKVDB_OK);
-
-empty:
-	c->free(c);
-
-	return 1;
-}
 
 static int
-mavg_merge(struct mo_mavg *mavg, size_t nthreads, const char *mo_name,
-	const char *exp_dir)
+mavg_dump(struct mo_mavg *mavg, size_t nthreads, const char *mo_name)
 {
 	size_t i;
-	tkvdb_tr *tr_merge;
-	tkvdb_params *params;
-	struct timespec tmsp;
-	uint64_t time_ns;
 
-	/* get current timestamp */
-	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
-		LOG("clock_gettime() failed: %s", strerror(errno));
-		return 0;
-	}
-	time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
-
-	params = tkvdb_params_create();
-	tkvdb_param_set(params, TKVDB_PARAM_ALIGNVAL, 16);
-
-	tr_merge = tkvdb_tr_create(NULL, params);
-	if (!tr_merge) {
-		LOG("Can't create transaction");
-		return 0;
-	}
-
-	tkvdb_params_free(params);
-
-	tr_merge->begin(tr_merge);
-
-	/* merge data from all threads */
+	/* dump data from all threads */
 	for (i=0; i<nthreads; i++) {
-		tkvdb_tr *tr;
-		size_t tr_idx;
-/*
-		tr_idx = atomic_load_explicit(&mavg->data[i].tr_idx,
-			memory_order_relaxed);
-
-		tr = mavg->data[i].trs[tr_idx];
-
-		mavg_merge_tr(mavg, mavg->data[i].val_itemsize, tr_merge, tr,
-			time_ns);
-*/
+		mavg_dump_tr(mavg, mavg->data[i].tr,
+			mavg->data[i].val_itemsize, mo_name);
 	}
-
-	mavg_dump_tr(mavg, tr_merge, mavg->data[0].val_itemsize);
-
-	tr_merge->free(tr_merge);
 
 	return 1;
 }
@@ -998,29 +865,16 @@ mavg_bg_thread(void *arg)
 			for (j=0; j<mo->nmavg; j++) {
 				struct mo_mavg *mavg = &mo->mavgs[j];
 
-				if ((mavg->last_merge + mavg->merge_secs)
+				if ((mavg->last_dump + mavg->dump_secs)
 					<= t) {
 
-					/* time to merge */
-					if (mavg_merge(mavg, data->nthreads,
-						mo->name, data->exp_dir)) {
+					/* time to dump */
+					if (mavg_dump(mavg, data->nthreads,
+						mo->name)) {
 
-						mavg->last_merge = t;
+						mavg->last_dump = t;
 						need_sleep = 0;
 					}
-				}
-
-				/* swap database banks */
-				if ((mavg->last_bankswap
-					+ mavg->size_secs * 2 + 1) <= t) {
-
-					/* time to swap banks */
-/*
-					if (mavg_swap(mavg, data->nthreads)) {
-						mavg->last_bankswap = t;
-						need_sleep = 0;
-					}
-*/
 				}
 			}
 		}

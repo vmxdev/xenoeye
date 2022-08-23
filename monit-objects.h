@@ -10,7 +10,6 @@
 #define FWM_DEFAULT_TIMEOUT 30
 
 #define MAVG_DEFAULT_SIZE 5
-#define MAVG_MERGE_DEFAULT_TIMEOUT 2
 
 #define MAVG_DEFAULT_TR_SIZE (1024*1024*256)
 
@@ -99,9 +98,9 @@ struct mo_mavg
 	char name[TOKEN_MAX_SIZE];
 	unsigned int size_secs;
 	struct mo_fieldset fieldset;
-	int merge_secs;
+	int dump_secs;
 
-	time_t last_merge, last_bankswap;
+	time_t last_dump;
 
 	/* limits */
 	struct mavg_limit *overlimit;

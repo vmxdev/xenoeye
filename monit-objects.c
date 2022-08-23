@@ -234,14 +234,6 @@ monit_objects_init(struct xe_data *data)
 					MAVG_DEFAULT_SIZE);
 				mavg->size_secs = MAVG_DEFAULT_SIZE;
 			}
-
-			if (mavg->merge_secs == 0) {
-				LOG("warning: merge time for '%s:%s' is not set"
-					", using default %d",
-					mo->name, mavg->name,
-					MAVG_MERGE_DEFAULT_TIMEOUT);
-				mavg->merge_secs = MAVG_MERGE_DEFAULT_TIMEOUT;
-			}
 		}
 	}
 
