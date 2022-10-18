@@ -249,6 +249,16 @@ monit_objects_init(struct xe_data *data)
 	}
 
 	/* moving averages */
+	/* thread with actions on overflow */
+	thread_err = pthread_create(&data->mavg_act_tid, NULL,
+		&mavg_act_thread, data);
+
+	if (thread_err) {
+		LOG("Can't start thread: %s", strerror(thread_err));
+		goto fail_mavgthread;
+	}
+
+	/* auxiliary background thread */
 	thread_err = pthread_create(&data->mavg_tid, NULL,
 		&mavg_bg_thread, data);
 
@@ -328,8 +338,8 @@ monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 }
 
 int
-monit_object_process_nf(struct monit_object *mo, size_t thread_id,
-	uint64_t time_ns, struct nf_flow_info *flow)
+monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
+	size_t thread_id, uint64_t time_ns, struct nf_flow_info *flow)
 {
 	size_t i, j, f;
 
@@ -397,7 +407,9 @@ monit_object_process_nf(struct monit_object *mo, size_t thread_id,
 	}
 
 	/* moving average */
-	if (!monit_object_mavg_process_nf(mo, thread_id, time_ns, flow)) {
+	if (!monit_object_mavg_process_nf(globl, mo, thread_id, time_ns,
+		flow)) {
+
 		return 0;
 	}
 

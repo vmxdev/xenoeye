@@ -49,8 +49,10 @@ struct xe_data
 
 	/* backgriund thread for fixed windows in memory */
 	pthread_t fwm_tid;
+
 	/* moving averages */
-	pthread_t mavg_tid;
+	pthread_t mavg_tid, mavg_act_tid;
+	_Atomic size_t mavg_db_bank_idx;
 
 	/* templates */
 	int allow_templates_in_future;

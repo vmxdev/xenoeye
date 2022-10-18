@@ -13,8 +13,6 @@
 
 #define MAVG_DEFAULT_TR_SIZE (1024*1024*256)
 
-#define MAVG_DEFAULT_LIMDB_SIZE (1024*1024)
-
 struct xe_data;
 struct nf_flow_info;
 
@@ -78,7 +76,10 @@ struct mavg_data
 	uint8_t *key;
 	uint8_t *val; /* array of struct mavg_val */
 
-	size_t keysize, valsize, val_itemsize;
+	size_t keysize, valsize, val_itemsize, key_fullsize;
+
+	/* per-thread database of overlimited items, 2 banks */
+	tkvdb_tr *ovr_db[2];
 };
 
 struct mavg_limit
@@ -98,7 +99,7 @@ struct mo_mavg
 	char name[TOKEN_MAX_SIZE];
 	unsigned int size_secs;
 	struct mo_fieldset fieldset;
-	int dump_secs;
+	unsigned int dump_secs;
 
 	time_t last_dump;
 
@@ -106,9 +107,8 @@ struct mo_mavg
 	struct mavg_limit *overlimit;
 	size_t noverlimit;
 
-	/* database of overlimited items */
-	tkvdb_tr *overlimited_db;
-	pthread_mutex_t overlimited_lock;
+	/* global database of overlimited items */
+	tkvdb_tr *glb_ovr_db;
 
 	/* each thread has it's own data */
 	size_t nthreads;
@@ -136,8 +136,8 @@ int monit_objects_init(struct xe_data *data);
 int monit_objects_free(struct xe_data *data);
 
 int monit_object_match(struct monit_object *mo, struct nf_flow_info *fi);
-int monit_object_process_nf(struct monit_object *mo, size_t thread_id,
-	uint64_t time_ns, struct nf_flow_info *flow);
+int monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
+	size_t thread_id, uint64_t time_ns, struct nf_flow_info *flow);
 
 void monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 	int print_spaces);
@@ -151,10 +151,12 @@ void *fwm_bg_thread(void *);
 int mavg_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
 int mavg_fields_init(size_t nthreads, struct mo_mavg *window);
 int mavg_limits_init(struct mo_mavg *window);
-int monit_object_mavg_process_nf(struct monit_object *mo, size_t thread_id,
+int monit_object_mavg_process_nf(struct xe_data *globl,
+	struct monit_object *mo, size_t thread_id,
 	uint64_t time_ns, struct nf_flow_info *flow);
 
 void *mavg_bg_thread(void *);
+void *mavg_act_thread(void *);
 
 #endif
 

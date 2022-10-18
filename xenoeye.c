@@ -424,6 +424,7 @@ main(int argc, char *argv[])
 
 	memset(&data, 0, sizeof(struct xe_data));
 	atomic_init(&data.stop, 0);
+	atomic_init(&data.mavg_db_bank_idx, 0);
 
 	if (!config_parse(&data, conffile ? conffile : DEFAULT_CONFIG_FILE)) {
 		return EXIT_FAILURE;

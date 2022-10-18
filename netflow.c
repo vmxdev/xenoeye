@@ -268,8 +268,8 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 					debug_flow_str);
 			}
 
-			monit_object_process_nf(mo, thread_id, npi->time_ns,
-				&flow);
+			monit_object_process_nf(data, mo, thread_id,
+				npi->time_ns, &flow);
 		}
 	}
 	(*ptr) += length;
@@ -526,8 +526,8 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 					debug_flow_str);
 			}
 
-			monit_object_process_nf(mo, thread_id, npi->time_ns,
-				&flow);
+			monit_object_process_nf(data, mo, thread_id,
+				npi->time_ns, &flow);
 		}
 
 		flow_num++;
