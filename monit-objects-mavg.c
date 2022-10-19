@@ -479,9 +479,8 @@ mavg_limits_init(struct mo_mavg *window)
 
 /* react on overlimit */
 static void
-mavg_on_overlimit(struct xe_data *globl, struct mo_mavg *mavg,
-	struct mavg_data *data,	size_t limit_id,
-	__float128 counterval, __float128 lim,
+mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
+	size_t limit_id, __float128 counterval, __float128 lim,
 	uint64_t time_ns)
 {
 	TKVDB_RES rc;
@@ -538,8 +537,7 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 
 		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
-				mavg_on_overlimit(globl, mavg, data,
-					j,
+				mavg_on_overlimit(globl, data, j,
 					val, pval->limits_max[j], time_ns);
 			}
 		}
@@ -673,6 +671,11 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 					data->valsize);
 				mavg_recalc(&pval->val, &pval->time_prev, val,
 					time_ns, wndsize, &pval->val);
+
+				/* update time */
+				atomic_store_explicit(&pval->time_prev, time_ns,
+					memory_order_relaxed);
+
 				mvals[i] = pval->val;
 			}
 
@@ -699,6 +702,12 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 							mvals[i], time_ns,
 							wndsize,
 							(_Atomic __float128 *)&mvals[i]);
+
+						/* update time */
+						atomic_store_explicit(
+							&pval->time_prev,
+							time_ns,
+							memory_order_relaxed);
 					}
 				}
 			}
@@ -786,6 +795,7 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 				/* */
 				printf("%g ", (double)val->limits_max[j]);
 			}
+
 			printf(")");
 		}
 
@@ -955,8 +965,8 @@ mavg_act_on_ovrlm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 		flddata += fld->size;
 	}
-	fprintf(fcont, " %lu %lu", (uint64_t)ovr->limit, (uint64_t)ovr->val);
-	/*fprintf(fcont, " %f %f", (double)lim, (double)counterval);*/
+	fprintf(fcont, " %lu %lu", (uint64_t)ovr->val, (uint64_t)ovr->limit);
+	/*fprintf(fcont, " %f %f", (double)ovr->limit, (double)ovr->val);*/
 	fclose(fcont);
 
 	/* write file */
