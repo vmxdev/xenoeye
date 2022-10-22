@@ -92,6 +92,21 @@ struct mavg_limit
 	__float128 *def;
 };
 
+enum MAVG_OVRLM_TYPE
+{
+	MAVG_OVRLM_GONE,
+	MAVG_OVRLM_NEW,
+	MAVG_OVRLM_UPDATE
+};
+
+struct mavg_ovrlm_data
+{
+	enum MAVG_OVRLM_TYPE type;
+	uint64_t time_start, time_dump, time_last;
+	__float128 val;
+	__float128 limit;
+};
+
 struct mo_mavg
 {
 	char notif_pfx[PATH_MAX]; /* prefix for notification files */
