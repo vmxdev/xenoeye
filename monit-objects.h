@@ -102,9 +102,10 @@ enum MAVG_OVRLM_TYPE
 struct mavg_ovrlm_data
 {
 	enum MAVG_OVRLM_TYPE type;
-	uint64_t time_start, time_dump, time_last;
+	uint64_t time_dump, time_last;
 	__float128 val;
 	__float128 limit;
+	__float128 wnd_size_ns;
 };
 
 struct mo_mavg

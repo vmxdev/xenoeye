@@ -125,19 +125,72 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 static void
 on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr)
-{
-}
-
-static void
-on_ret_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize)
+	struct mavg_ovrlm_data *ovr, uint64_t time_ns)
 {
 	char filename[PATH_MAX];
 
-	build_file_name(filename, mw, key, keysize);
+	__float128 val;
+	size_t i;
+	uint8_t *flddata;
+
+	FILE *fcont, *f;
+	size_t csize;
+	char *cptr;
+
+	if (!build_file_name(filename, mw, key, keysize)) {
+		LOG("Update failed");
+		return;
+	}
+
+	val = ovr->val
+		- (time_ns - ovr->time_last) / ovr->wnd_size_ns * ovr->val;
+
+	/* build file content */
+	fcont = open_memstream(&cptr, &csize);
+	if (!fcont) {
+		LOG("Can't open memstream: %s", strerror(errno));
+		return;
+	}
+
+	flddata = key;
+	for (i=0; i<mw->fieldset.n_naggr; i++) {
+		struct field *fld = &mw->fieldset.naggr[i];
+
+		monit_object_field_print(fld, fcont, flddata, 1);
+
+		flddata += fld->size;
+	}
+	fprintf(fcont, " %lu %lu", (uint64_t)val, (uint64_t)ovr->limit);
+	/*fprintf(fcont, " %f %f", (double)ovr->limit, (double)ovr->val);*/
+	fclose(fcont);
+
+	/* write file */
+	f = fopen(filename, "w");
+	if (!f) {
+		LOG("Can't create file '%s': %s", filename, strerror(errno));
+		return;
+	}
+	fputs(cptr, f);
+	fclose(f);
+
+	LOG("UPDATE: %s", cptr);
+
+	free(cptr);
+}
+
+static void
+on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize)
+{
+	char filename[PATH_MAX];
+
+	if (!build_file_name(filename, mw, key, keysize)) {
+		return;
+	}
+
 	if (unlink(filename) < 0) {
 		LOG("Can't remove file '%s': %s", filename, strerror(errno));
 	}
+	LOG("DEL: %s", filename);
 }
 
 static int
@@ -175,24 +228,26 @@ act(struct mo_mavg *mw, tkvdb_tr *db)
 
 		/* FIXME: move timeout to config */
 		if ((val->time_last + 20*1e9) < time_ns) {
-			/* return to normal */
-			on_ret_to_norm(mw, c->key(c), c->keysize(c));
+			/* traffic is back to normal */
+			on_back_to_norm(mw, c->key(c), c->keysize(c));
 
 			val->type = MAVG_OVRLM_GONE;
 			goto skip;
 		}
 
 		if (val->type == MAVG_OVRLM_UPDATE) {
-			if ((val->time_dump + 3e9) > val->time_last) {
-				/* update */
-				on_update(mw, c->key(c), c->keysize(c),
-					c->val(c));
-				val->time_dump = val->time_last;
+			if ((val->time_dump + 3*1e9) > time_ns) {
+				goto skip;
 			}
+
+			on_update(mw, c->key(c), c->keysize(c), val, time_ns);
+
+			val->time_dump = time_ns;
 		} else if (val->type == MAVG_OVRLM_NEW) {
-			/* actions */
-			on_overlimit(mw, c->key(c), c->keysize(c),
-				c->val(c));
+			on_overlimit(mw, c->key(c), c->keysize(c), val);
+
+			/* update dump time */
+			val->time_dump = time_ns;
 
 			/* change type */
 			val->type = MAVG_OVRLM_UPDATE;
@@ -254,7 +309,7 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 			} else if (val_glb->type == MAVG_OVRLM_GONE) {
 				/* restart actions */
 				val_glb->type = MAVG_OVRLM_NEW;
-				val_glb->time_start = val_thr->time_last;
+
 				val_glb->time_last = val_thr->time_last;
 				val_glb->time_dump = 0;
 				val_glb->val = val_thr->val;
@@ -266,11 +321,11 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 			struct mavg_ovrlm_data val;
 
 			val.type = MAVG_OVRLM_NEW;
-			val.time_start = val_thr->time_last;
 			val.time_last = val_thr->time_last;
 			val.time_dump = 0;
 			val.val = val_thr->val;
 			val.limit = val_thr->limit;
+			val.wnd_size_ns = val_thr->wnd_size_ns;
 
 			dtv.data = &val;
 			dtv.size = c->valsize(c);

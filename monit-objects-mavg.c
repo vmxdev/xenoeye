@@ -466,7 +466,7 @@ mavg_limits_init(struct mo_mavg *window)
 static void
 mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 	size_t limit_id, __float128 counterval, __float128 lim,
-	uint64_t time_ns)
+	uint64_t time_ns, __float128 wndsize)
 {
 	TKVDB_RES rc;
 	tkvdb_datum dtk, dtv;
@@ -495,6 +495,7 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 
 	val.val = counterval;
 	val.limit = lim;
+	val.wnd_size_ns = wndsize;
 
 	/* put without checks */
 	rc = db->put(db, &dtk, &dtv);
@@ -509,7 +510,7 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 static void
 mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 	struct mavg_data *data,	uint8_t *vptr, __float128 *vals,
-	uint64_t time_ns)
+	uint64_t time_ns, __float128 wndsize)
 {
 	size_t i, j;
 
@@ -523,7 +524,8 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
 				mavg_on_overlimit(globl, data, j,
-					val, pval->limits_max[j], time_ns);
+					val, pval->limits_max[j], time_ns,
+					wndsize);
 			}
 		}
 	}
@@ -698,7 +700,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			}
 
 			mavg_limits_check(globl, mavg, data, dtval.data, mvals,
-				time_ns);
+				time_ns, wndsize);
 		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
 			size_t j;
 			/* try to add new key-value pair */
@@ -714,7 +716,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			mavg_val_init(mavg, flow, time_ns, data, mvals);
 
 			mavg_limits_check(globl, mavg, data, data->val, mvals,
-				time_ns);
+				time_ns, wndsize);
 
 			dtval.data = data->val;
 			dtval.size = data->valsize;
