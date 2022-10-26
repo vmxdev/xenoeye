@@ -76,27 +76,20 @@ build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize)
 	return 1;
 }
 
-static void
-on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr)
+static int
+build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
+	__float128 val, __float128 limit)
 {
 	size_t i;
-	uint8_t *flddata;
-
-	FILE *fcont, *f;
+	FILE *fcont;
 	size_t csize;
 	char *cptr;
-	char filename[PATH_MAX];
+	uint8_t *flddata;
 
-	if (!build_file_name(filename, mw, key, keysize)) {
-		return;
-	}
-
-	/* build file content */
 	fcont = open_memstream(&cptr, &csize);
 	if (!fcont) {
 		LOG("Can't open memstream: %s", strerror(errno));
-		return;
+		return 0;
 	}
 
 	flddata = key;
@@ -107,9 +100,33 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 		flddata += fld->size;
 	}
-	fprintf(fcont, " %lu %lu", (uint64_t)ovr->val, (uint64_t)ovr->limit);
-	/*fprintf(fcont, " %f %f", (double)ovr->limit, (double)ovr->val);*/
+	fprintf(fcont, " %lu %lu", (uint64_t)val, (uint64_t)limit);
+	/*fprintf(fcont, " %f %f", (double)val, (double)limit);*/
 	fclose(fcont);
+
+	strcpy(text, cptr);
+
+	free(cptr);
+
+	return 1;
+}
+
+static void
+on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+	struct mavg_ovrlm_data *ovr)
+{
+	FILE *f;
+	char filename[PATH_MAX];
+	char filecont[1024];
+
+	if (!build_file_name(filename, mw, key, keysize)) {
+		LOG("Can't create file");
+		return;
+	}
+
+	if (!build_file_content(filecont, mw, key, ovr->val, ovr->limit)) {
+		return;
+	}
 
 	/* write file */
 	f = fopen(filename, "w");
@@ -117,25 +134,19 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 		LOG("Can't create file '%s': %s", filename, strerror(errno));
 		return;
 	}
-	fputs(cptr, f);
+	fputs(filecont, f);
 	fclose(f);
-
-	free(cptr);
 }
 
 static void
 on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, uint64_t time_ns)
+	struct mavg_ovrlm_data *ovr, uint64_t time_ns, __float128 wnd_size_ns)
 {
+	FILE *f;
 	char filename[PATH_MAX];
+	char filecont[1024];
 
 	__float128 val;
-	size_t i;
-	uint8_t *flddata;
-
-	FILE *fcont, *f;
-	size_t csize;
-	char *cptr;
 
 	if (!build_file_name(filename, mw, key, keysize)) {
 		LOG("Update failed");
@@ -143,26 +154,11 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	}
 
 	val = ovr->val
-		- (time_ns - ovr->time_last) / ovr->wnd_size_ns * ovr->val;
+		- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
 
-	/* build file content */
-	fcont = open_memstream(&cptr, &csize);
-	if (!fcont) {
-		LOG("Can't open memstream: %s", strerror(errno));
+	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
 		return;
 	}
-
-	flddata = key;
-	for (i=0; i<mw->fieldset.n_naggr; i++) {
-		struct field *fld = &mw->fieldset.naggr[i];
-
-		monit_object_field_print(fld, fcont, flddata, 1);
-
-		flddata += fld->size;
-	}
-	fprintf(fcont, " %lu %lu", (uint64_t)val, (uint64_t)ovr->limit);
-	/*fprintf(fcont, " %f %f", (double)ovr->limit, (double)ovr->val);*/
-	fclose(fcont);
 
 	/* write file */
 	f = fopen(filename, "w");
@@ -170,12 +166,8 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 		LOG("Can't create file '%s': %s", filename, strerror(errno));
 		return;
 	}
-	fputs(cptr, f);
+	fputs(filecont, f);
 	fclose(f);
-
-	LOG("UPDATE: %s", cptr);
-
-	free(cptr);
 }
 
 static void
@@ -190,11 +182,10 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize)
 	if (unlink(filename) < 0) {
 		LOG("Can't remove file '%s': %s", filename, strerror(errno));
 	}
-	LOG("DEL: %s", filename);
 }
 
 static int
-act(struct mo_mavg *mw, tkvdb_tr *db)
+act(struct mo_mavg *mw, tkvdb_tr *db, __float128 wnd_size_ns)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -240,7 +231,8 @@ act(struct mo_mavg *mw, tkvdb_tr *db)
 				goto skip;
 			}
 
-			on_update(mw, c->key(c), c->keysize(c), val, time_ns);
+			on_update(mw, c->key(c), c->keysize(c), val, time_ns,
+				wnd_size_ns);
 
 			val->time_dump = time_ns;
 		} else if (val->type == MAVG_OVRLM_NEW) {
@@ -325,7 +317,6 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 			val.time_dump = 0;
 			val.val = val_thr->val;
 			val.limit = val_thr->limit;
-			val.wnd_size_ns = val_thr->wnd_size_ns;
 
 			dtv.data = &val;
 			dtv.size = c->valsize(c);
@@ -390,7 +381,7 @@ mavg_act_thread(void *arg)
 					db_thr->begin(db_thr);
 				}
 
-				act(mw, db_glb);
+				act(mw, db_glb, mw->size_secs * 1e9);
 			}
 		}
 	}

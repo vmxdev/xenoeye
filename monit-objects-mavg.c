@@ -495,7 +495,6 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 
 	val.val = counterval;
 	val.limit = lim;
-	val.wnd_size_ns = wndsize;
 
 	/* put without checks */
 	rc = db->put(db, &dtk, &dtv);

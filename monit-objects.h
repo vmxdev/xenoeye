@@ -105,7 +105,6 @@ struct mavg_ovrlm_data
 	uint64_t time_dump, time_last;
 	__float128 val;
 	__float128 limit;
-	__float128 wnd_size_ns;
 };
 
 struct mo_mavg
