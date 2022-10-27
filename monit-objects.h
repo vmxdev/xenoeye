@@ -13,6 +13,8 @@
 
 #define MAVG_DEFAULT_TR_SIZE (1024*1024*256)
 
+#define MAVG_SCRIPT_STR_SIZE (10*1024)
+
 struct xe_data;
 struct nf_flow_info;
 
@@ -86,6 +88,10 @@ struct mavg_limit
 {
 	char name[PATH_MAX];
 	char file[PATH_MAX];
+
+	char action_script[MAVG_SCRIPT_STR_SIZE];
+	char back2norm_script[MAVG_SCRIPT_STR_SIZE];
+
 	tkvdb_tr *db;
 
 	/* default */

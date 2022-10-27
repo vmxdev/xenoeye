@@ -227,6 +227,10 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 		/* FIXME: check ? */
 		size_t idx = a->path_stack[6].data.array_idx;
 		l->def[idx] = strtod(value->str, NULL);
+	} else if (STRCMP(a, 5, "action-script") == 0) {
+		strcpy(l->action_script, value->str);
+	} else if (STRCMP(a, 5, "back2norm-script") == 0) {
+		strcpy(l->back2norm_script, value->str);
 	}
 
 	return 1;
@@ -466,7 +470,7 @@ mavg_limits_init(struct mo_mavg *window)
 static void
 mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 	size_t limit_id, __float128 counterval, __float128 lim,
-	uint64_t time_ns, __float128 wndsize)
+	uint64_t time_ns)
 {
 	TKVDB_RES rc;
 	tkvdb_datum dtk, dtv;
@@ -509,7 +513,7 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 static void
 mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 	struct mavg_data *data,	uint8_t *vptr, __float128 *vals,
-	uint64_t time_ns, __float128 wndsize)
+	uint64_t time_ns)
 {
 	size_t i, j;
 
@@ -523,8 +527,7 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
 				mavg_on_overlimit(globl, data, j,
-					val, pval->limits_max[j], time_ns,
-					wndsize);
+					val, pval->limits_max[j], time_ns);
 			}
 		}
 	}
@@ -699,7 +702,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			}
 
 			mavg_limits_check(globl, mavg, data, dtval.data, mvals,
-				time_ns, wndsize);
+				time_ns);
 		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
 			size_t j;
 			/* try to add new key-value pair */
@@ -715,7 +718,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			mavg_val_init(mavg, flow, time_ns, data, mvals);
 
 			mavg_limits_check(globl, mavg, data, data->val, mvals,
-				time_ns, wndsize);
+				time_ns);
 
 			dtval.data = data->val;
 			dtval.size = data->valsize;

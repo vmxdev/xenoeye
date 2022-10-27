@@ -30,7 +30,8 @@
 #include "monit-objects-common.h"
 
 static int
-build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize)
+build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize,
+	size_t *limit_id)
 {
 	size_t i;
 	FILE *fname;
@@ -40,13 +41,12 @@ build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize)
 	size_t namesize;
 	char *nameptr;
 
-	size_t limit_id;
 	struct mavg_limit *l;
 
 	/* get limit id */
-	memcpy(&limit_id, key + keysize - sizeof(size_t), sizeof(size_t));
+	memcpy(limit_id, key + keysize - sizeof(size_t), sizeof(size_t));
 
-	l = &mw->overlimit[limit_id];
+	l = &mw->overlimit[*limit_id];
 
 	/* build file name */
 	fname = open_memstream(&nameptr, &namesize);
@@ -118,8 +118,10 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	FILE *f;
 	char filename[PATH_MAX];
 	char filecont[1024];
+	size_t limit_id;
+	char *script;
 
-	if (!build_file_name(filename, mw, key, keysize)) {
+	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		LOG("Can't create file");
 		return;
 	}
@@ -136,6 +138,35 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	}
 	fputs(filecont, f);
 	fclose(f);
+
+	/* start script */
+	script = mw->overlimit[limit_id].action_script;
+	if (*script) {
+		int pid;
+
+		pid = fork();
+		if (pid == 0) {
+			/* child */
+
+			pid = fork();
+			if (pid == 0) {
+				/* double fork */
+				/* build program args */
+				char *args[4];
+				args[0] = script;
+				args[1] = filename;
+				args[2] = filecont;
+				args[3] = NULL;
+				if (execve(script, args, NULL) == -1) {
+					LOG("Can't start script '%s': %s",
+						script, strerror(errno));
+				}
+			}
+			exit(EXIT_SUCCESS);
+		} else if (pid == -1) {
+			LOG("Can't fork(): %s", strerror(errno));
+		}
+	}
 }
 
 static void
@@ -145,10 +176,11 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	FILE *f;
 	char filename[PATH_MAX];
 	char filecont[1024];
+	size_t limit_id;
 
 	__float128 val;
 
-	if (!build_file_name(filename, mw, key, keysize)) {
+	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		LOG("Update failed");
 		return;
 	}
@@ -174,8 +206,9 @@ static void
 on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize)
 {
 	char filename[PATH_MAX];
+	size_t limit_id;
 
-	if (!build_file_name(filename, mw, key, keysize)) {
+	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		return;
 	}
 
