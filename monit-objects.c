@@ -276,8 +276,9 @@ fail_opendir:
 	return ret;
 }
 
+
 void
-monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
+monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 	int print_spaces)
 {
 	uint16_t d16;
@@ -289,46 +290,60 @@ monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 		case FILTER_BASIC_ADDR4:
 			inet_ntop(AF_INET, data, s, INET_ADDRSTRLEN);
 			if (print_spaces) {
-				fprintf(f, " '%s' ", s);
+				sprintf(str, " '%s' ", s);
 			} else {
-				fprintf(f, "%s", s);
+				sprintf(str, "%s", s);
 			}
 			break;
 
 		case FILTER_BASIC_ADDR6:
 			inet_ntop(AF_INET6, data, s, INET6_ADDRSTRLEN);
 			if (print_spaces) {
-				fprintf(f, " '%s' ", s);
+				sprintf(str, " '%s' ", s);
 			} else {
-				fprintf(f, "%s", s);
+				sprintf(str, "%s", s);
 			}
 			break;
 
 		case FILTER_BASIC_RANGE:
-			if (print_spaces) {
-				fprintf(f, " ");
-			}
 			switch (fld->size) {
 				case sizeof(uint8_t):
-					fprintf(f, "%u", data[0]);
+					if (print_spaces) {
+						sprintf(str, " %u ", data[0]);
+					} else {
+						sprintf(str, "%u", data[0]);
+					}
 					break;
 				case sizeof(uint16_t):
 					d16 = *((uint16_t *)data);
-					fprintf(f, "%u", ntohs(d16));
+					if (print_spaces) {
+						sprintf(str, " %u ",
+							ntohs(d16));
+					} else {
+						sprintf(str, "%u", ntohs(d16));
+					}
 					break;
 				case sizeof(uint32_t):
 					d32 = *((uint32_t *)data);
-					fprintf(f, "%u", ntohl(d32));
+					if (print_spaces) {
+						sprintf(str, " %u ",
+							ntohl(d32));
+					} else {
+						sprintf(str, "%u", ntohl(d32));
+					}
 					break;
 				case sizeof(uint64_t):
 					d64 = *((uint64_t *)data);
-					fprintf(f, "%lu", be64toh(d64));
+					if (print_spaces) {
+						sprintf(str, " %lu ",
+							be64toh(d64));
+					} else {
+						sprintf(str, "%lu",
+							be64toh(d64));
+					}
 					break;
 				default:
 					break;
-			}
-			if (print_spaces) {
-				fprintf(f, " ");
 			}
 			break;
 
@@ -336,6 +351,17 @@ monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 			break;
 	}
 }
+
+
+void
+monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
+	int print_spaces)
+{
+	char str[INET6_ADDRSTRLEN + 10];
+	monit_object_field_print_str(fld, str, data, print_spaces);
+	fputs(str, f);
+}
+
 
 int
 monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,

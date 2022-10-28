@@ -112,8 +112,72 @@ build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
 }
 
 static void
+exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
+	char *script, char *filename, __float128 val, __float128 limit)
+{
+	int pid;
+	char **args;
+	size_t i, argidx = 0;
+	uint8_t *flddata;
+	char *arg;
+
+	if (!*script) {
+		return;
+	}
+
+	/* build script args */
+	args = alloca((mw->fieldset.n_naggr + 8) * sizeof(char *));
+	args[argidx++] = script;
+	args[argidx++] = mo_name;
+	args[argidx++] = mw->name;
+	args[argidx++] = mw->overlimit[limit_id].name;
+	args[argidx++] = filename;
+
+	flddata = key;
+	for (i=0; i<mw->fieldset.n_naggr; i++) {
+		struct field *fld = &mw->fieldset.naggr[i];
+		arg = alloca(INET6_ADDRSTRLEN + 10);
+
+		monit_object_field_print_str(fld, arg, flddata, 0);
+		args[argidx++] = arg;
+
+		flddata += fld->size;
+	}
+
+	arg = alloca(30);
+	sprintf(arg, "%lu", (uint64_t)val);
+	args[argidx++] = arg;
+
+	arg = alloca(30);
+	sprintf(arg, "%lu", (uint64_t)limit);
+	args[argidx++] = arg;
+
+	args[argidx++] = NULL;
+
+
+	pid = fork();
+	if (pid == 0) {
+		/* child */
+
+		pid = fork();
+		if (pid == 0) {
+			/* double fork */
+			if (execve(args[0], args, NULL) == -1) {
+				LOG("Can't start script '%s': %s",
+					args[0], strerror(errno));
+			}
+		} else if (pid == -1) {
+			LOG("Can't fork(): %s", strerror(errno));
+		}
+		exit(EXIT_FAILURE);
+	} else if (pid == -1) {
+		LOG("Can't fork(): %s", strerror(errno));
+	}
+}
+
+static void
 on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr)
+	struct mavg_ovrlm_data *ovr, char *mo_name)
 {
 	FILE *f;
 	char filename[PATH_MAX];
@@ -141,32 +205,8 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 	/* start script */
 	script = mw->overlimit[limit_id].action_script;
-	if (*script) {
-		int pid;
-
-		pid = fork();
-		if (pid == 0) {
-			/* child */
-
-			pid = fork();
-			if (pid == 0) {
-				/* double fork */
-				/* build program args */
-				char *args[4];
-				args[0] = script;
-				args[1] = filename;
-				args[2] = filecont;
-				args[3] = NULL;
-				if (execve(script, args, NULL) == -1) {
-					LOG("Can't start script '%s': %s",
-						script, strerror(errno));
-				}
-			}
-			exit(EXIT_SUCCESS);
-		} else if (pid == -1) {
-			LOG("Can't fork(): %s", strerror(errno));
-		}
-	}
+	exec_script(mw, key, limit_id, mo_name, script, filename, ovr->val,
+		ovr->limit);
 }
 
 static void
@@ -203,10 +243,13 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 }
 
 static void
-on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize)
+on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+	struct mavg_ovrlm_data *ovr, char *mo_name)
 {
 	char filename[PATH_MAX];
+	char filecont[1024];
 	size_t limit_id;
+	char *script;
 
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		return;
@@ -215,10 +258,19 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize)
 	if (unlink(filename) < 0) {
 		LOG("Can't remove file '%s': %s", filename, strerror(errno));
 	}
+
+	if (!build_file_content(filecont, mw, key, 0, ovr->limit)) {
+		return;
+	}
+
+	/* start script */
+	script = mw->overlimit[limit_id].back2norm_script;
+	exec_script(mw, key, limit_id, mo_name, script, filename, 0,
+		ovr->limit);
 }
 
 static int
-act(struct mo_mavg *mw, tkvdb_tr *db, __float128 wnd_size_ns)
+act(struct mo_mavg *mw, tkvdb_tr *db, __float128 wnd_size_ns, char *mo_name)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -253,7 +305,8 @@ act(struct mo_mavg *mw, tkvdb_tr *db, __float128 wnd_size_ns)
 		/* FIXME: move timeout to config */
 		if ((val->time_last + 20*1e9) < time_ns) {
 			/* traffic is back to normal */
-			on_back_to_norm(mw, c->key(c), c->keysize(c));
+			on_back_to_norm(mw, c->key(c), c->keysize(c), val,
+				mo_name);
 
 			val->type = MAVG_OVRLM_GONE;
 			goto skip;
@@ -269,7 +322,8 @@ act(struct mo_mavg *mw, tkvdb_tr *db, __float128 wnd_size_ns)
 
 			val->time_dump = time_ns;
 		} else if (val->type == MAVG_OVRLM_NEW) {
-			on_overlimit(mw, c->key(c), c->keysize(c), val);
+			on_overlimit(mw, c->key(c), c->keysize(c), val,
+				mo_name);
 
 			/* update dump time */
 			val->time_dump = time_ns;
@@ -414,7 +468,7 @@ mavg_act_thread(void *arg)
 					db_thr->begin(db_thr);
 				}
 
-				act(mw, db_glb, mw->size_secs * 1e9);
+				act(mw, db_glb, mw->size_secs * 1e9, mo->name);
 			}
 		}
 	}

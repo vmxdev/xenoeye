@@ -162,6 +162,8 @@ int monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 
 void monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 	int print_spaces);
+void monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
+	int print_spaces);
 
 /* fixed windows in memory */
 int fwm_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
