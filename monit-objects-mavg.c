@@ -746,6 +746,19 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 	int ret = 0;
 	tkvdb_cursor *c;
 
+	__float128 wnd_size_ns;
+
+	struct timespec tmsp;
+	uint64_t time_ns;
+
+	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
+		LOG("clock_gettime() failed: %s", strerror(errno));
+	}
+	time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
+
+	/* time window in nanoseconds */
+	wnd_size_ns = (__float128)mavg->size_secs * 1e9;
+
 	c = tkvdb_cursor_create(tr);
 	if (!c) {
 		LOG("tkvdb_cursor_create() failed");
@@ -763,6 +776,7 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 		uint8_t *data = c->key(c);
 		uint8_t *pval = c->val(c);
 
+
 		for (i=0; i<mavg->fieldset.n_naggr; i++) {
 			struct field *fld = &mavg->fieldset.naggr[i];
 			monit_object_field_print(fld, stdout, data, 1);
@@ -774,9 +788,18 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 		for (i=0; i<mavg->fieldset.n_aggr; i++) {
 			size_t j;
 			struct mavg_val *val;
+			__float128 v;
 
 			val = MAVG_VAL(pval, i, val_itemsize);
-			printf("%g ", (double)val->val);
+			v = val->val / (__float128)mavg->size_secs;
+
+			/* correct value */
+			v = v - (time_ns - val->time_prev) / wnd_size_ns * v;
+			if (v < 0.0) {
+				v = 0.0;
+			}
+
+			printf("%g ", (double)v);
 
 			/* limits */
 			printf("(");
