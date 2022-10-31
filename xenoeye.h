@@ -51,7 +51,7 @@ struct xe_data
 	pthread_t fwm_tid;
 
 	/* moving averages */
-	pthread_t mavg_tid, mavg_act_tid;
+	pthread_t mavg_dump_tid, mavg_act_tid;
 	_Atomic size_t mavg_db_bank_idx;
 
 	/* templates */

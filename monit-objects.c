@@ -259,8 +259,8 @@ monit_objects_init(struct xe_data *data)
 	}
 
 	/* auxiliary background thread */
-	thread_err = pthread_create(&data->mavg_tid, NULL,
-		&mavg_bg_thread, data);
+	thread_err = pthread_create(&data->mavg_dump_tid, NULL,
+		&mavg_dump_thread, data);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));

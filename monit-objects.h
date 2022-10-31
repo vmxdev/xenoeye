@@ -178,7 +178,7 @@ int monit_object_mavg_process_nf(struct xe_data *globl,
 	struct monit_object *mo, size_t thread_id,
 	uint64_t time_ns, struct nf_flow_info *flow);
 
-void *mavg_bg_thread(void *);
+void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);
 
 #endif
