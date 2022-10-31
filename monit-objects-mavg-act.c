@@ -225,12 +225,14 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 		return;
 	}
 
-	val = ovr->val
-		- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
 
-	if (val < 0.0) {
+	if (time_ns > (ovr->time_last + wnd_size_ns)) {
 		val = 0.0;
+	} else {
+		val = ovr->val
+			- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
 	}
+
 
 	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
 		return;

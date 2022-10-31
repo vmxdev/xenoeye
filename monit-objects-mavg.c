@@ -791,12 +791,15 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 			__float128 v;
 
 			val = MAVG_VAL(pval, i, val_itemsize);
-			v = val->val / (__float128)mavg->size_secs;
+			v = val->val;
 
 			/* correct value */
-			v = v - (time_ns - val->time_prev) / wnd_size_ns * v;
-			if (v < 0.0) {
+			if (time_ns > (val->time_prev + wnd_size_ns)) {
 				v = 0.0;
+			} else {
+				v = v - (time_ns - val->time_prev)
+					/ wnd_size_ns * v;
+				v /= (__float128)mavg->size_secs;
 			}
 
 			printf("%g ", (double)v);
