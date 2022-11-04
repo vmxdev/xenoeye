@@ -32,8 +32,8 @@
 #define MAVG_VAL(DATUM, I, SIZE) ((struct mavg_val *)&DATUM[SIZE * I])
 
 static int
-mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
-	const char *mo_name)
+mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
+	size_t val_itemsize)
 {
 	size_t i;
 	int ret = 0;
@@ -64,7 +64,6 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 	}
 
 	/* iterate over all set */
-	printf("dump %s:%s\n", mo_name, mavg->name);
 	do {
 		uint8_t *data = c->key(c);
 		uint8_t *pval = c->val(c);
@@ -72,12 +71,12 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 
 		for (i=0; i<mavg->fieldset.n_naggr; i++) {
 			struct field *fld = &mavg->fieldset.naggr[i];
-			monit_object_field_print(fld, stdout, data, 1);
+			monit_object_field_print(fld, out, data, 1);
 
 			data += fld->size;
 		}
 
-		printf(" :: ");
+		fprintf(out, " :: ");
 		for (i=0; i<mavg->fieldset.n_aggr; i++) {
 			size_t j;
 			struct mavg_val *val;
@@ -95,22 +94,22 @@ mavg_dump_tr(struct mo_mavg *mavg, tkvdb_tr *tr, size_t val_itemsize,
 				v /= (__float128)mavg->size_secs;
 			}
 
-			printf("%g ", (double)v);
+			fprintf(out, "%g ", (double)v);
 
 			/* limits */
-			printf("(");
+			fprintf(out, "(");
 			for (j=0; j<mavg->noverlimit; j++) {
 				/* */
-				printf("%g ", (double)val->limits_max[j]);
+				fprintf(out, "%g ", (double)val->limits_max[j]);
 			}
 
-			printf(")");
+			fprintf(out, ")");
 		}
 
-		printf("\n");
+		fprintf(out, "\n");
 	} while (c->next(c) == TKVDB_OK);
 
-	printf("\n");
+	fprintf(out, "\n");
 	ret = 1;
 empty:
 	c->free(c);
@@ -119,16 +118,76 @@ cursor_fail:
 	return ret;
 }
 
+static int
+mavg_dump_do(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo,
+	int append)
+{
+	FILE *f;
+	char dump_path[PATH_MAX];
+	size_t i;
+	char timebuf[100];
+	time_t t;
+
+	t = time(NULL);
+	if (t == (time_t)-1) {
+		LOG("time() failed: %s", strerror(errno));
+		return 0;
+	}
+
+	sprintf(dump_path, append? "%s/%s.adump" : "%s/%s.dump",
+		mo->dir, mavg->name);
+
+	f = fopen(dump_path, append? "a": "w");
+	if (!f) {
+		LOG("Can't open '%s': %s", dump_path, strerror(errno));
+		return 0;
+	}
+
+	fprintf(f, "%s", ctime_r(&t, timebuf));
+
+	for (i=0; i<nthreads; i++) {
+		mavg_dump_tr(f, mavg, mavg->data[i].tr,
+			mavg->data[i].val_itemsize);
+	}
+
+	if (append) {
+		/* extra empty line */
+		fprintf(f, "\n");
+	}
+
+	fclose(f);
+
+	return 1;
+}
 
 static int
-mavg_dump(struct mo_mavg *mavg, size_t nthreads, const char *mo_name)
+mavg_dump(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo)
 {
-	size_t i;
+	char enabled[PATH_MAX];
+	struct stat statbuf;
+	int dump = 0, append = 0;
 
-	/* dump data from all threads */
-	for (i=0; i<nthreads; i++) {
-		mavg_dump_tr(mavg, mavg->data[i].tr,
-			mavg->data[i].val_itemsize, mo_name);
+	sprintf(enabled, "%s/%s.d", mo->dir, mavg->name);
+	if (stat(enabled, &statbuf) == 0) {
+		dump = 1;
+	}
+
+	sprintf(enabled, "%s/%s.a", mo->dir, mavg->name);
+	if (stat(enabled, &statbuf) == 0) {
+		append = 1;
+	}
+
+	if (!dump && !append) {
+		/* skip */
+		return 0;
+	}
+
+	if (dump) {
+		mavg_dump_do(mavg, nthreads, mo, 0);
+	}
+
+	if (append) {
+		mavg_dump_do(mavg, nthreads, mo, 1);
 	}
 
 	return 1;
@@ -142,7 +201,6 @@ mavg_dump_thread(void *arg)
 	for (;;) {
 		time_t t;
 		size_t i, j;
-		int need_sleep = 1;
 
 		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
 			/* stop */
@@ -155,29 +213,31 @@ mavg_dump_thread(void *arg)
 			return NULL;
 		}
 
+		/* for each monitoring object */
 		for (i=0; i<data->nmonit_objects; i++) {
 			struct monit_object *mo = &data->monit_objects[i];
 
+			/* for each moving average */
 			for (j=0; j<mo->nmavg; j++) {
 				struct mo_mavg *mavg = &mo->mavgs[j];
 
-				if ((mavg->last_dump + mavg->dump_secs)
+				if (mavg->dump_secs == 0) {
+					/* skip */
+					continue;
+				}
+
+				if ((mavg->last_dump_check + mavg->dump_secs)
 					<= t) {
 
 					/* time to dump */
-					if (mavg_dump(mavg, data->nthreads,
-						mo->name)) {
+					mavg_dump(mavg, data->nthreads, mo);
 
-						mavg->last_dump = t;
-						need_sleep = 0;
-					}
+					mavg->last_dump_check = t;
 				}
 			}
 		}
 
-		if (need_sleep) {
-			sleep(1);
-		}
+		sleep(1);
 	}
 
 	return NULL;

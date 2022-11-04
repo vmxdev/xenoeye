@@ -146,7 +146,7 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 	 *  OK, this packet is UDP.
 	 */
 
-	/* define/compute tcp header offset */
+	/* define/compute udp header offset */
 	udp = (struct sniff_udp*)(packet + SIZE_ETHERNET + size_ip);
 
 	nfpkt.src_addr_ipv4 = ip->ip_src.s_addr;

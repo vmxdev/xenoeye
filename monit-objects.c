@@ -213,6 +213,7 @@ monit_objects_init(struct xe_data *data)
 				fwm->time = FWM_DEFAULT_TIMEOUT;
 			}
 		}
+
 		/* moving averages */
 		for (i=0; i<mo->nmavg; i++) {
 			struct mo_mavg *mavg = &mo->mavgs[i];
@@ -235,6 +236,9 @@ monit_objects_init(struct xe_data *data)
 				mavg->size_secs = MAVG_DEFAULT_SIZE;
 			}
 		}
+
+		/* store path to monitoring object directory */
+		sprintf(mo->dir, "%s/%s/", data->mo_dir, dir->d_name);
 	}
 
 	closedir(d);

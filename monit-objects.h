@@ -122,7 +122,7 @@ struct mo_mavg
 	struct mo_fieldset fieldset;
 	unsigned int dump_secs;
 
-	time_t last_dump;
+	time_t last_dump_check;
 
 	/* limits */
 	struct mavg_limit *overlimit;
@@ -138,6 +138,7 @@ struct mo_mavg
 
 struct monit_object
 {
+	char dir[PATH_MAX];
 	char name[PATH_MAX];
 	struct filter_expr *expr;
 
