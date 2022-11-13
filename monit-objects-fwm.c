@@ -157,6 +157,9 @@ fwm_config(struct aajson *a, aajson_val *value,
 		}
 		memset(&tmp[i], 0, sizeof(struct mo_fwm));
 
+		/* by default fw is enabled */
+		atomic_init(&tmp[i].enabled_cnt, 1);
+
 		mo->fwms = tmp;
 		mo->nfwm = i + 1;
 	}
@@ -187,6 +190,11 @@ fwm_config(struct aajson *a, aajson_val *value,
 
 			window->dont_create_index = 1;
 		}
+	} else if (STRCMP(a, 3, "disabled") == 0) {
+		if (value->type == AAJSON_VALUE_TRUE) {
+			atomic_init(&window->enabled_cnt, 0);
+		}
+		/* other values for 'disabled' ignored */
 	}
 
 	return 1;

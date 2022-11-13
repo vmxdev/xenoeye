@@ -49,6 +49,8 @@ struct fwm_data
 
 struct mo_fwm
 {
+	_Atomic int enabled_cnt;
+
 	char name[TOKEN_MAX_SIZE];
 	struct mo_fieldset fieldset;
 
@@ -84,6 +86,13 @@ struct mavg_data
 	tkvdb_tr *ovr_db[2];
 };
 
+struct mavg_limit_ext_stat
+{
+	char mo_name[TOKEN_MAX_SIZE];
+	char name[TOKEN_MAX_SIZE];
+	_Atomic int *ptr;
+};
+
 struct mavg_limit
 {
 	char name[PATH_MAX];
@@ -91,6 +100,10 @@ struct mavg_limit
 
 	char action_script[MAVG_SCRIPT_STR_SIZE];
 	char back2norm_script[MAVG_SCRIPT_STR_SIZE];
+
+	/* extended statistics on overlimit */
+	struct mavg_limit_ext_stat *ext_stat;
+	size_t n_ext_stat;
 
 	tkvdb_tr *db;
 
@@ -175,9 +188,11 @@ void *fwm_bg_thread(void *);
 int mavg_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
 int mavg_fields_init(size_t nthreads, struct mo_mavg *window);
 int mavg_limits_init(struct mo_mavg *window);
+void monit_objects_mavg_link_ext_stat(struct xe_data *globl);
 int monit_object_mavg_process_nf(struct xe_data *globl,
 	struct monit_object *mo, size_t thread_id,
 	uint64_t time_ns, struct nf_flow_info *flow);
+
 
 void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);

@@ -159,6 +159,7 @@ fail_open:
 	return ret;
 }
 
+
 int
 monit_objects_init(struct xe_data *data)
 {
@@ -243,6 +244,9 @@ monit_objects_init(struct xe_data *data)
 
 	closedir(d);
 
+	/* all monitoring objects are parsed, so we can link extended stats */
+	monit_objects_mavg_link_ext_stat(data);
+
 	/* create thread for background processing fixed windows in memory */
 	thread_err = pthread_create(&data->fwm_tid, NULL,
 		&fwm_bg_thread, data);
@@ -262,7 +266,7 @@ monit_objects_init(struct xe_data *data)
 		goto fail_mavgthread;
 	}
 
-	/* auxiliary background thread */
+	/* dump thread */
 	thread_err = pthread_create(&data->mavg_dump_tid, NULL,
 		&mavg_dump_thread, data);
 
@@ -373,14 +377,29 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 {
 	size_t i, j, f;
 
+	/* fixed windows */
 	for (i=0; i<mo->nfwm; i++) {
+		int enabled;
 		tkvdb_tr *tr;
 		TKVDB_RES rc;
 		tkvdb_datum dtkey, dtval;
 
-		struct mo_fwm *fwm = &mo->fwms[i];
-		struct fwm_data *fdata = &fwm->data[thread_id];
-		uint8_t *key = fdata->key;
+		struct mo_fwm *fwm;
+		struct fwm_data *fdata;
+		uint8_t *key;
+
+		fwm = &mo->fwms[i];
+
+		/* check state */
+		enabled = atomic_load_explicit(&fwm->enabled_cnt,
+			memory_order_relaxed);
+
+		if (!enabled) {
+			continue;
+		}
+
+		fdata = &fwm->data[thread_id];
+		key = fdata->key;
 
 		/* make key */
 		for (f=0; f<fwm->fieldset.n_naggr; f++) {

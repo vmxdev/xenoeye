@@ -231,6 +231,43 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 		strcpy(l->action_script, value->str);
 	} else if (STRCMP(a, 5, "back2norm-script") == 0) {
 		strcpy(l->back2norm_script, value->str);
+	} else if (STRCMP(a, 5, "ext") == 0) {
+		/* extended statistics */
+		if (a->path_stack[6].type != AAJSON_PATH_ITEM_ARRAY) {
+			LOG("'ext' must be array");
+			return 0;
+		}
+
+		i = a->path_stack[6].data.array_idx;
+		if (i >= l->n_ext_stat) {
+			struct mavg_limit_ext_stat *tmp;
+			char *delim;
+
+			/* append new extended table (fwm) */
+			tmp = realloc(l->ext_stat,
+				(i + 1) * sizeof(struct mavg_limit_ext_stat));
+			if (!tmp) {
+				LOG("realloc() failed");
+				return 0;
+			}
+
+			/* parse name and optional monitoring object */
+			delim = strchr(value->str, '/');
+			if (delim) {
+				*delim = '\0';
+				strcpy(tmp[i].mo_name, value->str);
+				strcpy(tmp[i].name, delim + 1);
+			} else {
+				tmp[i].mo_name[0] = '\0';
+				strcpy(tmp[i].name, value->str);
+			}
+
+			/* init pointer */
+			tmp[i].ptr = NULL;
+
+			l->ext_stat = tmp;
+			l->n_ext_stat = i + 1;
+		}
 	}
 
 	return 1;
@@ -736,5 +773,85 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 	}
 
 	return 1;
+}
+
+
+static void
+monit_objects_mavg_link(struct monit_object *mo, struct mavg_limit_ext_stat *e)
+{
+	size_t i;
+
+	/* for each fwm in monitoring object */
+	for (i=0; i<mo->nfwm; i++) {
+		struct mo_fwm *fwm = &mo->fwms[i];
+
+		if (strcmp(fwm->name, e->name) == 0) {
+			e->ptr = &fwm->enabled_cnt;
+			break;
+		}
+	}
+}
+
+
+static void
+monit_objects_mavg_link_d(struct xe_data *globl, struct mavg_limit_ext_stat *e)
+{
+	size_t i;
+
+	/* for each monitoring object */
+	for (i=0; i<globl->nmonit_objects; i++) {
+		struct monit_object *mo = &globl->monit_objects[i];
+
+		if (strcmp(e->mo_name, mo->name) == 0) {
+			/* found */
+			monit_objects_mavg_link(mo, e);
+			break;
+		}
+	}
+}
+
+
+static void
+monit_objects_mavg_link_mo(struct xe_data *globl, struct monit_object *mo)
+{
+	size_t i, j, k;
+
+	/* for each moving average */
+	for (i=0; i<mo->nmavg; i++) {
+		struct mo_mavg *mw = &mo->mavgs[i];
+
+		/* for each overlimit set */
+		for (j=0; j<mw->noverlimit; j++) {
+			struct mavg_limit *lm = &mw->overlimit[j];
+
+			/* for each ext table */
+			for (k=0; k<lm->n_ext_stat; k++) {
+				struct mavg_limit_ext_stat *e
+					= &lm->ext_stat[k];
+
+				if (!*e->mo_name) {
+					/* same monitoring object */
+					monit_objects_mavg_link(mo, e);
+				} else {
+					/* different monitoring object */
+					monit_objects_mavg_link_d(globl, e);
+				}
+			}
+		}
+	}
+}
+
+
+void
+monit_objects_mavg_link_ext_stat(struct xe_data *globl)
+{
+	size_t i;
+
+	/* for each monitoring object */
+	for (i=0; i<globl->nmonit_objects; i++) {
+		struct monit_object *mo = &globl->monit_objects[i];
+
+		monit_objects_mavg_link_mo(globl, mo);
+	}
 }
 

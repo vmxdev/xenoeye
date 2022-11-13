@@ -175,6 +175,32 @@ exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
 	}
 }
 
+
+static void
+ext_stats_toggle(struct mo_mavg *mw, int on)
+{
+	size_t i, j;
+
+	for (i=0; i<mw->noverlimit; i++) {
+		struct mavg_limit *ml = &mw->overlimit[i];
+
+		for (j=0; j<ml->n_ext_stat; j++) {
+			struct mavg_limit_ext_stat *e = &ml->ext_stat[j];
+
+			if (e->ptr) {
+				if (on) {
+					atomic_fetch_add_explicit(e->ptr, 1,
+						memory_order_relaxed);
+				} else {
+					atomic_fetch_sub_explicit(e->ptr, 1,
+						memory_order_relaxed);
+				}
+			}
+		}
+	}
+}
+
+
 static void
 on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	struct mavg_ovrlm_data *ovr, char *mo_name)
@@ -184,6 +210,9 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	char filecont[1024];
 	size_t limit_id;
 	char *script;
+
+	/* turn on extended statistics */
+	ext_stats_toggle(mw, 1);
 
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		LOG("Can't create file");
@@ -256,6 +285,9 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	char filecont[1024];
 	size_t limit_id;
 	char *script;
+
+	/* turn off extended statistics */
+	ext_stats_toggle(mw, 0);
 
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		return;
