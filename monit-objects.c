@@ -194,6 +194,11 @@ monit_objects_init(struct xe_data *data)
 		}
 
 		sprintf(mofile, "%s/%s/mo.conf", data->mo_dir, dir->d_name);
+		if (strlen(mofile) >= PATH_MAX) {
+			LOG("Filename too big: %s/%s", data->mo_dir, dir->d_name);
+			continue;
+		}
+
 		LOG("Adding monitoring object '%s'", dir->d_name);
 
 		if (!monit_object_info_parse(data, dir->d_name, mofile)) {
@@ -218,10 +223,18 @@ monit_objects_init(struct xe_data *data)
 		/* moving averages */
 		for (i=0; i<mo->nmavg; i++) {
 			struct mo_mavg *mavg = &mo->mavgs[i];
+			char tmp_pfx[PATH_MAX * 3];
 
 			/* make prefix for notification files */
-			sprintf(mavg->notif_pfx, "%s/%s-%s",
+			sprintf(tmp_pfx, "%s/%s-%s",
 				data->notif_dir, mo->name, mavg->name);
+
+			if (strlen(tmp_pfx) >= PATH_MAX) {
+				LOG("Filename too big: %s/%s", mo->dir, mavg->name);
+				return 0;
+			}
+
+			strcpy(mavg->notif_pfx, tmp_pfx);
 
 			if (!mavg_fields_init(data->nthreads, mavg)) {
 				return 0;
@@ -239,7 +252,8 @@ monit_objects_init(struct xe_data *data)
 		}
 
 		/* store path to monitoring object directory */
-		sprintf(mo->dir, "%s/%s/", data->mo_dir, dir->d_name);
+		sprintf(mofile, "%s/%s/", data->mo_dir, dir->d_name);
+		strcpy(mo->dir, mofile);
 	}
 
 	closedir(d);

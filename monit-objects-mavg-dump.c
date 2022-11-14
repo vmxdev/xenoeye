@@ -123,7 +123,7 @@ mavg_dump_do(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo,
 	int append)
 {
 	FILE *f;
-	char dump_path[PATH_MAX];
+	char dump_path[PATH_MAX * 2];
 	size_t i;
 	char timebuf[100];
 	time_t t;
@@ -136,6 +136,11 @@ mavg_dump_do(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo,
 
 	sprintf(dump_path, append? "%s/%s.adump" : "%s/%s.dump",
 		mo->dir, mavg->name);
+
+	if (strlen(dump_path) >= PATH_MAX) {
+		LOG("Filename too big: %s/%s", mo->dir, mavg->name);
+		return 0;
+	}
 
 	f = fopen(dump_path, append? "a": "w");
 	if (!f) {
@@ -163,11 +168,16 @@ mavg_dump_do(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo,
 static int
 mavg_dump(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo)
 {
-	char enabled[PATH_MAX];
+	char enabled[PATH_MAX * 2];
 	struct stat statbuf;
 	int dump = 0, append = 0;
 
 	sprintf(enabled, "%s/%s.d", mo->dir, mavg->name);
+	if (strlen(enabled) >= PATH_MAX) {
+		LOG("Filename too big: %s/%s", mo->dir, mavg->name);
+		return 0;
+	}
+
 	if (stat(enabled, &statbuf) == 0) {
 		dump = 1;
 	}
