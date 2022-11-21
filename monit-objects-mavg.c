@@ -52,7 +52,7 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 
 	if (window->noverlimit > 1) {
 		val_itemsize = sizeof(struct mavg_val)
-			+ sizeof(__float128) * (window->noverlimit - 1);
+			+ sizeof(MAVG_TYPE) * (window->noverlimit - 1);
 	} else {
 		val_itemsize = sizeof(struct mavg_val);
 	}
@@ -206,7 +206,7 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 		}
 		memset(&tmp[i], 0, sizeof(struct mavg_limit));
 
-		tmp[i].def = malloc(n_aggr * sizeof(__float128));
+		tmp[i].def = malloc(n_aggr * sizeof(MAVG_TYPE));
 		if (!tmp[i].def) {
 			free(tmp);
 			LOG("malloc() failed");
@@ -338,7 +338,7 @@ mavg_config(struct aajson *a, aajson_val *value,
 
 static int
 mavg_limits_parse_line(struct mo_mavg *window, char *line, uint8_t *key,
-	__float128 *val)
+	MAVG_TYPE *val)
 {
 	char* token;
 	const char separators[] = ",";
@@ -418,7 +418,7 @@ mavg_limits_file_load(struct mo_mavg *window, struct mavg_limit *l)
 	tkvdb_datum dtk, dtv;
 	TKVDB_RES rc;
 	uint8_t *key;
-	__float128 *val;
+	MAVG_TYPE *val;
 
 	FILE *f = fopen(l->file, "r");
 	if (!f) {
@@ -428,13 +428,13 @@ mavg_limits_file_load(struct mo_mavg *window, struct mavg_limit *l)
 	}
 
 	key = window->data[0].key;
-	val = alloca(sizeof(__float128) * window->fieldset.n_aggr);
+	val = alloca(sizeof(MAVG_TYPE) * window->fieldset.n_aggr);
 
 	dtk.data = key;
 	dtk.size = window->data[0].keysize;
 
 	dtv.data = val;
-	dtv.size = sizeof(__float128) * window->fieldset.n_aggr;
+	dtv.size = sizeof(MAVG_TYPE) * window->fieldset.n_aggr;
 
 	for (;;) {
 		char line[2048], *trline;
@@ -506,7 +506,7 @@ mavg_limits_init(struct mo_mavg *window)
 /* react on overlimit */
 static void
 mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
-	size_t limit_id, __float128 counterval, __float128 lim,
+	size_t limit_id, MAVG_TYPE counterval, MAVG_TYPE lim,
 	uint64_t time_ns)
 {
 	TKVDB_RES rc;
@@ -549,17 +549,17 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 
 static void
 mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
-	struct mavg_data *data,	uint8_t *vptr, __float128 *vals,
+	struct mavg_data *data,	uint8_t *vptr, MAVG_TYPE *vals,
 	uint64_t time_ns)
 {
 	size_t i, j;
 
 	for (i=0; i<mavg->fieldset.n_aggr; i++) {
-		__float128 val;
+		MAVG_TYPE val;
 		struct mavg_val *pval;
 
 		pval = MAVG_VAL(vptr, i, data->valsize);
-		val = vals[i] / (__float128)mavg->size_secs;
+		val = vals[i] / (MAVG_TYPE)mavg->size_secs;
 
 		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
@@ -571,11 +571,11 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 }
 
 static void
-mavg_recalc(_Atomic __float128 *oldval_p, _Atomic uint64_t *old_time_ns_p,
-	__float128 val, uint64_t time_ns, __float128 wndsize,
-	_Atomic __float128 *res)
+mavg_recalc(_Atomic MAVG_TYPE *oldval_p, _Atomic uint64_t *old_time_ns_p,
+	MAVG_TYPE val, uint64_t time_ns, MAVG_TYPE wndsize,
+	_Atomic MAVG_TYPE *res)
 {
-	__float128 oldval, tmdiff;
+	MAVG_TYPE oldval, tmdiff;
 	uint64_t old_time_ns;
 
 	oldval = atomic_load_explicit(oldval_p, memory_order_relaxed);
@@ -597,7 +597,7 @@ mavg_recalc(_Atomic __float128 *oldval_p, _Atomic uint64_t *old_time_ns_p,
 
 static void
 mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
-	uint64_t time_ns, struct mavg_data *data, __float128 *vals)
+	uint64_t time_ns, struct mavg_data *data, MAVG_TYPE *vals)
 {
 	size_t i, j;
 
@@ -605,7 +605,7 @@ mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
 
 	for (i=0; i<mavg->fieldset.n_aggr; i++) {
 		struct field *fld = &mavg->fieldset.aggr[i];
-		__float128 val;
+		MAVG_TYPE val;
 		struct mavg_val *pval;
 
 		val = monit_object_nf_val(flow, fld)
@@ -625,7 +625,7 @@ mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
 			rc = tr->get(tr, &dtkey, &dtval);
 			if (rc == TKVDB_OK) {
 				/* found, using value as limit */
-				__float128 *limptr = (__float128 *)dtval.data;
+				MAVG_TYPE *limptr = (MAVG_TYPE *)dtval.data;
 				pval->limits_max[j] = *limptr;
 			} else {
 				/* not found, using default */
@@ -653,7 +653,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 		tkvdb_tr *tr;
 		TKVDB_RES rc;
 		tkvdb_datum dtkey, dtval, nval;
-		__float128 wndsize;
+		MAVG_TYPE wndsize;
 
 		struct mo_mavg *mavg = &mo->mavgs[i];
 		struct mavg_data *data = &mavg->data[thread_id];
@@ -661,8 +661,8 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 		uint8_t *key = data->key;
 
 		/* reserve space for merged values */
-		__float128 *mvals = alloca(mavg->fieldset.n_aggr
-			* sizeof(__float128));
+		MAVG_TYPE *mvals = alloca(mavg->fieldset.n_aggr
+			* sizeof(MAVG_TYPE));
 
 		/* window size in nanoseconds */
 		wndsize = mavg->size_secs * 1e9;
@@ -687,7 +687,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			/* update existing values */
 			for (i=0; i<mavg->fieldset.n_aggr; i++) {
 				struct field *fld = &mavg->fieldset.aggr[i];
-				__float128 val;
+				MAVG_TYPE val;
 				struct mavg_val *pval;
 
 				val = monit_object_nf_val(flow, fld)
@@ -727,7 +727,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 							&pval->time_prev,
 							mvals[i], time_ns,
 							wndsize,
-							(_Atomic __float128 *)&mvals[i]);
+							(_Atomic MAVG_TYPE *)&mvals[i]);
 
 						/* update time */
 						atomic_store_explicit(

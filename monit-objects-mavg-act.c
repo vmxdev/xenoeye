@@ -78,7 +78,7 @@ build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 static int
 build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
-	__float128 val, __float128 limit)
+	MAVG_TYPE val, MAVG_TYPE limit)
 {
 	size_t i;
 	FILE *fcont;
@@ -113,7 +113,7 @@ build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
 
 static void
 exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
-	char *script, char *filename, __float128 val, __float128 limit)
+	char *script, char *filename, MAVG_TYPE val, MAVG_TYPE limit)
 {
 	int pid;
 	char **args;
@@ -240,14 +240,14 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 static void
 on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, uint64_t time_ns, __float128 wnd_size_ns)
+	struct mavg_ovrlm_data *ovr, uint64_t time_ns, MAVG_TYPE wnd_size_ns)
 {
 	FILE *f;
 	char filename[PATH_MAX];
 	char filecont[1024];
 	size_t limit_id;
 
-	__float128 val;
+	MAVG_TYPE val;
 
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		LOG("Update failed");
@@ -308,7 +308,7 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 }
 
 static int
-act(struct mo_mavg *mw, tkvdb_tr *db, __float128 wnd_size_ns, char *mo_name)
+act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name)
 {
 	int ret = 0;
 	tkvdb_cursor *c;

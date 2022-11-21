@@ -15,6 +15,9 @@
 
 #define MAVG_SCRIPT_STR_SIZE (10*1024)
 
+/*#define MAVG_TYPE __float128*/
+#define MAVG_TYPE double
+
 struct xe_data;
 struct nf_flow_info;
 
@@ -68,9 +71,9 @@ struct mo_fwm
 /* moving average */
 struct mavg_val
 {
-	_Atomic __float128 val;
+	_Atomic MAVG_TYPE val;
 	_Atomic uint64_t time_prev;
-	__float128 limits_max[1]; /* growing array (noverlimit items) */
+	MAVG_TYPE limits_max[1]; /* growing array (noverlimit items) */
 };
 
 struct mavg_data
@@ -108,7 +111,7 @@ struct mavg_limit
 	tkvdb_tr *db;
 
 	/* default */
-	__float128 *def;
+	MAVG_TYPE *def;
 };
 
 enum MAVG_OVRLM_TYPE
@@ -122,8 +125,8 @@ struct mavg_ovrlm_data
 {
 	enum MAVG_OVRLM_TYPE type;
 	uint64_t time_dump, time_last;
-	__float128 val;
-	__float128 limit;
+	MAVG_TYPE val;
+	MAVG_TYPE limit;
 };
 
 struct mo_mavg
