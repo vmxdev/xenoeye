@@ -340,8 +340,7 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name)
 			goto skip;
 		}
 
-		/* FIXME: move timeout to config */
-		if ((val->time_last + 20*1e9) < time_ns) {
+		if ((val->time_last + val->back2norm_time_ns) < time_ns) {
 			/* traffic is back to normal */
 			on_back_to_norm(mw, c->key(c), c->keysize(c), val,
 				mo_name);
@@ -431,6 +430,8 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 				val_glb->time_dump = 0;
 				val_glb->val = val_thr->val;
 				val_glb->limit = val_thr->limit;
+				val_glb->back2norm_time_ns
+					= val_thr->back2norm_time_ns;
 			}
 			/* don't touch items with type MAVG_OVRLM_NEW */
 		} else {
@@ -442,6 +443,7 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 			val.time_dump = 0;
 			val.val = val_thr->val;
 			val.limit = val_thr->limit;
+			val.back2norm_time_ns = val_thr->back2norm_time_ns;
 
 			dtv.data = &val;
 			dtv.size = c->valsize(c);

@@ -11,6 +11,8 @@
 
 #define MAVG_DEFAULT_SIZE 5
 
+#define MAVG_DEFAULT_BACK2NORM 30
+
 #define MAVG_DEFAULT_TR_SIZE (1024*1024*256)
 
 #define MAVG_SCRIPT_STR_SIZE (10*1024)
@@ -101,6 +103,8 @@ struct mavg_limit
 	char name[PATH_MAX];
 	char file[PATH_MAX];
 
+	MAVG_TYPE back2norm_time_ns;
+
 	char action_script[MAVG_SCRIPT_STR_SIZE];
 	char back2norm_script[MAVG_SCRIPT_STR_SIZE];
 
@@ -127,6 +131,7 @@ struct mavg_ovrlm_data
 	uint64_t time_dump, time_last;
 	MAVG_TYPE val;
 	MAVG_TYPE limit;
+	MAVG_TYPE back2norm_time_ns;
 };
 
 struct mo_mavg

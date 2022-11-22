@@ -206,6 +206,8 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 		}
 		memset(&tmp[i], 0, sizeof(struct mavg_limit));
 
+		tmp[i].back2norm_time_ns = MAVG_DEFAULT_BACK2NORM * 1e9;
+
 		tmp[i].def = malloc(n_aggr * sizeof(MAVG_TYPE));
 		if (!tmp[i].def) {
 			free(tmp);
@@ -231,6 +233,16 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 		strcpy(l->action_script, value->str);
 	} else if (STRCMP(a, 5, "back2norm-script") == 0) {
 		strcpy(l->back2norm_script, value->str);
+	} else if (STRCMP(a, 5, "back2norm-time") == 0) {
+		int back2norm_time = atoi(value->str);
+
+		if (back2norm_time <= 0) {
+			LOG("Incorrect 'back2norm-time' value '%s', using %d",
+				value->str, MAVG_DEFAULT_BACK2NORM);
+			back2norm_time= MAVG_DEFAULT_BACK2NORM;
+		}
+
+		l->back2norm_time_ns = back2norm_time * 1e9;
 	} else if (STRCMP(a, 5, "ext") == 0) {
 		/* extended statistics */
 		if (a->path_stack[6].type != AAJSON_PATH_ITEM_ARRAY) {
@@ -506,12 +518,11 @@ mavg_limits_init(struct mo_mavg *window)
 /* react on overlimit */
 static void
 mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
-	size_t limit_id, MAVG_TYPE counterval, MAVG_TYPE lim,
-	uint64_t time_ns)
+	size_t limit_id, struct mavg_ovrlm_data *od)
 {
 	TKVDB_RES rc;
 	tkvdb_datum dtk, dtv;
-	struct mavg_ovrlm_data val;
+	/*struct mavg_ovrlm_data val;*/
 	tkvdb_tr *db;
 
 	size_t ovr_idx;
@@ -528,16 +539,10 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 	dtk.data = data->key;
 	dtk.size = data->key_fullsize;
 
-	dtv.data = &val;
+	dtv.data = od;
 	dtv.size = sizeof(struct mavg_ovrlm_data);
 
-
-	val.time_last = time_ns;
-
-	val.val = counterval;
-	val.limit = lim;
-
-	/* put without checks */
+	/* put without checks if this item exists */
 	rc = db->put(db, &dtk, &dtv);
 	if (rc != TKVDB_OK) {
 		LOG("Can't append item to db with "\
@@ -563,8 +568,15 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 
 		for (j=0; j<mavg->noverlimit; j++) {
 			if (val >= pval->limits_max[j]) {
-				mavg_on_overlimit(globl, data, j,
-					val, pval->limits_max[j], time_ns);
+				struct mavg_ovrlm_data od;
+
+				od.time_last = time_ns;
+				od.val = val;
+				od.limit = pval->limits_max[j];
+				od.back2norm_time_ns
+					= mavg->overlimit[j].back2norm_time_ns;
+
+				mavg_on_overlimit(globl, data, j, &od);
 			}
 		}
 	}
