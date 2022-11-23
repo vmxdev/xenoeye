@@ -38,6 +38,7 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 	size_t i;
 	int ret = 0;
 	tkvdb_cursor *c;
+	size_t mem_used;
 
 	MAVG_TYPE wnd_size_ns;
 
@@ -62,6 +63,12 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 		ret = 1;
 		goto empty;
 	}
+
+	/* print memory used by database */
+	mem_used = tr->mem(tr);
+	fprintf(out, "mem used/avail: %luM/%luM (%lu/%lu bytes)\n",
+		1 + mem_used / (1024 * 1024), mavg->db_mem / (1024 * 1024),
+		mem_used, mavg->db_mem);
 
 	/* iterate over all set */
 	do {

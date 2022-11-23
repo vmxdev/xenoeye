@@ -40,7 +40,7 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 	params = tkvdb_params_create();
 	tkvdb_param_set(params, TKVDB_PARAM_ALIGNVAL, 16);
 	tkvdb_param_set(params, TKVDB_PARAM_TR_DYNALLOC, 0);
-	tkvdb_param_set(params, TKVDB_PARAM_TR_LIMIT, MAVG_DEFAULT_TR_SIZE);
+	tkvdb_param_set(params, TKVDB_PARAM_TR_LIMIT, window->db_mem);
 
 	params_ovr = tkvdb_params_create();
 	tkvdb_param_set(params_ovr, TKVDB_PARAM_ALIGNVAL, 16);
@@ -309,6 +309,9 @@ mavg_config(struct aajson *a, aajson_val *value,
 		}
 		memset(&tmp[i], 0, sizeof(struct mo_mavg));
 
+		/* default db size */
+		tmp[i].db_mem = MAVG_DEFAULT_DB_SIZE;
+
 		mo->mavgs = tmp;
 		mo->nmavg = i + 1;
 	}
@@ -337,6 +340,16 @@ mavg_config(struct aajson *a, aajson_val *value,
 		}
 
 		window->dump_secs = tmp_time;
+	} else if (STRCMP(a, 3, "mem-m") == 0) {
+		int tmp_mem = atoi(value->str);
+		if (tmp_mem < 0) {
+			LOG("Incorrect db size '%s', using default %dM",
+				value->str,
+				MAVG_DEFAULT_DB_SIZE / (1024 * 1024));
+			window->db_mem = MAVG_DEFAULT_DB_SIZE;
+		} else {
+			window->db_mem = tmp_mem * 1024 * 1024;
+		}
 	} else if (STRCMP(a, 3, "overlimit") == 0) {
 		if (!mavg_config_limit(a, value, window,
 			window->fieldset.n_aggr)) {
@@ -522,7 +535,6 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 {
 	TKVDB_RES rc;
 	tkvdb_datum dtk, dtv;
-	/*struct mavg_ovrlm_data val;*/
 	tkvdb_tr *db;
 
 	size_t ovr_idx;

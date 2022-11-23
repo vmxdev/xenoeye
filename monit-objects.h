@@ -13,7 +13,7 @@
 
 #define MAVG_DEFAULT_BACK2NORM 30
 
-#define MAVG_DEFAULT_TR_SIZE (1024*1024*256)
+#define MAVG_DEFAULT_DB_SIZE (1024*1024*256)
 
 #define MAVG_SCRIPT_STR_SIZE (10*1024)
 
@@ -151,6 +151,8 @@ struct mo_mavg
 
 	/* global database of overlimited items */
 	tkvdb_tr *glb_ovr_db;
+
+	size_t db_mem;
 
 	/* each thread has it's own data */
 	size_t nthreads;
