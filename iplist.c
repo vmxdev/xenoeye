@@ -247,7 +247,10 @@ iplist_try_load(const char *filename, const char *listname)
 		char *mask_sym;
 		int mask = 32;
 
-		fgets(line, sizeof(line) - 1, f);
+		if (!fgets(line, sizeof(line) - 1, f)) {
+			break;
+		}
+
 		if (feof(f)) {
 			break;
 		}
