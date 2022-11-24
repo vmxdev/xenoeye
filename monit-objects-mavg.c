@@ -69,6 +69,7 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 
 	for (i=0; i<nthreads; i++) {
 		struct mavg_data *data = &window->data[i];
+		tkvdb_tr *tmp_db;
 
 		data->keysize = keysize;
 		/* allocate memory for key plus level number */
@@ -88,13 +89,15 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 		}
 
 		/* init database */
-		data->tr = tkvdb_tr_create(NULL, params);
-		if (!data->tr) {
+		tmp_db = tkvdb_tr_create(NULL, params);
+		if (!tmp_db) {
 			LOG("tkvdb_tr_create() failed");
 			return 0;
 		}
 
-		data->tr->begin(data->tr);
+		tmp_db->begin(tmp_db);
+		atomic_store_explicit(&data->db, tmp_db, memory_order_relaxed);
+
 
 		/* init databases with limits */
 		data->ovr_db[0] = tkvdb_tr_create(NULL, params_ovr);
@@ -666,6 +669,116 @@ mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
 	}
 }
 
+/* try to reset MA database when there is not enough memory in it */
+static int
+try_reset_db(struct mo_mavg *mavg, struct mavg_data *thr_data)
+{
+	tkvdb_cursor *c;
+	int ret = 0;
+
+	struct timespec tmsp;
+	uint64_t time_ns;
+
+	MAVG_TYPE wndsize;
+
+	tkvdb_params *params;
+	tkvdb_tr *newdb, *olddb;
+
+	/* create new database with the same params as old */
+	params = tkvdb_params_create();
+	tkvdb_param_set(params, TKVDB_PARAM_ALIGNVAL, 16);
+	tkvdb_param_set(params, TKVDB_PARAM_TR_DYNALLOC, 0);
+	tkvdb_param_set(params, TKVDB_PARAM_TR_LIMIT, mavg->db_mem);
+
+	/* create new database */
+	newdb = tkvdb_tr_create(NULL, params);
+	if (!newdb) {
+		LOG("tkvdb_tr_create() failed");
+		goto newdb_fail;
+	}
+
+	tkvdb_params_free(params);
+
+	newdb->begin(newdb);
+
+	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
+		LOG("clock_gettime() failed: %s", strerror(errno));
+		goto clock_fail;
+	}
+	time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
+
+	/* window size in nanoseconds */
+	wndsize = mavg->size_secs * 1e9;
+
+	olddb = atomic_load_explicit(&thr_data->db, memory_order_relaxed);
+
+	c = tkvdb_cursor_create(olddb);
+	if (!c) {
+		LOG("tkvdb_cursor_create() failed");
+		goto cursor_fail;
+	}
+
+	if (c->first(c) != TKVDB_OK) {
+		LOG("c->first() failed");
+		goto first_failed;
+	}
+
+	/* iterate over all set */
+	do {
+		size_t i;
+		int keep = 0;
+
+		tkvdb_datum dtk = c->key_datum(c);
+		tkvdb_datum dtv = c->val_datum(c);
+
+		for (i=0; i<mavg->fieldset.n_aggr; i++) {
+			struct mavg_val *pval;
+
+			pval = MAVG_VAL(((uint8_t *)dtv.data), i,
+				thr_data->valsize);
+
+			/* check when this item was last used */
+			if ((pval->time_prev + wndsize) > time_ns) {
+				/* if no later than window size,
+				   save in new database */
+				keep = 1;
+			}
+		}
+
+		if (keep) {
+			TKVDB_RES rc = newdb->put(newdb, &dtk, &dtv);
+			if (rc != TKVDB_OK) {
+				LOG("put() failed with code %d", rc);
+				goto put_failed;
+			}
+		}
+
+	} while (c->next(c) == TKVDB_OK);
+
+	/* replace old database with new one */
+	atomic_store_explicit(&thr_data->db, newdb, memory_order_relaxed);
+
+	/* sleep a bit to wait for other threads to finish working with the
+	   old database*/
+	usleep(10);
+
+	/* destroy old database */
+	olddb->free(olddb);
+
+	ret = 1;
+
+put_failed:
+first_failed:
+	c->free(c);
+
+cursor_fail:
+clock_fail:
+	newdb->free(newdb);
+
+newdb_fail:
+
+	return ret;
+}
 
 int
 monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
@@ -674,7 +787,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 	size_t i, f, t;
 
 	for (i=0; i<mo->nmavg; i++) {
-		tkvdb_tr *tr;
+		tkvdb_tr *db;
 		TKVDB_RES rc;
 		tkvdb_datum dtkey, dtval, nval;
 		MAVG_TYPE wndsize;
@@ -700,13 +813,13 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			key += fld->size;
 		}
 
-		tr = data->tr;
+		db = atomic_load_explicit(&data->db, memory_order_relaxed);
 
 		dtkey.data = data->key;
 		dtkey.size = data->keysize;
 
 		/* search for key */
-		rc = tr->get(tr, &dtkey, &dtval);
+		rc = db->get(db, &dtkey, &dtval);
 		if (rc == TKVDB_OK) {
 			/* update existing values */
 			for (i=0; i<mavg->fieldset.n_aggr; i++) {
@@ -732,6 +845,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			/* values from another threads */
 			for (t=0; t<mavg->nthreads; t++) {
 				struct mavg_data *ndata;
+				tkvdb_tr *ndb;
 
 				if (t == thread_id) {
 					/* skip self thread */
@@ -739,7 +853,9 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 				}
 
 				ndata = &mavg->data[t];
-				rc = ndata->tr->get(ndata->tr, &dtkey, &nval);
+				ndb = atomic_load_explicit(&ndata->db,
+					memory_order_relaxed);
+				rc = ndb->get(ndb, &dtkey, &nval);
 				if (rc == TKVDB_OK) {
 					for (i=0; i<mavg->fieldset.n_aggr; i++) {
 						struct mavg_val *pval;
@@ -768,6 +884,11 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			size_t j;
 			/* try to add new key-value pair */
 
+			if (data->db_is_full) {
+				/* skip */
+				continue;
+			}
+
 			/*
 			 * FIXME: it's not really needed, trying to suppress
 			 * valgring warning
@@ -784,11 +905,19 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			dtval.data = data->val;
 			dtval.size = data->valsize;
 
-			rc = tr->put(tr, &dtkey, &dtval);
-			if (rc == TKVDB_OK) {
-			} else if (rc == TKVDB_ENOMEM) {
+			rc = db->put(db, &dtkey, &dtval);
+
+			if (rc == TKVDB_ENOMEM) {
 				/* FIXME: out of memory */
-			} else {
+				LOG("Not enough memory for MA database, "
+					"please increase value of 'mem-m'");
+				if (!try_reset_db(mavg, data)) {
+					LOG("Can't cleanup MA database, all "
+						"new items will be discarded");
+
+					data->db_is_full = 1;
+				}
+			} else if (rc != TKVDB_OK) {
 				LOG("Can't insert data, error code %d", rc);
 			}
 		} else {

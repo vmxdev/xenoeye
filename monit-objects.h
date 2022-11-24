@@ -80,7 +80,9 @@ struct mavg_val
 
 struct mavg_data
 {
-	tkvdb_tr *tr;
+	/* atomic pointer to database */
+	tkvdb_tr *_Atomic db;
+	int db_is_full;
 
 	uint8_t *key;
 	uint8_t *val; /* array of struct mavg_val */

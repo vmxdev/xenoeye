@@ -158,8 +158,12 @@ mavg_dump_do(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo,
 	fprintf(f, "%s", ctime_r(&t, timebuf));
 
 	for (i=0; i<nthreads; i++) {
-		mavg_dump_tr(f, mavg, mavg->data[i].tr,
-			mavg->data[i].val_itemsize);
+		tkvdb_tr *db;
+
+		db = atomic_load_explicit(&mavg->data[i].db,
+			memory_order_relaxed);
+
+		mavg_dump_tr(f, mavg, db, mavg->data[i].val_itemsize);
 	}
 
 	if (append) {
