@@ -271,6 +271,10 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 			monit_object_process_nf(data, mo, thread_id,
 				npi->time_ns, &flow);
 		}
+#ifdef FLOWS_CNT
+		atomic_fetch_add_explicit(&data->nflows, 1,
+			memory_order_relaxed);
+#endif
 	}
 	(*ptr) += length;
 	return 1;
@@ -449,7 +453,6 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 	struct template_key tkey;
 	int template_field_count;
 	int stop = 0;
-	int flow_num = 0;
 	size_t t_id;
 
 /*
@@ -475,7 +478,6 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 			break;
 		}
 
-		/*LOG("flow #%d", flow_num);*/
 		memset(&flow, 0, sizeof(struct nf_flow_info));
 		tmpfptr = fptr;
 
@@ -529,8 +531,10 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 			monit_object_process_nf(data, mo, thread_id,
 				npi->time_ns, &flow);
 		}
-
-		flow_num++;
+#ifdef FLOWS_CNT
+		atomic_fetch_add_explicit(&data->nflows, 1,
+			memory_order_relaxed);
+#endif
 	}
 	return 1;
 }

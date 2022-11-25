@@ -53,6 +53,26 @@ print_usage(const char *progname)
 	fprintf(stderr, "    -h print this message\n");
 }
 
+
+#ifdef FLOWS_CNT
+static void*
+fc_thread(void *arg)
+{
+	struct xe_data *globl = arg;
+
+	uint64_t flows = 0;
+	int timeout = 10;
+
+	for (;;) {
+		sleep(timeout);
+		LOG("fps: %lu", (globl->nflows - flows) / timeout);
+		flows = globl->nflows;
+	}
+
+	return NULL;
+}
+#endif
+
 static int
 config_adjust_cap_size(struct xe_data *data, size_t idx)
 {
@@ -474,6 +494,18 @@ main(int argc, char *argv[])
 
 	LOG("Allow templates in future: %s",
 		data.allow_templates_in_future ? "yes": "no");
+
+#ifdef FLOWS_CNT
+	{
+		int thread_err = pthread_create(&data.fc_tid, NULL,
+			&fc_thread, &data);
+
+		if (thread_err) {
+			LOG("Can't start thread: %s", strerror(thread_err));
+			return EXIT_FAILURE;
+		}
+	}
+#endif
 
 	if (!monit_objects_init(&data)) {
 		LOG("Can't init monitoring objects");

@@ -10,6 +10,8 @@
 #include "xe-debug.h"
 #include "monit-objects.h"
 
+/*#define FLOWS_CNT*/
+
 struct nf_flow_info;
 struct filter_expr;
 
@@ -78,6 +80,12 @@ struct xe_data
 
 	/* notify threads about stop */
 	atomic_int stop;
+
+#ifdef FLOWS_CNT
+	/* flows counter */
+	_Atomic uint64_t nflows;
+	pthread_t fc_tid;
+#endif
 };
 
 /* helper struct for passing data to capture threads */
