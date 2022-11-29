@@ -260,9 +260,9 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 		if ((fld->type == FILTER_BASIC_ADDR4)
 			|| (fld->type == FILTER_BASIC_ADDR6)) {
 
-			fprintf(f, "  %s inet", fld->sql_name);
+			fprintf(f, "  %s INET", fld->sql_name);
 		} else {
-			fprintf(f, "  %s int", fld->sql_name);
+			fprintf(f, "  %s BIGINT", fld->sql_name);
 		}
 	}
 	fprintf(f, ");\n\n");
