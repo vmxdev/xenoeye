@@ -101,13 +101,13 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 				v /= (MAVG_TYPE)mavg->size_secs;
 			}
 
-			fprintf(out, "%g ", (double)v);
+			fprintf(out, "%lu ", (uint64_t)v);
 
 			/* limits */
 			fprintf(out, "(");
 			for (j=0; j<mavg->noverlimit; j++) {
 				/* */
-				fprintf(out, "%g ", (double)val->limits_max[j]);
+				fprintf(out, "%lu ", (uint64_t)val->limits_max[j]);
 			}
 
 			fprintf(out, ")");

@@ -276,6 +276,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 
 	n = 0;
 
+	fprintf(f, "BEGIN;\n");
 	do {
 		uint8_t *data = c->key(c);
 
@@ -394,6 +395,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 
 		fprintf(f, ");\n");
 	}
+	fprintf(f, "COMMIT;\n");
 
 	ret = 1;
 empty:
