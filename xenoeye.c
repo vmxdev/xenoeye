@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2018-2021, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2018-2022, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -404,7 +404,7 @@ fail_alloc:
 	return 0;
 }
 
-static struct xe_data *tmp_data;
+static struct xe_data *globl;
 
 static void
 on_ctrl_c(int s)
@@ -424,7 +424,7 @@ main(int argc, char *argv[])
 	struct xe_data data;
 	int opt;
 	size_t i;
-	struct sigaction sig_int;
+	struct sigaction sig_int, sig_chld;
 
 
 	while ((opt = getopt(argc, argv, "c:h")) != -1) {
@@ -529,11 +529,17 @@ main(int argc, char *argv[])
 	}
 
 
-	tmp_data = &data;
+	globl = &data;
+
 	sig_int.sa_handler = &on_ctrl_c;
 	sigemptyset(&sig_int.sa_mask);
 	sig_int.sa_flags = 0;
 	sigaction(SIGINT, &sig_int, NULL);
+
+	/* childs */
+	sig_chld.sa_handler = SIG_DFL;
+	sig_chld.sa_flags = SA_NOCLDWAIT;
+	sigaction(SIGCHLD, &sig_chld, NULL);
 
 	/* FIXME: correct shutdown */
 	for (i=0; i<data.ncap; i++) {

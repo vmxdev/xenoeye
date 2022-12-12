@@ -162,6 +162,7 @@ exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
 		pid = fork();
 		if (pid == 0) {
 			/* double fork */
+			setsid();
 			if (execve(args[0], args, NULL) == -1) {
 				LOG("Can't start script '%s': %s",
 					args[0], strerror(errno));
