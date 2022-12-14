@@ -158,7 +158,6 @@ exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
 	pid = fork();
 	if (pid == 0) {
 		/* child */
-
 		pid = fork();
 		if (pid == 0) {
 			/* double fork */
@@ -280,15 +279,27 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 static void
 on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, char *mo_name)
+	struct mavg_ovrlm_data *ovr, char *mo_name,
+	uint64_t time_ns, MAVG_TYPE wnd_size_ns)
 {
 	char filename[PATH_MAX];
 	char filecont[1024];
 	size_t limit_id;
 	char *script;
 
+	MAVG_TYPE val;
+
 	/* turn off extended statistics */
 	ext_stats_toggle(mw, 0);
+
+	/* calculate value */
+	if (time_ns > (ovr->time_last + wnd_size_ns)) {
+		val = 0.0;
+	} else {
+		val = ovr->val
+			- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
+	}
+
 
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		return;
@@ -298,7 +309,7 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 		LOG("Can't remove file '%s': %s", filename, strerror(errno));
 	}
 
-	if (!build_file_content(filecont, mw, key, 0, ovr->limit)) {
+	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
 		return;
 	}
 
@@ -344,7 +355,7 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name)
 		if ((val->time_last + val->back2norm_time_ns) < time_ns) {
 			/* traffic is back to normal */
 			on_back_to_norm(mw, c->key(c), c->keysize(c), val,
-				mo_name);
+				mo_name, time_ns, wnd_size_ns);
 
 			val->type = MAVG_OVRLM_GONE;
 			goto skip;
