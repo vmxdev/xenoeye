@@ -277,8 +277,8 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	fclose(f);
 }
 
-static void
-on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+static int
+back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	struct mavg_ovrlm_data *ovr, char *mo_name,
 	uint64_t time_ns, MAVG_TYPE wnd_size_ns)
 {
@@ -300,9 +300,14 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 			- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
 	}
 
+	if (val > ovr->limit) {
+		/* still over limit */
+		return 0;
+	}
+
 
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
-		return;
+		return 1;
 	}
 
 	if (unlink(filename) < 0) {
@@ -310,13 +315,15 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	}
 
 	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
-		return;
+		return 1;
 	}
 
 	/* start script */
 	script = mw->overlimit[limit_id].back2norm_script;
-	exec_script(mw, key, limit_id, mo_name, script, filename, 0,
+	exec_script(mw, key, limit_id, mo_name, script, filename, val,
 		ovr->limit);
+
+	return 1;
 }
 
 static int
@@ -353,12 +360,13 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name)
 		}
 
 		if ((val->time_last + val->back2norm_time_ns) < time_ns) {
-			/* traffic is back to normal */
-			on_back_to_norm(mw, c->key(c), c->keysize(c), val,
-				mo_name, time_ns, wnd_size_ns);
+			/* is traffic back to normal? */
+			if (back_to_norm(mw, c->key(c), c->keysize(c), val,
+				mo_name, time_ns, wnd_size_ns)) {
 
-			val->type = MAVG_OVRLM_GONE;
-			goto skip;
+				val->type = MAVG_OVRLM_GONE;
+				goto skip;
+			}
 		}
 
 		if (val->type == MAVG_OVRLM_UPDATE) {
