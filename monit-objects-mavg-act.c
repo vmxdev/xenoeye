@@ -240,28 +240,17 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 static void
 on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, uint64_t time_ns, MAVG_TYPE wnd_size_ns)
+	struct mavg_ovrlm_data *ovr, MAVG_TYPE val)
 {
 	FILE *f;
 	char filename[PATH_MAX];
 	char filecont[1024];
 	size_t limit_id;
 
-	MAVG_TYPE val;
-
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
 		LOG("Update failed");
 		return;
 	}
-
-
-	if (time_ns > (ovr->time_last + wnd_size_ns)) {
-		val = 0.0;
-	} else {
-		val = ovr->val
-			- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
-	}
-
 
 	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
 		return;
@@ -277,37 +266,20 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	fclose(f);
 }
 
-static int
-back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, char *mo_name,
-	uint64_t time_ns, MAVG_TYPE wnd_size_ns)
+static void
+on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+	struct mavg_ovrlm_data *ovr, char *mo_name, MAVG_TYPE val)
 {
 	char filename[PATH_MAX];
 	char filecont[1024];
 	size_t limit_id;
 	char *script;
 
-	MAVG_TYPE val;
-
 	/* turn off extended statistics */
 	ext_stats_toggle(mw, 0);
 
-	/* calculate value */
-	if (time_ns > (ovr->time_last + wnd_size_ns)) {
-		val = 0.0;
-	} else {
-		val = ovr->val
-			- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
-	}
-
-	if (val > ovr->limit) {
-		/* still over limit */
-		return 0;
-	}
-
-
 	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
-		return 1;
+		return;
 	}
 
 	if (unlink(filename) < 0) {
@@ -315,15 +287,13 @@ back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	}
 
 	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
-		return 1;
+		return;
 	}
 
 	/* start script */
 	script = mw->overlimit[limit_id].back2norm_script;
 	exec_script(mw, key, limit_id, mo_name, script, filename, val,
 		ovr->limit);
-
-	return 1;
 }
 
 static int
@@ -353,41 +323,64 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name)
 	}
 
 	do {
-		struct mavg_ovrlm_data *val = c->val(c);
+		struct mavg_ovrlm_data *ovr = c->val(c);
+		MAVG_TYPE val;
 
-		if (val->type == MAVG_OVRLM_GONE) {
+		if (ovr->type == MAVG_OVRLM_GONE) {
 			goto skip;
 		}
 
-		if ((val->time_last + val->back2norm_time_ns) < time_ns) {
-			/* is traffic back to normal? */
-			if (back_to_norm(mw, c->key(c), c->keysize(c), val,
-				mo_name, time_ns, wnd_size_ns)) {
-
-				val->type = MAVG_OVRLM_GONE;
-				goto skip;
-			}
-		}
-
-		if (val->type == MAVG_OVRLM_UPDATE) {
-			if ((val->time_dump + 3*1e9) > time_ns) {
-				goto skip;
-			}
-
-			on_update(mw, c->key(c), c->keysize(c), val, time_ns,
-				wnd_size_ns);
-
-			val->time_dump = time_ns;
-		} else if (val->type == MAVG_OVRLM_NEW) {
-			on_overlimit(mw, c->key(c), c->keysize(c), val,
+		if (ovr->type == MAVG_OVRLM_NEW) {
+			on_overlimit(mw, c->key(c), c->keysize(c), ovr,
 				mo_name);
 
 			/* update dump time */
-			val->time_dump = time_ns;
+			ovr->time_dump = time_ns;
 
 			/* change type */
-			val->type = MAVG_OVRLM_UPDATE;
+			ovr->type = MAVG_OVRLM_UPDATE;
+			goto skip;
 		}
+
+		/* calculate val */
+		if (time_ns > (ovr->time_last + wnd_size_ns)) {
+			val = 0.0;
+		} else {
+			val = ovr->val
+				- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
+		}
+
+
+		/* UPDATE or ALMOST_GONE */
+		if (val > ovr->limit) {
+			ovr->type = MAVG_OVRLM_UPDATE;
+			ovr->time_back2norm = 0;
+		} else {
+			if (ovr->type == MAVG_OVRLM_UPDATE) {
+				ovr->type = MAVG_OVRLM_ALMOST_GONE;
+				ovr->time_back2norm = time_ns;
+			}
+		}
+
+		if (ovr->type == MAVG_OVRLM_ALMOST_GONE) {
+			if (time_ns > (ovr->time_back2norm + ovr->back2norm_time_ns)) {
+				/* traffic is back to normal */
+				on_back_to_norm(mw, c->key(c), c->keysize(c), ovr,
+					mo_name, val);
+
+				ovr->type = MAVG_OVRLM_GONE;
+				goto skip;
+			}
+		}
+
+		if ((ovr->time_dump + 3*1e9) > time_ns) {
+			goto skip;
+		}
+
+		/* update notification file */
+		on_update(mw, c->key(c), c->keysize(c), ovr, val);
+		ovr->time_dump = time_ns;
+
 skip: ;
 	} while (c->next(c) == TKVDB_OK);
 

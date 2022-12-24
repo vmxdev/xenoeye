@@ -122,15 +122,16 @@ struct mavg_limit
 
 enum MAVG_OVRLM_TYPE
 {
-	MAVG_OVRLM_GONE,
 	MAVG_OVRLM_NEW,
-	MAVG_OVRLM_UPDATE
+	MAVG_OVRLM_UPDATE,
+	MAVG_OVRLM_ALMOST_GONE,
+	MAVG_OVRLM_GONE
 };
 
 struct mavg_ovrlm_data
 {
 	enum MAVG_OVRLM_TYPE type;
-	uint64_t time_dump, time_last;
+	uint64_t time_dump, time_last, time_back2norm;
 	MAVG_TYPE val;
 	MAVG_TYPE limit;
 	MAVG_TYPE back2norm_time_ns;
