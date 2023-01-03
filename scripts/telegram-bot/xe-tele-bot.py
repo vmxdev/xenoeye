@@ -46,8 +46,35 @@ async def check_events():
 
         if filename.endswith(".s"):
             # anomaly is gone
+            # green
+            msg_txt = "🟢 "
+            f = open(full_name)
+            msg_txt += f.read()
+            f.close()
+            pfile_name = filename_wo_ext + ".p"
+
+            if os.path.isfile(pfile_name):
+                f = open(pfile_name, "r")
+                lines = f.readlines()
+                for line in lines:
+                    # reply to start messages
+                    ls = line.split(":")
+                    chat_id = ls[0]
+                    msg_id = ls[1]
+                    await bot.send_message(chat_id, msg_txt, reply_to_message_id=msg_id)
+                os.remove(full_name)
+                os.remove(pfile_name)
+                continue
+            else:
+                if not os.path.isfile(filename_wo_ext + ".n"):
+                    # anomaly ended but no previous files left
+                    for chat_id in CHATS:
+                        await bot.send_message(chat_id, msg_txt)
+                    os.remove(full_name)
+                    continue
+
             if os.path.isfile(filename_wo_ext + ".n"):
-                # and it was not reported
+                # anomaly is gone but was not reported
                 # yellow
                 msg_txt = "🟡 "
                 f = open(filename_wo_ext + ".n", "r")
@@ -67,33 +94,12 @@ async def check_events():
                 # next file
                 continue
 
-            rfile_name = filename_wo_ext + ".-"
-
-            # green
-            msg_txt = "🟢 "
-            f = open(full_name)
-            msg_txt += f.read()
-            f.close()
-
-            if not os.path.isfile(rfile_name):
-                # anomaly ended but no previous files left
-                for chat_id in CHATS:
-                    await bot.send_message(chat_id, msg_txt)
-                os.remove(full_name)
-                # next file
-                continue
-
-            f = open(rfile_name, "r")
-            lines = f.readlines()
-            for line in lines:
-                # reply to start messages
-                ls = line.split(":")
-                chat_id = ls[0]
-                msg_id = ls[1]
-                await bot.send_message(chat_id, msg_txt, reply_to_message_id=msg_id)
-            os.remove(full_name)
-            os.remove(rfile_name)
-
+    # second pass
+    for filename in os.listdir(MSGS_DIR):
+        full_name = os.path.join(MSGS_DIR, filename)
+        if not os.path.isfile(full_name):
+            continue
+        filename_wo_ext = os.path.splitext(full_name)[0]
         if filename.endswith(".n"):
             # new anomaly
             # red
@@ -107,7 +113,7 @@ async def check_events():
                 msg = await bot.send_message(chat_id, msg_txt)
                 f.write("{}:{}\n".format(chat_id, msg["message_id"]))
             f.close()
-            os.rename(out_name, filename_wo_ext + ".-")
+            os.rename(out_name, filename_wo_ext + ".p")
             os.remove(full_name)
 
 
