@@ -60,8 +60,8 @@ flow_field_print(char *str, enum NF_FIELD_TYPE type, int flength,
 			be64toh(*((uint64_t *)fptr)));
 	} else if ((flength == 16) && (type == NF_FIELD_IP_ADDR)) {
 		/* FIXME: hmm */
-		sprintf(str, "%s: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:"
-			"%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", desc,
+		sprintf(str, "%s: %02x%02x:%02x%02x:%02x%02x:%02x%02x:"
+			"%02x%02x:%02x%02x:%02x%02x:%02x%02x", desc,
 			*(fptr + 0), *(fptr + 1), *(fptr + 2), *(fptr + 3),
 			*(fptr + 4), *(fptr + 5), *(fptr + 6), *(fptr + 7),
 			*(fptr + 8), *(fptr + 9), *(fptr + 10), *(fptr + 11),
