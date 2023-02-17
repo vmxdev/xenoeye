@@ -5,7 +5,7 @@
   * [Распределение нагрузки по нескольким CPU](#распределение-нагрузки-по-нескольким-cpu)
   * [Частота семплирования](#частота-семплирования)
   * [Объекты мониторинга](#объекты-мониторинга)
-  * [IP-списки](#ip-списки)
+  * [IP-списки](#ip-cписки)
   * [Конфигурируем какие данные экспортировать в СУБД](#конфигурируем-какие-данные-экспортировать-в-субд)
   * [Экспорт в СУБД](#экспорт-в-субд)
   * [Простые отчеты по IP-адресам](#простые-отчеты-по-ip-адресам)
@@ -173,7 +173,7 @@ IPv4 src addr: 1.2.3.4; IPv4 dst addr: 5.6.7.8; Src TOS: 0; Protocol: 6; Src por
 В фильтрах допускаются скобки, операторы `and`, `or` и `not`.
 
 Кроме обычных полей в фильтрах могут использоваться виртуальные поля `dev-ip` и `dev-id`. Например, фильтр "`dst net 10.11.12.0/24 and dev-ip 1.2.3.4`" отберет только фловы, которые приходят с роутера 1.2.3.4.
-Подробнее о фильтрах смотрите в ...
+Подробнее о фильтрах смотрите в [CONFIG.ru.md](CONFIG.ru.md) ...
 
 Физически объект мониторинга - это каталог с файлом `mo.conf`, расположеный в специальном месте - каталоге объектов мониторинга.
 
@@ -562,6 +562,7 @@ $ select src_host, count(src_host) from (select distinct src_host, dst_host from
 
 Один из самых простых способов строить графики временных рядов — с помощью программы gnuplot.
 
+Построим график входящего трафика за предыдущие сутки:
 
 Получаем данные в виде CSV
 
@@ -575,23 +576,66 @@ COPY 2880
 ```
 $ gnuplot
 
-> set terminal png size 1000,400
-> set output 'day-i.png'
-> set xdata time
-> set timefmt '%Y-%m-%d %H:%M:%S'
-> set xtics rotate
-> set datafile separator ','
-> set format y '%.02s%cB'
-> plot 'day-i.csv' using 1:2 notitle with lines
-> ^D
+gnuplot> set terminal png size 1000,400
+gnuplot> set output 'day-i.png'
+gnuplot> set xdata time
+gnuplot> set timefmt '%Y-%m-%d %H:%M:%S'
+gnuplot> set xtics rotate
+gnuplot> set datafile separator ','
+gnuplot> set format y '%.02s%cB'
+gnuplot> plot 'day-i.csv' using 1:2 notitle with lines
+gnuplot> ^D
 $
 ```
 
 ![gnuplot chart 1](docs-img/gnuplot-day-i.png?raw=true "gnuplot chart 1")
 
 
-### Графики с помощью Python Matplotlib
+Построим более сложный график — входящий трафик с разбивкой по протоколам:
 
+```
+$ gnuplot
+gnuplot> set key autotitle columnhead
+gnuplot> set xdata time
+gnuplot> set timefmt '%Y-%m-%d %H:%M:%S'
+gnuplot> set format y '%.02s%cB'
+gnuplot> set xtics rotate
+gnuplot> set datafile separator '|'
+gnuplot> plot 'day-prot-r.csv' using 1:3 with lines, for [i=4:20] '' using 1:i with lines
+```
+
+И еще один график — входящий трафик с разбивкой по IP-адресам назначения
+
+Сложность таких графиков в том, что IP-адресов может быть очень много (особенно в IPv6-сетях).
+
+SQL-запрос становится более сложным
+
+``` sql
+SELECT time, sum(octets)/30*8 AS ip, ips FROM
+(
+  WITH topips AS
+  (SELECT  sum(octets) AS ip, COALESCE (src_host::text, 'Other') as ips FROM ingress_octets_by_src WHERE time >= now() - interval '1 day' GROUP BY ips ORDER BY ip desc limit 20)
+  SELECT time, octets,  COALESCE (src_host::text, 'Other') as ips FROM ingress_octets_by_src WHERE time >= now() - interval '1 day' AND src_host::text IN (SELECT ips from topips)
+  UNION
+  SELECT time, octets, 'Other'                             as ips FROM ingress_octets_by_src WHERE time >= now() - interval '1 day' AND src_host::text NOT IN (SELECT ips from topips)
+  UNION
+  SELECT time, octets, 'Other'                             as ips FROM ingress_octets_by_src WHERE time >= now() - interval '1 day' AND src_host IS NULL
+) AS report
+GROUP BY time, ips ORDER BY time;
+```
+
+Краткое объяснение:
+
+`SELECT  sum(octets) AS ip, COALESCE (src_host::text, 'Other') as ips FROM ingress_octets_by_src WHERE time >= now() - interval '1 day' GROUP BY ips ORDER BY ip desc limit 20` - выбираем топ-20 адресов, по убыванию количества байт
+
+Следующие три `SELECT` выбирают время, количество байт и IP-адрес. Если адрес находится не в топ-20, он становится 'Other', байты по этим адресам суммируются
+
+Константы в выборке самого верхнего уровня (`SELECT time, sum(octets)/30*8 AS ip, ips FROM`):
+
+30 - количество секунд в окне, 8 - количество бит в байте, результат пересчитываем в BPS.
+
+
+### Графики с помощью Python Matplotlib
 
 Если вы работаете с Python, то, возможно, вам будет удобнее строить графики с помощью библиотеки Matplotlib.
 
