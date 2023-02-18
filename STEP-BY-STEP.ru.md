@@ -562,9 +562,13 @@ $ select src_host, count(src_host) from (select distinct src_host, dst_host from
 
 Один из самых простых способов строить графики временных рядов — с помощью программы gnuplot.
 
+``` sh
+$ sudo apt -y install gnuplot-nox
+```
+
 Построим график входящего трафика за предыдущие сутки:
 
-Получаем данные в виде CSV
+Для этого нужно получить данные в текстовом виде:
 
 ``` sh
 $ psql postgresql://user:password@127.0.0.1:5432/database -c "\copy (select * from ingress_all where time >= now() - interval '1 day' order by time) to 'day-i.csv' with CSV delimiter ','"
@@ -591,24 +595,33 @@ $
 ![gnuplot chart 1](docs-img/gnuplot-day-i.png?raw=true "gnuplot chart 1")
 
 
-Построим более сложный график — входящий трафик с разбивкой по протоколам:
+Построим более сложный график — входящий трафик с разбивкой по IP протоколам:
+
+``` sh
+$ echo "select extract(epoch from time) as time, proto, octets from ingress_proto where time >= now() - interval '1 day' order by time \crosstabview time proto octets" | psql postgresql://user:password@127.0.0.1:5432/database > day-i-prot.csv
+```
+
+Строим график в файл `day-i-prot.png` (предполагаем, что колонок в результате не больше 20):
 
 ```
 $ gnuplot
+gnuplot> set terminal png size 1000,400
+gnuplot> set output 'day-i-prot.png'
 gnuplot> set key autotitle columnhead
 gnuplot> set xdata time
 gnuplot> set timefmt '%Y-%m-%d %H:%M:%S'
 gnuplot> set format y '%.02s%cB'
 gnuplot> set xtics rotate
 gnuplot> set datafile separator '|'
-gnuplot> plot 'day-prot-r.csv' using 1:3 with lines, for [i=4:20] '' using 1:i with lines
+gnuplot> plot 'day-i-prot.csv' using 1:3 with lines, for [i=4:20] '' using 1:i with lines
 ```
+
 
 И еще один график — входящий трафик с разбивкой по IP-адресам назначения
 
-Сложность таких графиков в том, что IP-адресов может быть очень много (особенно в IPv6-сетях).
+IP-адресов в отчете может быть очень много (особенно в IPv6-сетях).
 
-SQL-запрос становится более сложным
+Поэтому SQL-запрос становится более сложным:
 
 ``` sql
 SELECT time, sum(octets)/30*8 AS ip, ips FROM
@@ -633,6 +646,8 @@ GROUP BY time, ips ORDER BY time;
 Константы в выборке самого верхнего уровня (`SELECT time, sum(octets)/30*8 AS ip, ips FROM`):
 
 30 - количество секунд в окне, 8 - количество бит в байте, результат пересчитываем в BPS.
+
+Скрипт для генерации такого графика находится здесь: ...
 
 
 ### Графики с помощью Python Matplotlib
