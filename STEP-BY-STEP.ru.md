@@ -597,11 +597,26 @@ $
 
 Построим более сложный график — входящий трафик с разбивкой по IP протоколам:
 
+Номера IP-протоколов передаются в netflow как числа. Для того, чтобы отображать названия протоколов в текстовом виде, возьмем данные IANA и создадим из них таблицу в СУБД.
 ``` sh
-$ echo "select extract(epoch from time) as time, proto, octets from ingress_proto where time >= now() - interval '1 day' order by time \crosstabview time proto octets" | psql postgresql://user:password@127.0.0.1:5432/database > day-i-prot.csv
+$ wget https://www.iana.org/assignments/protocol-numbers/protocol-numbers-1.csv
+# обрежем в файле ненужное
+$ grep "^[0-9]*-" protocol-numbers-1.csv -v | tail -n +2 > iana.csv
+# создадим таблицу
+$ psql postgresql://user:password@127.0.0.1:5432/database -c "create table iana_protocols (num int, name text, descr text, ipv6ext text, ref text);"
+CREATE TABLE
+# заполним ее данными
+$ psql postgresql://user:password@127.0.0.1:5432/database -c "\copy iana_protocols FROM 'iana.csv' DELIMITER ',' CSV"
+COPY 149
 ```
 
-Строим график в файл `day-i-prot.png` (предполагаем, что колонок в результате не больше 20):
+Теперь можно сделать выборку с названием протокола:
+
+``` sh
+$ echo "select time, iana_protocols.name, octets from ingress_proto join iana_protocols on ingress_proto.proto=iana_protocols.num where time >= now() - interval '1 day' order by time \crosstabview time name octets" | psql postgresql://user:password@127.0.0.1:5432/database > day-i-prot.csv
+```
+
+Строим график в файл `day-i-prot.png` (предполагаем, что протоколов в результате не больше 20):
 
 ```
 $ gnuplot
@@ -647,7 +662,8 @@ GROUP BY time, ips ORDER BY time;
 
 30 - количество секунд в окне, 8 - количество бит в байте, результат пересчитываем в BPS.
 
-Скрипт для генерации такого графика находится здесь: ...
+
+Скрипт для генерации такого графика находится здесь: [scripts/mkchart-gnuplot.sh](scripts/mkchart-gnuplot.sh)
 
 
 ### Графики с помощью Python Matplotlib
@@ -656,7 +672,91 @@ GROUP BY time, ips ORDER BY time;
 
 Графики немного визуально отличаются от тех, которые генерирует gnuplot.
 
-Скрипт ...
+Устаовка нужных библиотек:
+
+``` sh
+$ pip3 install matplotlib psycopg2-binary
+```
+
+Скрипт для генерации кольцевой диаграммы, который берет данные прямо из СУБД и строит диаграмму в файл `mpl-day-i.png`
+
+``` python
+import numpy as np
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
+import psycopg2
+
+INTERVAL = '2 days'
+CONNSTR = 'postgresql://user:password@127.0.0.1:5432/database'
+PTHRESHOLD = 4.0
+
+protocols = []
+octets = []
+explode = []
+protolabels = []
+
+# Load dataset
+query = """
+select iana_protocols.name, sum(octets) as oct
+from ingress_proto
+join iana_protocols on ingress_proto.proto=iana_protocols.num
+where time >= now() - interval '{}'
+group by iana_protocols.name
+order by oct desc
+""".format(INTERVAL)
+
+conn = psycopg2.connect(CONNSTR)
+cursor = conn.cursor()
+cursor.execute(query)
+records = cursor.fetchall()
+for record in records:
+    protocols.append(record[0])
+    octets.append(record[1])
+    explode.append(0.05)
+
+cursor.close()
+conn.close()
+
+# prepare labels
+sm = sum(octets)
+for i in range(len(protocols)):
+     proc = 100 * octets[i] / sm
+     protolabels.append('{} - {:.2f}%'.format(protocols[i], 100 * octets[i] / sm))
+     # don't display protocol name when % less than threshold
+     if proc < PTHRESHOLD:
+         protocols[i] = ''
+
+# plot
+
+# pie chart
+plt.pie(octets,
+    labels=protocols,
+    autopct=lambda p: format(p, '.2f')+'%' if p > 4 else None,
+    pctdistance=0.7,
+    explode=explode)
+
+# draw circle
+centre_circle = plt.Circle((0, 0), 0.50, fc='white')
+fig = plt.gcf()
+
+# adding circle in pie chart
+fig.gca().add_artist(centre_circle)
+
+# adding title of chart
+plt.title('IP protocols for the last {}'.format(INTERVAL))
+
+# add legends
+plt.legend(protolabels, loc='center left', bbox_to_anchor=(1, 0.5), title='IP protocols')
+
+plt.tight_layout()
+
+plt.savefig('mpl-day-i.png')
+```
+
+Временной ряд в виде стековой столбчатой диаграммы:
+
+...
 
 ### Визуализация трафика в Grafana
 
