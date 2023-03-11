@@ -405,7 +405,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 		fwm = &mo->fwms[i];
 
 		/* check state */
-		enabled = atomic_load_explicit(&fwm->enabled_cnt,
+		enabled = atomic_load_explicit(&fwm->active_cnt,
 			memory_order_relaxed);
 
 		if (!enabled) {
