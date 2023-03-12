@@ -54,7 +54,8 @@ struct fwm_data
 
 struct mo_fwm
 {
-	_Atomic int active_cnt;
+	int is_extended;
+	_Atomic int is_active;
 
 	char name[TOKEN_MAX_SIZE];
 	struct mo_fieldset fieldset;

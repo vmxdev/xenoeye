@@ -939,7 +939,7 @@ monit_objects_mavg_link(struct monit_object *mo, struct mavg_limit_ext_stat *e)
 		struct mo_fwm *fwm = &mo->fwms[i];
 
 		if (strcmp(fwm->name, e->name) == 0) {
-			e->ptr = &fwm->active_cnt;
+			e->ptr = &fwm->is_active;
 			break;
 		}
 	}

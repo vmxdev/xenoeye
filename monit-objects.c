@@ -393,7 +393,6 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 
 	/* fixed windows */
 	for (i=0; i<mo->nfwm; i++) {
-		int enabled;
 		tkvdb_tr *tr;
 		TKVDB_RES rc;
 		tkvdb_datum dtkey, dtval;
@@ -405,11 +404,14 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 		fwm = &mo->fwms[i];
 
 		/* check state */
-		enabled = atomic_load_explicit(&fwm->active_cnt,
-			memory_order_relaxed);
+		if (fwm->is_extended) {
+			int active;
 
-		if (!enabled) {
-			continue;
+			active = atomic_load_explicit(&fwm->is_active,
+				memory_order_relaxed);
+			if (!active) {
+				continue;
+			}
 		}
 
 		fdata = &fwm->data[thread_id];

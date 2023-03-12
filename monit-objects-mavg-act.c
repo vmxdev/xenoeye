@@ -189,10 +189,10 @@ ext_stats_toggle(struct mo_mavg *mw, int on)
 
 			if (e->ptr) {
 				if (on) {
-					atomic_fetch_add_explicit(e->ptr, 1,
+					atomic_store_explicit(e->ptr, 1,
 						memory_order_relaxed);
 				} else {
-					atomic_fetch_sub_explicit(e->ptr, 1,
+					atomic_store_explicit(e->ptr, 0,
 						memory_order_relaxed);
 				}
 			}

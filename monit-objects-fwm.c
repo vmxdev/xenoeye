@@ -157,8 +157,9 @@ fwm_config(struct aajson *a, aajson_val *value,
 		}
 		memset(&tmp[i], 0, sizeof(struct mo_fwm));
 
-		/* by default fw is enabled */
-		atomic_init(&tmp[i].active_cnt, 1);
+		/* by default fw is not extended */
+		tmp[i].is_extended = 0;
+		atomic_init(&tmp[i].is_active, 0);
 
 		mo->fwms = tmp;
 		mo->nfwm = i + 1;
@@ -192,9 +193,10 @@ fwm_config(struct aajson *a, aajson_val *value,
 		}
 	} else if (STRCMP(a, 3, "extended") == 0) {
 		if (value->type == AAJSON_VALUE_TRUE) {
-			atomic_init(&window->active_cnt, 0);
+			window->is_extended = 1;
+			atomic_init(&window->is_active, 0);
 		}
-		/* other values for 'disabled' ignored */
+		/* other values for 'extended' ignored */
 	}
 
 	return 1;
