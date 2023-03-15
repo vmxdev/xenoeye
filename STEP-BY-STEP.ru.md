@@ -507,7 +507,6 @@ Cоздайте файл `/var/lib/xenoeye/iplists/REGION` и поместите
 
 ### Определяем спам-ботов и ssh-сканеры
 
-
 Если в вашем датацентре или в сети есть зараженные хосты, которые сканируют остальных по ssh, их можно определить таким объектом мониторинга:
 
 `/var/lib/xenoeye/mo/ssh_scanners/mo.conf`:
@@ -587,7 +586,9 @@ gnuplot> set timefmt '%Y-%m-%d %H:%M:%S'
 gnuplot> set xtics rotate
 gnuplot> set datafile separator ','
 gnuplot> set format y '%.02s%cB'
-gnuplot> plot 'day-i.csv' using 1:2 notitle with lines
+gnuplot> set style fill solid
+gnuplot> set boxwidth 0.5
+gnuplot> plot 'day-i.csv' using 1:2 notitle with boxes
 gnuplot> ^D
 $
 ```
@@ -628,8 +629,12 @@ gnuplot> set timefmt '%Y-%m-%d %H:%M:%S'
 gnuplot> set format y '%.02s%cB'
 gnuplot> set xtics rotate
 gnuplot> set datafile separator '|'
-gnuplot> plot 'day-i-prot.csv' using 1:3 with lines, for [i=4:20] '' using 1:i with lines
+gnuplot> set style fill solid
+gnuplot> set boxwidth 0.5
+gnuplot> plot 'day-i-prot.csv' using 1:2 with boxes, for [i=3:20] '' using 1:i with boxes
 ```
+
+![gnuplot chart 2](docs-img/gnuplot-day-prot.png?raw=true "gnuplot chart 2")
 
 
 И еще один график — входящий трафик с разбивкой по IP-адресам назначения
@@ -663,6 +668,8 @@ GROUP BY time, ips ORDER BY time;
 30 - количество секунд в окне, 8 - количество бит в байте, результат пересчитываем в BPS.
 
 
+![gnuplot chart 3](docs-img/gnuplot-day-ip.png?raw=true "gnuplot chart 3")
+
 Скрипт для генерации такого графика находится здесь: [scripts/mkchart-gnuplot.sh](scripts/mkchart-gnuplot.sh)
 
 
@@ -672,91 +679,27 @@ GROUP BY time, ips ORDER BY time;
 
 Графики немного визуально отличаются от тех, которые генерирует gnuplot.
 
-Устаовка нужных библиотек:
+Установка нужных библиотек:
 
 ``` sh
-$ pip3 install matplotlib psycopg2-binary
+$ pip3 install matplotlib psycopg2-binary pandas
 ```
 
-Скрипт для генерации кольцевой диаграммы, который берет данные прямо из СУБД и строит диаграмму в файл `mpl-day-i.png`
+Скрипты для генерации кольцевых диаграмм, которые берет данные из СУБД и строят диаграмму в файлы:
 
-``` python
-import numpy as np
-import matplotlib
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
-import psycopg2
+[scripts/mkchart-matplotlib-donut-prot.py](scripts/mkchart-matplotlib-donut-prot.py)
 
-INTERVAL = '2 days'
-CONNSTR = 'postgresql://user:password@127.0.0.1:5432/database'
-PTHRESHOLD = 4.0
+![matplotlib chart 1](docs-img/mpl-donut-prot.png?raw=true "matplotlib chart 1")
 
-protocols = []
-octets = []
-explode = []
-protolabels = []
 
-# Load dataset
-query = """
-select iana_protocols.name, sum(octets) as oct
-from ingress_proto
-join iana_protocols on ingress_proto.proto=iana_protocols.num
-where time >= now() - interval '{}'
-group by iana_protocols.name
-order by oct desc
-""".format(INTERVAL)
+[scripts/mkchart-matplotlib-donut-as.py](scripts/mkchart-matplotlib-donut-as.py)
 
-conn = psycopg2.connect(CONNSTR)
-cursor = conn.cursor()
-cursor.execute(query)
-records = cursor.fetchall()
-for record in records:
-    protocols.append(record[0])
-    octets.append(record[1])
-    explode.append(0.05)
+![matplotlib chart 1](docs-img/mpl-donut-prot.png?raw=true "matplotlib chart 1")
 
-cursor.close()
-conn.close()
 
-# prepare labels
-sm = sum(octets)
-for i in range(len(protocols)):
-     proc = 100 * octets[i] / sm
-     protolabels.append('{} - {:.2f}%'.format(protocols[i], 100 * octets[i] / sm))
-     # don't display protocol name when % less than threshold
-     if proc < PTHRESHOLD:
-         protocols[i] = ''
+Временные ряды:
 
-# plot
 
-# pie chart
-plt.pie(octets,
-    labels=protocols,
-    autopct=lambda p: format(p, '.2f')+'%' if p > 4 else None,
-    pctdistance=0.7,
-    explode=explode)
-
-# draw circle
-centre_circle = plt.Circle((0, 0), 0.50, fc='white')
-fig = plt.gcf()
-
-# adding circle in pie chart
-fig.gca().add_artist(centre_circle)
-
-# adding title of chart
-plt.title('IP protocols for the last {}'.format(INTERVAL))
-
-# add legends
-plt.legend(protolabels, loc='center left', bbox_to_anchor=(1, 0.5), title='IP protocols')
-
-plt.tight_layout()
-
-plt.savefig('mpl-day-i.png')
-```
-
-Временной ряд в виде стековой столбчатой диаграммы:
-
-...
 
 ### Визуализация трафика в Grafana
 
@@ -978,7 +921,7 @@ $ touch /var/lib/xenoeye/mo/http_flood/mavg1.a
 
 ### Расширенная статистика
 
-Часто при превышении порогов хочется узнать более подробно, что за трафик вызвал это превышение. Можно при превышении запускать скрипт, который будет собирать сырой netflow-трафик (с помощью tcpdump/tshark), и потом анализировать этот трафик например с помощью wireshark. 
+Часто при превышении порогов хочется узнать более подробно, что за трафик вызвал это превышение. Можно при превышении запускать скрипт, который будет собирать сырой netflow-трафик (с помощью tcpdump/tshark), и потом анализировать этот трафик например с помощью wireshark.
 
 Кроме такого способа, в коллекторе есть механизм "расширенной статистики". Это специальные элементы секции "fwm". Они помечаются параметром `"disabled" : true` и при старте неактивны. Как только превышается порог, эти элементы становятся активными, в соответствующие таблицы добавляются расширенные данные. При возврате трафика в норму они опять становятся неактивными
 
