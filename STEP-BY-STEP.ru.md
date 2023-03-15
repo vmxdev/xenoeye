@@ -694,7 +694,7 @@ $ pip3 install matplotlib psycopg2-binary pandas
 
 [scripts/mkchart-matplotlib-donut-as.py](scripts/mkchart-matplotlib-donut-as.py)
 
-![matplotlib chart 1](docs-img/mpl-donut-prot.png?raw=true "matplotlib chart 1")
+![matplotlib chart 2](docs-img/mpl-donut-as.png?raw=true "matplotlib chart 2")
 
 
 Временные ряды:
