@@ -4,7 +4,7 @@ matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import psycopg2
 
-INTERVAL = '60 minutes'
+INTERVAL = '30 minutes'
 CONNSTR = 'postgresql://xenoeye:password@localhost/xenoeyedb'
 PTHRESHOLD = 2.0
 TOP=15
