@@ -685,6 +685,7 @@ GROUP BY time, ips ORDER BY time;
 $ pip3 install matplotlib psycopg2-binary pandas
 ```
 
+
 Скрипты для генерации кольцевых диаграмм, которые берет данные из СУБД и строят диаграмму в файлы:
 
 [scripts/mkchart-matplotlib-donut-prot.py](scripts/mkchart-matplotlib-donut-prot.py)
@@ -697,8 +698,17 @@ $ pip3 install matplotlib psycopg2-binary pandas
 ![matplotlib chart 2](docs-img/mpl-donut-as.png?raw=true "matplotlib chart 2")
 
 
-Временные ряды:
 
+Скрипты для генерации графиков временных рядов:
+
+[scripts/mkchart-matplotlib-ts.py](scripts/mkchart-matplotlib-ts.py)
+
+![matplotlib chart 3](docs-img/mpl-ts.png?raw=true "matplotlib chart 3")
+
+
+[scripts/mkchart-matplotlib-ts-ip.py](scripts/mkchart-matplotlib-ts-ip.py)
+
+![matplotlib chart 4](docs-img/mpl-ts-ips.png?raw=true "matplotlib chart 4")
 
 
 ### Визуализация трафика в Grafana
