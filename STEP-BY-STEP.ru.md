@@ -757,7 +757,7 @@ JOIN iana_protocols on ingress_proto.proto=iana_protocols.num
 WHERE
   $__timeFilter(time)
 GROUP BY time, iana_protocols.name
-ORDER BY time;
+ORDER BY time
 ```
 
 В новых версиях Grafana для того чтобы строить такие графики нужно добавить трансформацию:
@@ -774,26 +774,26 @@ ORDER BY time;
 
 ![Grafana chart 2](docs-img/grafana-2.png?raw=true "Grafana chart 2")
 
-SQL-запрос для графиков такого типа:
+IP адресов может быть много, чтобы grafana и браузеру не стало плохо, SQL-запрос будет выбирать топ-30 адресов (по количеству байт) за период отображения и показывать только их. Остальные будут показаны как 'Others'.
+
+Запрос для графиков такого типа:
 
 ```
-SELECT
-  time AS "time",
-  sum(octets) AS ip,
-  COALESCE (src_host::text, 'Other') as ips
-FROM ingress_bytes_by_src
-WHERE
-  $__timeFilter(time)
-GROUP BY time, ips
-ORDER BY time, ip
+SELECT time, sum(octets)/30*8 AS ip, ips FROM
+(
+  WITH topips AS
+  (SELECT  sum(octets) AS ip, COALESCE (dst_host::text, 'Other') as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) GROUP BY ips ORDER BY ip desc limit 30)
+  SELECT time, octets,  COALESCE (dst_host::text, 'Other') as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host::text IN (SELECT ips from topips)
+  UNION
+  SELECT time, octets, 'Other'                             as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host::text NOT IN (SELECT ips from topips)
+  UNION
+  SELECT time, octets, 'Other'                             as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host IS NULL
+) AS report
+GROUP BY time, ips ORDER BY time
 ```
 
-Еще несколько примеров графиков:
+Еще примеры графиков:
 
-
-![Grafana chart 3](docs-img/grafana-3.png?raw=true "Grafana chart 3")
-
-![Grafana chart 4](docs-img/grafana-4.png?raw=true "Grafana chart 4")
 
 ![Grafana chart 5](docs-img/grafana-5.png?raw=true "Grafana chart 5")
 
@@ -967,6 +967,7 @@ $ touch /var/lib/xenoeye/mo/http_flood/mavg1.a
 
 Кроме такого способа, в коллекторе есть механизм "расширенной статистики". Это специальные элементы секции "fwm". Они помечаются параметром `"extended" : true` и при старте неактивны. Как только превышается порог, эти элементы становятся активными, в соответствующие таблицы добавляются расширенные данные. При возврате трафика в норму они опять становятся неактивными
 
+Можно включить расширенную статистику для текущего объекта мониторинга или для какого-то другого. Таблицы из другого объекта мониторинга записываются как `объект_мониторинга/таблица`.
 
 ```
 {
@@ -977,11 +978,13 @@ $ touch /var/lib/xenoeye/mo/http_flood/mavg1.a
 			"name": "level1",
 			"action-script": "/var/lib/xenoeye/scripts/on-start.sh",
 			"back2norm-script": "/var/lib/xenoeye/scripts/on-stop.sh",
-			"ext": ["top_talkers"]
+			"ext": ["top_talkers", "egress/top_talkers"]
 		}
 	]
 }
 ```
+
+Будьте внимательны - в расширенные таблицы попадает не только трафик который вызвал превышения, а весь, который попал в этот объект мониторинга
 
 
 ### Оповещение об аномалиях с помощью Telegram-робота
