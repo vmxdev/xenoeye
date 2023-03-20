@@ -774,7 +774,7 @@ ORDER BY time
 
 ![Grafana chart 2](docs-img/grafana-2.png?raw=true "Grafana chart 2")
 
-IP адресов может быть много, чтобы grafana и браузеру не стало плохо, SQL-запрос будет выбирать топ-30 адресов (по количеству байт) за период отображения и показывать только их. Остальные будут показаны как 'Others'.
+IP адресов может быть много, чтобы grafana и браузеру не стало плохо, SQL-запрос будет выбирать топ-15 адресов (по количеству байт) за период отображения и показывать только их. Остальные будут показаны как 'Other'.
 
 Запрос для графиков такого типа:
 
@@ -782,7 +782,7 @@ IP адресов может быть много, чтобы grafana и брау
 SELECT time, sum(octets)/30*8 AS ip, ips FROM
 (
   WITH topips AS
-  (SELECT  sum(octets) AS ip, COALESCE (dst_host::text, 'Other') as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) GROUP BY ips ORDER BY ip desc limit 30)
+  (SELECT  sum(octets) AS ip, COALESCE (dst_host::text, 'Other') as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) GROUP BY ips ORDER BY ip desc limit 15)
   SELECT time, octets,  COALESCE (dst_host::text, 'Other') as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host::text IN (SELECT ips from topips)
   UNION
   SELECT time, octets, 'Other'                             as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host::text NOT IN (SELECT ips from topips)
@@ -795,9 +795,14 @@ GROUP BY time, ips ORDER BY time
 Еще примеры графиков:
 
 
-![Grafana chart 5](docs-img/grafana-5.png?raw=true "Grafana chart 5")
+![Grafana chart 3](docs-img/grafana-3.png?raw=true "Grafana chart 3")
 
-![Grafana chart 6](docs-img/grafana-6.png?raw=true "Grafana chart 6")
+![Grafana chart 4](docs-img/grafana-4.png?raw=true "Grafana chart 4")
+
+Для отображения круговых диаграмм используются такие же запросы, как и для временных столбчатых диаграмм. Чтобы данные в диаграмме суммировались за весь выбранный период, установите свойство `Calculation` в `Total`
+
+
+![Grafana pie option](docs-img/grafana-pie-calc.png?raw=true "Grafana pie option")
 
 
 ### Скользящие средние
@@ -971,20 +976,39 @@ $ touch /var/lib/xenoeye/mo/http_flood/mavg1.a
 
 ```
 {
-	"name": "mavg1",
-	"fields": ["src host", "octets"],
-	"overlimit": [
+	"fwm": [
 		{
-			"name": "level1",
-			"action-script": "/var/lib/xenoeye/scripts/on-start.sh",
-			"back2norm-script": "/var/lib/xenoeye/scripts/on-stop.sh",
-			"ext": ["top_talkers", "egress/top_talkers"]
+			"extended": true,
+			"name": "ext",
+			"fields": ["octets", "src host", "dst host", "tcp-flags"]
 		}
+		/* ... */
+	],
+
+	"mavg": [
+		{
+			"name": "mavg1",
+			"time": 20,
+			"fields": ["src host", "octets"],
+			"overlimit": [
+				{
+					"name": "level1",
+					"default": [10000000],
+					"action-script": "/var/lib/xenoeye/scripts/on-start.sh",
+					"back2norm-script": "/var/lib/xenoeye/scripts/on-stop.sh",
+					"ext": ["ext"]
+					//"ext": ["ext" , "egress/ext"]
+				}
+			]
+		}
+		/* ... */
 	]
 }
 ```
 
-Будьте внимательны - в расширенные таблицы попадает не только трафик который вызвал превышения, а весь, который попал в этот объект мониторинга
+После превышения порогов соответствующая таблица начнет заполняться данными.
+
+Будьте внимательны - в расширенные таблицы попадает не только трафик который вызвал превышения, а весь, который принадлежит этому объекту мониторинга.
 
 
 ### Оповещение об аномалиях с помощью Telegram-робота
