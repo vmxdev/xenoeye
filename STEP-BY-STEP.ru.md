@@ -779,12 +779,12 @@ IP адресов может быть много, чтобы grafana и брау
 SELECT time, sum(octets)/30*8 AS ip, ips FROM
 (
   WITH topips AS
-  (SELECT  sum(octets) AS ip, COALESCE (dst_host::text, 'Other') as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) GROUP BY ips ORDER BY ip desc limit 15)
-  SELECT time, octets,  COALESCE (dst_host::text, 'Other') as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host::text IN (SELECT ips from topips)
+  (SELECT  sum(octets) AS ip, COALESCE (dst_host::text, 'Other') as ips FROM ingress_octets_by_dst WHERE $__timeFilter(time) GROUP BY ips ORDER BY ip desc limit 15)
+  SELECT time, octets,  COALESCE (dst_host::text, 'Other') as ips FROM ingress_octets_by_dst WHERE $__timeFilter(time) AND dst_host::text IN (SELECT ips from topips)
   UNION
-  SELECT time, octets, 'Other'                             as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host::text NOT IN (SELECT ips from topips)
+  SELECT time, octets, 'Other'                             as ips FROM ingress_octets_by_dst WHERE $__timeFilter(time) AND dst_host::text NOT IN (SELECT ips from topips)
   UNION
-  SELECT time, octets, 'Other'                             as ips FROM ingress_bytes_by_dst WHERE $__timeFilter(time) AND dst_host IS NULL
+  SELECT time, octets, 'Other'                             as ips FROM ingress_octets_by_dst WHERE $__timeFilter(time) AND dst_host IS NULL
 ) AS report
 GROUP BY time, ips ORDER BY time
 ```
