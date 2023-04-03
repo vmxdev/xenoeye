@@ -454,12 +454,9 @@ GRANT
 $ vi scripts/fill-db.sh
 ```
 
-Отредактируйте параметры подключения:
+Отредактируйте параметры подключения, если нужно:
+
   `psql postgresql://user:password@127.0.0.1:5432/database -f "$sqlscript"`
-
-замените на
-
-  `psql postgresql://xenoeye:password@localhost/xenoeyedb -f "$sqlscript"`
 
 
 ### Простые отчеты по IP-адресам
@@ -570,7 +567,7 @@ $ sudo apt -y install gnuplot-nox
 Для этого нужно получить данные в текстовом виде:
 
 ``` sh
-$ psql postgresql://user:password@127.0.0.1:5432/database -c "\copy (select * from ingress_all where time >= now() - interval '1 day' order by time) to 'day-i.csv' with CSV delimiter ','"
+$ psql postgresql://xenoeye:password@localhost/xenoeyedb -c "\copy (select * from ingress_all where time >= now() - interval '1 day' order by time) to 'day-i.csv' with CSV delimiter ','"
 COPY 2880
 ```
 
@@ -604,17 +601,17 @@ $ wget https://www.iana.org/assignments/protocol-numbers/protocol-numbers-1.csv
 # обрежем в файле ненужное
 $ grep "^[0-9]*-" protocol-numbers-1.csv -v | tail -n +2 > iana.csv
 # создадим таблицу
-$ psql postgresql://user:password@127.0.0.1:5432/database -c "create table iana_protocols (num int, name text, descr text, ipv6ext text, ref text);"
+$ psql postgresql://xenoeye:password@localhost/xenoeyedb -c "create table iana_protocols (num int, name text, descr text, ipv6ext text, ref text);"
 CREATE TABLE
 # заполним ее данными
-$ psql postgresql://user:password@127.0.0.1:5432/database -c "\copy iana_protocols FROM 'iana.csv' DELIMITER ',' CSV"
+$ psql postgresql://xenoeye:password@localhost/xenoeyedb -c "\copy iana_protocols FROM 'iana.csv' DELIMITER ',' CSV"
 COPY 149
 ```
 
 Теперь можно сделать выборку с названием протокола:
 
 ``` sh
-$ echo "select time, iana_protocols.name, octets from ingress_proto join iana_protocols on ingress_proto.proto=iana_protocols.num where time >= now() - interval '1 day' order by time \crosstabview time name octets" | psql postgresql://user:password@127.0.0.1:5432/database > day-i-prot.csv
+$ echo "select time, iana_protocols.name, octets from ingress_proto join iana_protocols on ingress_proto.proto=iana_protocols.num where time >= now() - interval '1 day' order by time \crosstabview time name octets" | psql postgresql://xenoeye:password@localhost/xenoeyedb > day-i-prot.csv
 ```
 
 Строим график в файл `day-i-prot.png` (предполагаем, что протоколов в результате не больше 20):
@@ -887,7 +884,7 @@ GROUP BY time, ips ORDER BY time
 
 Можно использовать два источника для вычисления порогов: экспортировать данные в СУБД и на основании этих данных выставлять пороги или попросить систему показывать текущие значения скользящих средних.
 
-Чтобы коллектор начал писать в файл текущие значения скользящих средних, нужно создать в каталоге с `mo.conf` файл с таким же названием, как и название скользящего среднего + `.d`.
+Чтобы коллектор начал писать в файл текущие значения скользящих средних, нужно для этого скользящего окна установить параметр `dump` в количество секунд. Это будет время между дампами. Потом создайте в каталоге с `mo.conf` файл с таким же названием, как и название скользящего среднего + `.d`.
 
 Если в конфиге `"name": "mavg1"`, то:
 ``` sh
@@ -920,6 +917,7 @@ $ touch /var/lib/xenoeye/mo/http_flood/mavg1.a
 ```
 	/* ... */
 	"name": "mavg1",
+	"dump": 10,
 	"mem-m": 10, /* 10 мегабайт */
 	"fields": ["src host", "octets"],
 	/* ... */

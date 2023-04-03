@@ -10,7 +10,7 @@ echo "SELECT time, sum(octets)/30*8 AS ip, ips FROM
   UNION
   SELECT time, octets, 'Other'                             as ips FROM ingress_bytes_by_src WHERE time >= now() - interval '1 day' AND src_host IS NULL
 ) AS report
-GROUP BY time, ips ORDER BY time \\crosstabview time ips ip" | psql postgresql://user:password@127.0.0.1:5432/database > day-i-ip.csv
+GROUP BY time, ips ORDER BY time \\crosstabview time ips ip" | psql postgresql://xenoeye:password@localhost/xenoeyedb > day-i-ip.csv
 
 echo "set terminal png size 1000,400
 set output 'day-i-ip.png'

@@ -4,7 +4,7 @@ EXP_DIR="/var/lib/xenoeye/exp"
 FAIL_DIR="/var/lib/xenoeye/expfailed/"
 
 for sqlscript in $EXP_DIR/*.sql; do
-  psql postgresql://user:password@127.0.0.1:5432/database -f "$sqlscript"
+  psql postgresql://xenoeye:password@localhost/xenoeyedb -f "$sqlscript"
   if [ $? -eq 0 ]; then
       rm -f "$sqlscript"
   else

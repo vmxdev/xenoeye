@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import psycopg2
 
 INTERVAL = '5 minutes'
-CONNSTR = 'postgresql://user:password@127.0.0.1:5432/database'
+CONNSTR = 'postgresql://xenoeye:password@localhost/xenoeyedb'
 PTHRESHOLD = 4.0
 
 protocols = []
