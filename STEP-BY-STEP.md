@@ -818,7 +818,7 @@ Immediately after the threshold is exceeded, the system can execute an external 
 
 For one monitoring object, several moving averages with different parameters (threshold values, window size) can be simultaneously calculated. The idea was this: when one threshold is exceeded, the system administrator is notified and the collection of extended statistics is turned on. When the next, higher threshold is exceeded, we will already have more detailed traffic data, we can notify the administrator again and take some action.
 
-The well-known collector [FastNetMon] (https://github.com/pavel-odintsov/fastnetmon) uses a different approach: when the threshold is exceeded, the collector collects some more netflow packets and gets a profile of the current traffic from them. Perhaps we will think about such an option.
+The well-known collector [FastNetMon](https://github.com/pavel-odintsov/fastnetmon) uses a different approach: when the threshold is exceeded, the collector collects some more netflow packets and gets a profile of the current traffic from them. Perhaps we will think about such an option.
 
 For moving averages to work, the collector does not need a DBMS, the configuration is taken from files, all calculations are made inside the collector.
 

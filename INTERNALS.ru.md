@@ -91,6 +91,7 @@ https://github.com/pavel-odintsov/fastnetmon - детектирует превы
 Формат файлов такой:
 
 `netflow.def`
+
 ``` c
 FIELD(internal_id,            "Description",              FIELD_TYPE,      netflow_id,  min_size,  max_size)
 ```
@@ -111,7 +112,7 @@ FIELD(ID,      "name",          TYPE,  src_netflow_field,   dst_netflow_field)
 
   * `ID` — внутренний идентификатор
   * `name` — строка, которая будет использоваться в фильтрах
-  * `TYPE` — тип (сейчас поддерживается RANGE(диапазон целых), `ADDR4` и `ADDR6` - IP адреса)
+  * `TYPE` — тип (сейчас поддерживается `RANGE`(диапазон целых), `ADDR4` и `ADDR6` - IP адреса)
   * `src_netflow_field`, `dst_netflow_field` — поля netflow с которыми нужно работать. То, что написано в `internal_id` из `netflow.def`. Если могут быть префиксы "источник" (`src`) и "назначение" `dst`, нужно указать соответствующие поля.
 
 После изменения файлов программу нужно перекомпилировать.

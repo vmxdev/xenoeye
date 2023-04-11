@@ -86,9 +86,10 @@ When compiling, the [X-Macro](https://en.wikipedia.org/wiki/X_Macro) technique i
 
 Perhaps later we will remake the architecture and it will be possible to add an arbitrary number of fields without losing performance.
 
-
 The file format is:
+
 `netflow.def`
+
 ``` c
 FIELD(internal_id,            "Description",              FIELD_TYPE,      netflow_id,  min_size,  max_size)
 ```
@@ -109,7 +110,7 @@ FIELD(ID,      "name",          TYPE,  src_netflow_field,   dst_netflow_field)
 
   * `ID` internal identifier
   * `name` is a string that will be used in filters
-  * `TYPE` type (now supported RANGE(range of integers), `ADDR4` or `ADDR6` - IP addresses)
+  * `TYPE` type (now supported `RANGE`(range of integers), `ADDR4` or `ADDR6` - IP addresses)
   * `src_netflow_field`, `dst_netflow_field` netflow fields to work with. What is written in `internal_id` from `netflow.def`. If there can be "source" (`src`) and "destination" `dst` prefixes, the corresponding fields must be specified.
 
 After changing the files, the program needs to be recompiled.
