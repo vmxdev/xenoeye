@@ -1,24 +1,24 @@
 # Step-by-step instructions for installing and configuring the collector
 
-   * [Build and install](#)
-   * [Checking Netflow packets receiving](#)
-   * [Load-balancing across multiple CPUs](#)
-   * [Sampling rate](#)
-   * [Monitoring objects](#)
-   * [IP lists](#)
-   * [Configure what data should be exported to the DBMS](#)
-   * [Export to DBMS](#)
-   * [Simple Reporting by IP Addresses](#)
-   * [Can we use GeoIP?](#)
-   * [Detect spam-bots and ssh-scanners](#)
-   * [Plotting with gnuplot](#)
-   * [Plots with Python Matplotlib](#)
-   * [Traffic visualization with Grafana](#)
-   * [Moving Averages](#)
-   * [Configure and set thresholds](#)
-   * [Scripts and their options](#)
-   * [Extended stats](#)
-   * [Anomaly alerts using Telegram-bot](#)
+  * [Build and install](#build-and-install)
+  * [Checking Netflow packets receiving](#checking-netflow-packets-receiving)
+  * [Load-balancing across multiple CPUs](#load-balancing-across-multiple-cpus)
+  * [Sampling rate](#sampling-rate)
+  * [Monitoring objects](#monitoring-objects)
+  * [IP lists](#ip-lists)
+  * [Configure what data should be exported to the DBMS](#configure-what-data-should-be-exported-to-the-dbms)
+  * [Export to DBMS](#export-to-dbms)
+  * [Simple Reporting by IP Addresses](#simple-reporting-by-ip-addresses)
+  * [Can we use GeoIP?](#can-we-use-geoip)
+  * [Detect spam-bots and ssh-scanners](#detect-spam-bots-and-ssh-scanners)
+  * [Plotting with gnuplot](#plotting-with-gnuplot)
+  * [Plots with Python Matplotlib](#plots-with-python-matplotlib)
+  * [Traffic visualization with Grafana](#traffic-visualization-with-grafana)
+  * [Moving Averages](#moving-averages)
+  * [Configure and set thresholds](#configure-and-set-thresholds)
+  * [Scripts and their options](#scripts-and-their-options)
+  * [Extended stats](#extended-stats)
+  * [Anomaly alerts using Telegram-bot](#anomaly-alerts-using-telegram-bot)
 
 
 ### Build and install
@@ -498,6 +498,8 @@ If you know a project that distributes databases without additional conditions, 
 The collector does not support GeoIP, but if you have some kind of database (for example, MaxMind), then you can make a geographic monitoring object using IP lists.
 
 Create a file `/var/lib/xenoeye/iplists/REGION` and put all the IP addresses of the desired region there. After that, it will be possible to create monitoring objects that will contain only incoming / outgoing traffic of the region.
+
+Another way to use GeoIP is to load the lists into the DBMS and replace IP addresses with country/region names in reports.
 
 
 ### Detect spam-bots and ssh-scanners

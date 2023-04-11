@@ -180,7 +180,7 @@ filter = INT_FIELD_NAME INT_VAL_MIN-INT_VAL_MAX /* диапазон значен
 filter = FIELD_NAME V1 or V2 or V3 ...          /* перечисление нескольких возможных значений */
 
 
-filter = NOT <expr>  /* инверсия условия */
+filter = NOT <expr>  /* инверсия выражения */
 
 filter = <expr1> AND <expr2> AND <expr3> ...    /* несколько условий, которые должны выполняться одновременно */
 
