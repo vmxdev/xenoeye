@@ -1,13 +1,13 @@
 # Internals
 
-  * [General remarks](#)
-  * [Worker and auxiliary threads](#)
-  * [Monitoring objects and filters](#)
-  * [How to add a new Netflow field to the collector](#)
-  * [Time source](#)
-  * [Fixed time windows](#)
-  * [Moving averages](#)
-  * [IP lists](#)
+  * [General remarks](#general-remarks)
+  * [Worker and auxiliary threads](#worker-and-auxiliary-threads)
+  * [Monitoring objects and filters](#monitoring-objects-and-filters)
+  * [How to add a new Netflow field to the collector](#how-to-add-a-new-netflow-field-to-the-collector)
+  * [Time source](#time-source)
+  * [Fixed time windows](#fixed-time-windows)
+  * [Moving averages](#moving-averages)
+  * [IP lists](#ip-lists)
 
 
 ### General remarks

@@ -48,7 +48,7 @@ In a slightly closer to production mode, with two monitoring objects, two slidin
 
 These numbers are best read in a pessimistic mood:
   1. if you load the collector with many monitoring objects with a bunch of reports and debug printing, it can choke on 100K fps/CPU or less
-  2. most likely 700K fps and more cannot be calculated on one CPU
+  2. most likely 700K fps and more cannot be processed on one CPU
 
 Scaling to multiple cores is described below in the documentation
 
@@ -77,21 +77,21 @@ Scaling to multiple cores is described below in the documentation
     * [Anomaly alerts using Telegram-bot](STEP-BY-STEP.md#anomaly-alerts-using-telegram-bot)
 
   * [Full description of configuration files](CONFIG.md)
-    * [Main configuration file `xenoeye.conf`](CONFIG.md#)
-    * [Setting the sampling rates `devices.conf`](CONFIG.md#)
-    * [Description of the monitoring object `mo.conf`](CONFIG.md#)
-    * [Files with thresholds](CONFIG.md#)
-    * [IP Lists](CONFIG.md#)
+    * [Main configuration file `xenoeye.conf`](CONFIG.md#main-configuration-file-xenoeyeconf)
+    * [Setting the sampling rates `devices.conf`](CONFIG.md#setting-the-sampling-rates-devicesconf)
+    * [Description of the monitoring object `mo.conf`](CONFIG.md#description-of-the-monitoring-object-moconf)
+    * [Files with thresholds](CONFIG.md#files-with-thresholds)
+    * [IP Lists](CONFIG.md#ip-lists)
 
   * [Internals](INTERNALS.md)
-    * [General remarks](INTERNALS.md#)
-    * [Worker and auxiliary threads](INTERNALS.md#)
-    * [Monitoring objects and filters](INTERNALS.md#)
-    * [How to add a new Netflow field to the collector](INTERNALS.md#)
-    * [Time source](INTERNALS.md#)
-    * [Fixed time windows](INTERNALS.md#)
-    * [Moving averages](INTERNALS.md#)
-    * [IP lists](INTERNALS.md#)
+    * [General remarks](INTERNALS.md#general-remarks)
+    * [Worker and auxiliary threads](INTERNALS.md#worker-and-auxiliary-threads)
+    * [Monitoring objects and filters](INTERNALS.md#monitoring-objects-and-filters)
+    * [How to add a new Netflow field to the collector](INTERNALS.md#how-to-add-a-new-netflow-field-to-the-collector)
+    * [Time source](INTERNALS.md#time-source)
+    * [Fixed time windows](INTERNALS.md#fixed-time-windows)
+    * [Moving averages](INTERNALS.md#moving-averages)
+    * [IP lists](INTERNALS.md#ip-lists)
 
 
 ## Plans for the future
