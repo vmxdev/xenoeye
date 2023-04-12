@@ -76,7 +76,7 @@ If it does, then the necessary fields are selected from the flow and processed f
 
 In Netflow v9 and IPFIX, few hundred fields exist and are described. Out of the box, the collector supports only the most common ones. Some types of fields can be easily added.
 
-The collector operates with netflow fields of two kinds. The first kind is the `IN_BYTES` and `IN_PKTS` fields. These fields are "hardcoded" as aggregable. If they are found in the config in the array of fields for export, then the data from these fields will be summed up.
+The collector operates with netflow fields of two types. The first type is the `IN_BYTES`, `IN_PKTS` and similar fields. These fields are considered aggregated. If they are found in the config in the array of fields for export, then the data from these fields will be summed up.
 
 The remaining fields are considered non-aggregable.
 
@@ -112,6 +112,16 @@ FIELD(ID,      "name",          TYPE,  src_netflow_field,   dst_netflow_field)
   * `name` is a string that will be used in filters
   * `TYPE` type (now supported `RANGE`(range of integers), `ADDR4` or `ADDR6` - IP addresses)
   * `src_netflow_field`, `dst_netflow_field` netflow fields to work with. What is written in `internal_id` from `netflow.def`. If there can be "source" (`src`) and "destination" `dst` prefixes, the corresponding fields must be specified.
+
+
+For aggregable fields, the `filter-ag.def` file is used:
+
+``` c
+FIELD(ID,   "name",       netflow_field,   SCALE)
+```
+
+`SCALE` is the factor by which the field value is multiplied. It is used only for one case - you can specify `bits` in the field list and the collector will export the value `in_bytes` * 8.
+
 
 After changing the files, the program needs to be recompiled.
 

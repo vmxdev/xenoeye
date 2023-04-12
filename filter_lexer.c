@@ -165,12 +165,12 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 		*id = ASC;
 	} else if (MATCH("desc")) {
 		*id = DESC;
-	} else if (MATCH("packets")) {
-		*id = PACKETS;
-	} else if (MATCH("octets")) {
-		*id = OCTETS;
-	} else if (MATCH("bits")) {
-		*id = BITS;
+
+#define FIELD(NAME, STR, FLD, SCALE)                          \
+		} else if (MATCH(STR)) {                      \
+			*id = NAME;
+#include "filter-ag.def"
+
 	} else {
 		/* unknown string */
 		return 0;

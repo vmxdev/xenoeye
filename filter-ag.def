@@ -1,0 +1,5 @@
+/*    NAME	STR		FLD		SCALE */
+FIELD(OCTETS,	"octets",	in_bytes,	1)
+FIELD(BITS,	"bits",		in_bytes,	8)
+FIELD(PACKETS,	"packets",	in_pkts,	1)
+#undef FIELD

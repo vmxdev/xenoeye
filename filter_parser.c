@@ -321,9 +321,10 @@ do {                                                                          \
 	}                                                                     \
 } while (0)
 
-	AGGR_FIELD(in, fld, OCTETS, in_bytes, 1);
-	AGGR_FIELD(in, fld, BITS, in_bytes, 8);
-	AGGR_FIELD(in, fld, PACKETS, in_pkts, 1);
+/* fields from 'filter-ag.def' */
+#define FIELD(NAME, STR, FLD, SCALE)                                          \
+	AGGR_FIELD(in, fld, NAME, FLD, SCALE);
+#include "filter-ag.def"
 
 #undef AGGR_FIELD
 
