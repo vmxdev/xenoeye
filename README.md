@@ -21,7 +21,7 @@ Please read carefully: some items may not be suitable for you
   * The project is in beta state. The collector works for us, but we cannot give any guarantee that it will work for you.
   * This is not a turnkey business solution, but a collector program and several auxiliary scripts. However, with the collector you can generate almost arbitrary reports, build charts, dashboards in Grafana and run scripts when the traffic exceeds the limits.
   * We use the collector to monitor our networks. We are using Netflow v9 and IPFIX, so the collector only supports them
-  * Unlike many modern collectors, we **don't use** Apache Kafka, Elastic stack or anything like that. The main calculations take place inside the collector itself
+  * Unlike many modern collectors, we **don't use** Apache Kafka, Elastic stack or anything like that. The main processing take place inside the collector itself
   * The documentation contains examples of building simple reports. To build more complex ones, you need at least basic knowledge of SQL
   * Collector processes data in two ways: aggregates it over periods (for reports and charts), and uses moving averages to quickly respond to bursts
   * Both methods can be used individually or together. For example, if a moving average detects a threshold being exceeded, you can run a custom script and immediately enable extended statistics collection
