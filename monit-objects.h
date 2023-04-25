@@ -38,7 +38,7 @@ struct mo_fieldset
 	struct field *aggr;
 };
 
-struct fwm_data
+struct fwm_thread_data
 {
 	/* using two banks */
 	tkvdb_tr *trs[2];
@@ -68,7 +68,7 @@ struct mo_fwm
 	int dont_create_index;
 
 	/* each thread has it's own data */
-	struct fwm_data *data;
+	struct fwm_thread_data *thread_data;
 };
 
 /* moving average */

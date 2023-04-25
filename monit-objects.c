@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020-2021, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2023, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -398,7 +398,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 		tkvdb_datum dtkey, dtval;
 
 		struct mo_fwm *fwm;
-		struct fwm_data *fdata;
+		struct fwm_thread_data *fdata;
 		uint8_t *key;
 
 		fwm = &mo->fwms[i];
@@ -414,7 +414,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 			}
 		}
 
-		fdata = &fwm->data[thread_id];
+		fdata = &fwm->thread_data[thread_id];
 		key = fdata->key;
 
 		/* make key */

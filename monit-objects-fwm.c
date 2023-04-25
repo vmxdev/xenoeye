@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2021, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2021-2023, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -36,43 +36,46 @@ fwm_fields_init(size_t nthreads, struct mo_fwm *window)
 
 	valsize = window->fieldset.n_aggr * sizeof(uint64_t);
 
-	window->data = calloc(nthreads, sizeof(struct fwm_data));
-	if (!window->data) {
+	window->thread_data = calloc(nthreads, sizeof(struct fwm_thread_data));
+	if (!window->thread_data) {
 		LOG("calloc() failed");
 		return 0;
 	}
 
 	for (i=0; i<nthreads; i++) {
-		window->data[i].keysize = keysize;
-		window->data[i].key = malloc(keysize);
-		if (!window->data[i].key) {
+		window->thread_data[i].keysize = keysize;
+		window->thread_data[i].key = malloc(keysize);
+		if (!window->thread_data[i].key) {
 			LOG("malloc() failed");
 			return 0;
 		}
 
-		window->data[i].valsize = valsize;
-		window->data[i].val = malloc(valsize);
-		if (!window->data[i].val) {
+		window->thread_data[i].valsize = valsize;
+		window->thread_data[i].val = malloc(valsize);
+		if (!window->thread_data[i].val) {
 			LOG("malloc() failed");
 			return 0;
 		}
 
-		window->data[i].trs[0] = tkvdb_tr_create(NULL, NULL);
-		if (!window->data[i].trs[0]) {
+		window->thread_data[i].trs[0] = tkvdb_tr_create(NULL, NULL);
+		if (!window->thread_data[i].trs[0]) {
 			LOG("tkvdb_tr_create() failed");
 			return 0;
 		}
-		window->data[i].trs[1] = tkvdb_tr_create(NULL, NULL);
-		if (!window->data[i].trs[1]) {
+		window->thread_data[i].trs[1] = tkvdb_tr_create(NULL, NULL);
+		if (!window->thread_data[i].trs[1]) {
 			LOG("tkvdb_tr_create() failed");
 			return 0;
 		}
 
-		window->data[i].trs[0]->begin(window->data[i].trs[0]);
-		window->data[i].trs[1]->begin(window->data[i].trs[1]);
+		window->thread_data[i].trs[0]
+			->begin(window->thread_data[i].trs[0]);
 
-		atomic_store_explicit(&window->data[i].tr,
-			window->data[i].trs[0], memory_order_relaxed);
+		window->thread_data[i].trs[1]
+			->begin(window->thread_data[i].trs[1]);
+
+		atomic_store_explicit(&window->thread_data[i].tr,
+			window->thread_data[i].trs[0], memory_order_relaxed);
 
 	}
 
@@ -577,16 +580,18 @@ fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 	for (i=0; i<nthreads; i++) {
 		tkvdb_tr *tr;
 
-		tr = atomic_load_explicit(&fwm->data[i].tr,
+		tr = atomic_load_explicit(&fwm->thread_data[i].tr,
 			memory_order_relaxed);
 
 		/* swap banks */
-		if (tr == fwm->data[i].trs[0]) {
-			atomic_store_explicit(&fwm->data[i].tr,
-				fwm->data[i].trs[1], memory_order_relaxed);
+		if (tr == fwm->thread_data[i].trs[0]) {
+			atomic_store_explicit(&fwm->thread_data[i].tr,
+				fwm->thread_data[i].trs[1],
+				memory_order_relaxed);
 		} else {
-			atomic_store_explicit(&fwm->data[i].tr,
-				fwm->data[i].trs[0], memory_order_relaxed);
+			atomic_store_explicit(&fwm->thread_data[i].tr,
+				fwm->thread_data[i].trs[0],
+				memory_order_relaxed);
 		}
 		usleep(10);
 		fwm_merge_tr(fwm, tr_merge, tr);
