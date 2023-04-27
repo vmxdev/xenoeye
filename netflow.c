@@ -97,34 +97,6 @@ flow_parse_unknown(struct nf_flow_info *flow, int flength, uint8_t *fptr)
 	/* do nothing */
 }
 
-#if 0
-static void
-flow_parse(struct nf_flow_info *flow,
-	int flength, int ftype, uint8_t *fptr)
-{
-
-#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
-if (ftype == FLDID) {                                                         \
-	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
-		LOG("Incorrect '" #NAME                                       \
-			"' field size (got %d, expected from %d to %d)",      \
-			flength, SIZEMIN, SIZEMAX);                           \
-	} else {                                                              \
-		if (FLDTYPE == NF_FIELD_STRING) {                             \
-			memcpy(&flow->NAME[0], fptr, flength);                \
-		} else {                                                      \
-			memcpy(&flow->NAME[SIZEMAX - flength], fptr, flength);\
-		}                                                             \
-		/*LOG("Field: '"#NAME"', length: %d", flength);*/             \
-		flow->has_##NAME = 1;                                         \
-		flow->NAME##_size = flength;                                  \
-	}                                                                     \
-}
-#include "netflow.def"
-
-}
-
-#endif
 
 static void
 pseudo_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
@@ -180,10 +152,7 @@ parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
 			template_size, length);
 		return 0;
 	}
-/*
-	LOG("Template id %d, field count: %u", ntohs(template_id),
-		field_count);
-*/
+
 	/* search for template in database */
 	make_template_key(&tkey, template_id, npi, 9);
 	tmplitem = netflow_template_find(&tkey,
@@ -240,10 +209,7 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 	struct template_key tkey;
 	int template_field_count;
 	size_t t_id;
-/*
-	LOG("v9 data, flowset: %d, length == %d, count = %d",
-		ntohs(flowset_id), length, count);
-*/
+
 	make_template_key(&tkey, flowset_id, npi, 9);
 	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
 
@@ -262,14 +228,12 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 		memset(&flow, 0, sizeof(struct nf_flow_info));
 		tmpfptr = fptr;
 
-		/*LOG("Flowset #%d", cnt);*/
 		for (i=0; i<template_field_count; i++) {
 			int flength, ftype;
 
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
 
-			//flow_parse(&flow, flength, ftype, fptr);
 			flow_parse_functions[ftype](&flow, flength, fptr);
 
 			fptr += flength;
@@ -334,12 +298,6 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
 	npi->epoch = header->unix_secs;
 
 	sampling_rate_init(npi);
-/*
-	LOG("got v9, package sequence: %u, source id %u, length %d",
-		ntohl(header->package_sequence),
-		ntohl(npi->source_id),
-		len);
-*/
 
 	ptr = (uint8_t *)npi->rawpacket + sizeof(struct nf9_header);
 
@@ -426,11 +384,6 @@ parse_ipfix_template(struct xe_data *data, struct nf_packet_info *npi,
 	template_id = tmpl_header->template_id;
 	field_count = ntohs(tmpl_header->field_count);
 
-/*
-	LOG("ipfix: template id %d, field count: %u", ntohs(template_id),
-		field_count);
-*/
-
 	/* search for template in database */
 	if (field_count < 1) {
 		LOG("ipfix: incorrect field count %u", field_count);
@@ -496,10 +449,6 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 	int stop = 0;
 	size_t t_id;
 
-/*
-	LOG("ipfix data, flowset: %d, length == %d", ntohs(flowset_id),
-		length);
-*/
 	make_template_key(&tkey, flowset_id, npi, 10);
 	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
 
@@ -528,7 +477,6 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 			flength = ntohs(tmpl->elements[i].length);
 			ftype = ntohs(tmpl->elements[i].id);
 
-			//flow_parse(&flow, flength, ftype, fptr);
 			flow_parse_functions[ftype](&flow, flength, fptr);
 
 			fptr += flength;
@@ -595,12 +543,6 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 	npi->epoch = header->export_time;
 
 	sampling_rate_init(npi);
-/*
-	LOG("got ipfix, package sequence: %u, source id %u, length %d",
-		ntohl(header->sequence_number),
-		ntohl(npi->source_id),
-		len);
-*/
 
 	ptr = (uint8_t *)npi->rawpacket + sizeof(struct ipfix_header);
 
@@ -614,8 +556,6 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 		length = ntohs(flowset_header->length);
 
 		ptr += sizeof(struct ipfix_flowset_header);
-
-/*		LOG("Flowset %u, length %u", flowset_id_host, length);*/
 
 		if (flowset_id_host == 2) {
 			if (!parse_ipfix_template(data, npi, &ptr,

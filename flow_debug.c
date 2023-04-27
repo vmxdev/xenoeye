@@ -74,47 +74,6 @@ flow_field_print_##FLDID(char *str, int flength, uint8_t *fptr)               \
 }
 #include "netflow.def"
 
-#if 0
-static void
-flow_field_print(char *str, enum NF_FIELD_TYPE type, int flength,
-	char *desc, uint8_t *fptr)
-{
-	if (type == NF_FIELD_BYTES) {
-		flow_field_print_bytes(str, flength, desc, fptr);
-		return;
-	}
-
-	if (flength == 1) {
-		sprintf(str, "%s: %u", desc, *fptr);
-	} else if (flength == 2) {
-		sprintf(str, "%s: %u", desc, ntohs(*((uint16_t *)fptr)));
-	} else if (flength == 4) {
-		if (type == NF_FIELD_IP_ADDR) {
-			sprintf(str, "%s: %u.%u.%u.%u", desc,
-				*(fptr + 0), *(fptr + 1),
-				*(fptr + 2), *(fptr + 3));
-		} else {
-			sprintf(str, "%s: %u", desc,
-				ntohl(*((uint32_t *)fptr)));
-		}
-	} else if ((flength == 8) && (type == NF_FIELD_INT)) {
-		sprintf(str, "%s: %lu", desc,
-			be64toh(*((uint64_t *)fptr)));
-	} else if ((flength == 16) && (type == NF_FIELD_IP_ADDR)) {
-		/* FIXME: hmm */
-		sprintf(str, "%s: %02x%02x:%02x%02x:%02x%02x:%02x%02x:"
-			"%02x%02x:%02x%02x:%02x%02x:%02x%02x", desc,
-			*(fptr + 0), *(fptr + 1), *(fptr + 2), *(fptr + 3),
-			*(fptr + 4), *(fptr + 5), *(fptr + 6), *(fptr + 7),
-			*(fptr + 8), *(fptr + 9), *(fptr + 10), *(fptr + 11),
-			*(fptr + 12), *(fptr + 13), *(fptr + 14), *(fptr + 15));
-	} else {
-		flow_field_print_bytes(str, flength, desc, fptr);
-	}
-}
-#endif
-
-
 void
 flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 	char *debug_flow_str)
@@ -135,22 +94,6 @@ flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 				"0x%02x ", *(fptr + i));
 		}
 	}
-
-#if 0
-	if (0) {
-#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
-} else if (ftype == FLDID) {                                                  \
-	flow_field_print(flow_str, FLDTYPE, flength, DESC, fptr);
-#include "netflow.def"
-	} else {
-		int i;
-		sprintf(flow_str, "Unknown field %d: ", ftype);
-		for (i=0; i<flength; i++) {
-			sprintf(flow_str + strlen(flow_str),
-				"0x%02x ", *(fptr + i));
-		}
-	}
-#endif
 
 	strcat(debug_flow_str, flow_str);
 }
