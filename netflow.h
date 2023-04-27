@@ -131,6 +131,7 @@ struct nf_packet_info
 	int sampling_rate;
 };
 
+void netflow_process_init(void);
 int netflow_process(struct xe_data *data, size_t thread_id,
 	struct nf_packet_info *npi, int len);
 

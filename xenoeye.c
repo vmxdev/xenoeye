@@ -516,6 +516,9 @@ main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	netflow_process_init();
+	flow_debug_init();
+
 	for (i=0; i<data.ncap; i++) {
 		if (data.cap[i].type == XENOEYE_CAPTURE_TYPE_PCAP) {
 			if (!pcapture_start(&data, i)) {

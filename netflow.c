@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020-2021, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2023, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,6 +40,10 @@
 #include "devices.h"
 
 
+typedef void (*flow_parse_func_t)(struct nf_flow_info *, int, uint8_t *);
+
+static flow_parse_func_t flow_parse_functions[UINT16_MAX];
+
 /* construct template key, used as key in persistent k-v templates storage */
 static void
 make_template_key(struct template_key *tkey, uint16_t template_id,
@@ -60,6 +64,40 @@ make_template_key(struct template_key *tkey, uint16_t template_id,
 	tkey->epoch = time(NULL);
 }
 
+/* make a separate function for each known field */
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+static void                                                                   \
+flow_parse_##FLDID(struct nf_flow_info *flow, int flength, uint8_t *fptr)     \
+{                                                                             \
+	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
+		LOG("Incorrect '" #NAME                                       \
+			"' field size (got %d, expected from %d to %d)",      \
+			flength, SIZEMIN, SIZEMAX);                           \
+	} else {                                                              \
+		if (FLDTYPE == NF_FIELD_STRING) {                             \
+			memcpy(&flow->NAME[0], fptr, flength);                \
+		} else {                                                      \
+			memcpy(&flow->NAME[SIZEMAX - flength], fptr, flength);\
+		}                                                             \
+		/*LOG("Field: '"#NAME"', length: %d", flength);*/             \
+		flow->has_##NAME = 1;                                         \
+		flow->NAME##_size = flength;                                  \
+	}                                                                     \
+}
+#include "netflow.def"
+
+/* function for unknown field */
+static void
+flow_parse_unknown(struct nf_flow_info *flow, int flength, uint8_t *fptr)
+{
+	(void)flow;
+	(void)flength;
+	(void)fptr;
+
+	/* do nothing */
+}
+
+#if 0
 static void
 flow_parse(struct nf_flow_info *flow,
 	int flength, int ftype, uint8_t *fptr)
@@ -85,6 +123,8 @@ if (ftype == FLDID) {                                                         \
 #include "netflow.def"
 
 }
+
+#endif
 
 static void
 pseudo_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
@@ -229,7 +269,8 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 			flength = ntohs(tmpl->typelen[i].length);
 			ftype = ntohs(tmpl->typelen[i].type);
 
-			flow_parse(&flow, flength, ftype, fptr);
+			//flow_parse(&flow, flength, ftype, fptr);
+			flow_parse_functions[ftype](&flow, flength, fptr);
 
 			fptr += flength;
 
@@ -487,7 +528,8 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 			flength = ntohs(tmpl->elements[i].length);
 			ftype = ntohs(tmpl->elements[i].id);
 
-			flow_parse(&flow, flength, ftype, fptr);
+			//flow_parse(&flow, flength, ftype, fptr);
+			flow_parse_functions[ftype](&flow, flength, fptr);
 
 			fptr += flength;
 
@@ -634,5 +676,20 @@ netflow_process(struct xe_data *data, size_t thread_id,
 	}
 
 	return ret;
+}
+
+void
+netflow_process_init(void)
+{
+	int i;
+
+	for (i=0; i<UINT16_MAX; i++) {
+		flow_parse_functions[i] = &flow_parse_unknown;
+	}
+
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+	flow_parse_functions[FLDID] = flow_parse_##FLDID;
+#include "netflow.def"
+
 }
 

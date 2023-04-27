@@ -6,6 +6,8 @@
 
 #include "xenoeye.h"
 
+void flow_debug_init(void);
+
 int flow_debug_config(struct aajson *a, aajson_val *value,
 	struct xe_debug *debug);
 

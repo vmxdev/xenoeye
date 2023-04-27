@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2021, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2021-2023, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,6 +22,9 @@
 
 #include "flow_debug.h"
 
+typedef void (*flow_fldprnt_func_t)(char *str, int flength, uint8_t *fptr);
+static flow_fldprnt_func_t flow_fldprnt_functions[UINT16_MAX];
+
 static void
 flow_field_print_bytes(char *str, int flength, char *desc, uint8_t *fptr)
 {
@@ -33,6 +36,45 @@ flow_field_print_bytes(char *str, int flength, char *desc, uint8_t *fptr)
 	}
 }
 
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+static void                                                                   \
+flow_field_print_##FLDID(char *str, int flength, uint8_t *fptr)               \
+{                                                                             \
+	if (FLDTYPE == NF_FIELD_BYTES) {                                      \
+		flow_field_print_bytes(str, flength, DESC, fptr);             \
+		return;                                                       \
+	}                                                                     \
+	if (flength == 1) {                                                   \
+		sprintf(str, "%s: %u", DESC, *fptr);                          \
+	} else if (flength == 2) {                                            \
+		sprintf(str, "%s: %u", DESC, ntohs(*((uint16_t *)fptr)));     \
+	} else if (flength == 4) {                                            \
+		if (FLDTYPE == NF_FIELD_IP_ADDR) {                            \
+			sprintf(str, "%s: %u.%u.%u.%u", DESC,                 \
+				*(fptr + 0), *(fptr + 1),                     \
+				*(fptr + 2), *(fptr + 3));                    \
+		} else {                                                      \
+			sprintf(str, "%s: %u", DESC,                          \
+				ntohl(*((uint32_t *)fptr)));                  \
+		}                                                             \
+	} else if ((flength == 8) && (FLDTYPE == NF_FIELD_INT)) {             \
+		sprintf(str, "%s: %lu", DESC,                                 \
+			be64toh(*((uint64_t *)fptr)));                        \
+	} else if ((flength == 16) && (FLDTYPE == NF_FIELD_IP_ADDR)) {        \
+		/* FIXME: hmm */                                              \
+		sprintf(str, "%s: %02x%02x:%02x%02x:%02x%02x:%02x%02x:"       \
+			"%02x%02x:%02x%02x:%02x%02x:%02x%02x", DESC,          \
+			*(fptr + 0), *(fptr + 1), *(fptr + 2), *(fptr + 3),   \
+			*(fptr + 4), *(fptr + 5), *(fptr + 6), *(fptr + 7),   \
+			*(fptr + 8), *(fptr + 9), *(fptr + 10), *(fptr + 11), \
+			*(fptr + 12), *(fptr + 13), *(fptr + 14), *(fptr + 15));\
+	} else {                                                              \
+		flow_field_print_bytes(str, flength, DESC, fptr);             \
+	}                                                                     \
+}
+#include "netflow.def"
+
+#if 0
 static void
 flow_field_print(char *str, enum NF_FIELD_TYPE type, int flength,
 	char *desc, uint8_t *fptr)
@@ -70,6 +112,8 @@ flow_field_print(char *str, enum NF_FIELD_TYPE type, int flength,
 		flow_field_print_bytes(str, flength, desc, fptr);
 	}
 }
+#endif
+
 
 void
 flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
@@ -81,6 +125,18 @@ flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 		strcat(debug_flow_str, "; ");
 	}
 
+	if (flow_fldprnt_functions[ftype]) {
+		flow_fldprnt_functions[ftype](flow_str, flength, fptr);
+	} else {
+		int i;
+		sprintf(flow_str, "Unknown field %d: ", ftype);
+		for (i=0; i<flength; i++) {
+			sprintf(flow_str + strlen(flow_str),
+				"0x%02x ", *(fptr + i));
+		}
+	}
+
+#if 0
 	if (0) {
 #define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
 } else if (ftype == FLDID) {                                                  \
@@ -94,6 +150,7 @@ flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 				"0x%02x ", *(fptr + i));
 		}
 	}
+#endif
 
 	strcat(debug_flow_str, flow_str);
 }
@@ -149,4 +206,18 @@ flow_debug_config(struct aajson *a, aajson_val *value, struct xe_debug *debug)
 	return 1;
 }
 #undef STRCMP
+
+void
+flow_debug_init(void)
+{
+	int i;
+	for (i=0; i<UINT16_MAX; i++) {
+		flow_fldprnt_functions[i] = NULL;
+	}
+
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+	flow_fldprnt_functions[FLDID] = flow_field_print_##FLDID;
+#include "netflow.def"
+
+}
 
