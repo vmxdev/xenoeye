@@ -76,15 +76,11 @@ If it does, then the necessary fields are selected from the flow and processed f
 
 In Netflow v9 and IPFIX, few hundred fields exist and are described. Out of the box, the collector supports only the most common ones. Some types of fields can be easily added.
 
-The collector operates with netflow fields of two types. The first type is the `IN_BYTES`, `IN_PKTS` and similar fields. These fields are considered aggregated. If they are found in the config in the array of fields for export, then the data from these fields will be summed up.
+The collector operates with netflow fields of two types. The first type is the `IN_BYTES`, `IN_PKTS` and similar fields. These fields are considered aggregable. If they are found in the config in the array of fields for export, then the data from these fields will be summed up.
 
 The remaining fields are considered non-aggregable.
 
-Now this approach is used to describe netflow fields: they are specified in the code, in the files [netflow.def](netflow.def) and [filter.def](filter.def).
-
-When compiling, the [X-Macro](https://en.wikipedia.org/wiki/X_Macro) technique is used, the list of fields turns into a list of `if () else if ()...` conditions. From a performance point of view, it is better not to add many fields to these files, but to leave only the necessary minimum.
-
-Perhaps later we will remake the architecture and it will be possible to add an arbitrary number of fields without losing performance.
+Now this approach is used to describe netflow fields: they are specified in the code, in the files [netflow.def](netflow.def), [filter.def](filter.def) and [filter-ag.def](filter-ag.def).
 
 The file format is:
 
