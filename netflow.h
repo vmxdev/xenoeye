@@ -158,7 +158,7 @@ struct nf_flow_info
 	int NAME##_size;                                    \
 	int has_##NAME;
 #include "netflow.def"
-	/* pseudo-fields for export devices */
+	/* virtual fields for export devices */
 	uint8_t dev_ip[4];
 	int dev_ip_size;
 	int has_dev_ip;

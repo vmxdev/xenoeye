@@ -99,7 +99,7 @@ flow_parse_unknown(struct nf_flow_info *flow, int flength, uint8_t *fptr)
 
 
 static void
-pseudo_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
+virtual_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
 {
 	memcpy(&flow->dev_ip[0], &npi->src_addr_ipv4, sizeof(uint32_t));
 	flow->dev_ip_size = sizeof(uint32_t);
@@ -242,8 +242,8 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 				break;
 			}
 		}
-		/* pseudo-fields */
-		pseudo_fields_init(&flow, npi);
+		/* virtual fields */
+		virtual_fields_init(&flow, npi);
 
 		/* debug print */
 		if (data->debug.print_flows) {
@@ -486,8 +486,8 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 				break;
 			}
 		}
-		/* pseudo-fields */
-		pseudo_fields_init(&flow, npi);
+		/* virtual fields */
+		virtual_fields_init(&flow, npi);
 
 		if (data->debug.print_flows) {
 			char debug_flow_str[1024];
@@ -629,7 +629,7 @@ parse_netflow_v5(struct xe_data *data, size_t thread_id,
 NF5_FIELDS
 #undef FIELD
 
-		pseudo_fields_init(&flow, npi);
+		virtual_fields_init(&flow, npi);
 
 		/* debug print */
 		if (data->debug.print_flows) {
