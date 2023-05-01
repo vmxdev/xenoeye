@@ -23,6 +23,58 @@ enum NF_FIELD_TYPE
 	NF_FIELD_BYTES
 };
 
+/* netflow v5 */
+struct nf5_header
+{
+	uint16_t version;
+	uint16_t count;
+	uint32_t sys_uptime;
+	uint32_t unix_secs;
+	uint32_t unix_nsecs;
+
+	uint32_t flow_sequence;
+	uint8_t engine_type;
+	uint8_t engine_id;
+	uint16_t sampling;
+} __attribute__ ((__packed__));
+
+#define NF5_FIELDS                                    \
+	FIELD(uint32_t, src_addr, ip4_src_addr, 8)    \
+	FIELD(uint32_t, dst_addr, ip4_dst_addr, 12)   \
+	FIELD(uint32_t, next_hop, ip4_next_hop, 15)   \
+	FIELD(uint16_t, input_snmp, input_snmp, 10)   \
+	FIELD(uint16_t, output_snmp, output_snmp, 14) \
+	FIELD(uint32_t, packets, in_pkts, 2)          \
+	FIELD(uint32_t, octets, in_bytes, 1)          \
+	FIELD(uint32_t, first, first_switched, 22)    \
+	FIELD(uint32_t, last, last_switched, 21)      \
+	FIELD(uint16_t, src_port, l4_src_port, 7)     \
+	FIELD(uint16_t, dst_port, l4_dst_port, 11)    \
+	FIELD(uint8_t, pad1, pad1, 65530)             \
+	FIELD(uint8_t, tcp_flags, tcp_flags, 6)       \
+	FIELD(uint8_t, protocol, protocol, 4)         \
+	FIELD(uint8_t, tos, src_tos, 5)               \
+	FIELD(uint16_t, src_as, src_as, 16)           \
+	FIELD(uint16_t, dst_as, dst_as, 17)           \
+	FIELD(uint8_t, src_mask, src_mask, 9)         \
+	FIELD(uint8_t, dst_mask, dst_mask, 13)        \
+	FIELD(uint16_t, pad2, pad2, 65531)
+
+struct nf5_flow
+{
+#define FIELD(TYPE, V5, V9, ID) \
+	TYPE V5;
+	NF5_FIELDS
+#undef FIELD
+} __attribute__ ((__packed__));
+
+struct nf5_packet
+{
+	struct nf5_header header;
+	struct nf5_flow flows[1];
+} __attribute__ ((__packed__));
+
+/* netflow v9 */
 struct nf9_header
 {
 	uint16_t version;

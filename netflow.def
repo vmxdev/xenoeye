@@ -38,4 +38,6 @@ FIELD(ingrs_vrf,           "Ingress VRFID",      NF_FIELD_INT,      234,4,  4)
 FIELD(egrs_vrf,            "Egress VRFID",       NF_FIELD_INT,      235,4,  4)
 FIELD(dot1q_vlan,          "Dot1q VLAN",         NF_FIELD_INT,      243,2,  2)
 FIELD(dot1q_cvlan,         "Dot1q customer VLAN",NF_FIELD_INT,      245,2,  2)
+FIELD(pad1,                "Padding",            NF_FIELD_INT,      65530,1,1)
+FIELD(pad2,                "Padding",            NF_FIELD_INT,      65531,2,2)
 #undef FIELD

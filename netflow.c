@@ -582,6 +582,91 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 	return 1;
 }
 
+static void
+print_netflow_v5_flowset(struct nf_flow_info *flow, char *debug_flow_str)
+{
+	debug_flow_str[0] = '\0';
+
+#define FIELD(TYPE, V5, V9, ID) \
+	flow_debug_add_field(sizeof(TYPE), ID, flow->V9, debug_flow_str);
+NF5_FIELDS
+#undef FIELD
+
+}
+
+
+static int
+parse_netflow_v5(struct xe_data *data, size_t thread_id,
+	struct nf_packet_info *npi, int length)
+{
+	int i;
+	struct nf5_packet *pkt = (struct nf5_packet *)npi->rawpacket;
+	int nflows = ntohs(pkt->header.count);
+
+	if ((int)(sizeof(struct nf5_header) + sizeof(struct nf5_flow) * nflows)
+		!= length) {
+
+		LOG("Invalid number of flows: %d", nflows);
+		return 0;
+	}
+
+	npi->source_id = pkt->header.engine_id;
+	npi->epoch = pkt->header.unix_secs;
+
+	sampling_rate_init(npi);
+
+	for (i=0; i<nflows; i++) {
+		struct nf_flow_info flow;
+		size_t t_id;
+
+		memset(&flow, 0, sizeof(struct nf_flow_info));
+
+		/* parse flow */
+#define FIELD(TYPE, V5, V9, ID) \
+	memcpy(&flow.V9, &pkt->flows[i].V5, sizeof(TYPE)); \
+	flow.has_##V9 = 1; \
+	flow.V9##_size = sizeof(TYPE);
+NF5_FIELDS
+#undef FIELD
+
+		pseudo_fields_init(&flow, npi);
+
+		/* debug print */
+		if (data->debug.print_flows) {
+			char debug_flow_str[1024];
+
+			print_netflow_v5_flowset(&flow, debug_flow_str);
+			flow_print_str(&data->debug, &flow, debug_flow_str);
+		}
+
+		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
+			struct monit_object *mo = &data->monit_objects[t_id];
+
+			if (!filter_match(mo->expr, &flow)) {
+				continue;
+			}
+
+			if (mo->debug.print_flows) {
+				char debug_flow_str[1024];
+
+				print_netflow_v5_flowset(&flow,
+					debug_flow_str);
+				flow_print_str(&data->debug, &flow,
+					debug_flow_str);
+			}
+
+			monit_object_process_nf(data, mo, thread_id,
+				npi->time_ns, &flow);
+		}
+#ifdef FLOWS_CNT
+		atomic_fetch_add_explicit(&data->nflows, 1,
+			memory_order_relaxed);
+#endif
+	}
+
+	return 1;
+}
+
 int
 netflow_process(struct xe_data *data, size_t thread_id,
 	struct nf_packet_info *npi, int len)
@@ -602,7 +687,7 @@ netflow_process(struct xe_data *data, size_t thread_id,
 	version = ntohs(*version_ptr);
 	switch (version) {
 		case 5:
-			LOG("netflow v5 not supported yet");
+			parse_netflow_v5(data, thread_id, npi, len);
 			break;
 		case 9:
 			ret = parse_netflow_v9(data, thread_id, npi, len);
