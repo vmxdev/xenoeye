@@ -587,10 +587,10 @@ print_netflow_v5_flowset(struct nf_flow_info *flow, char *debug_flow_str)
 {
 	debug_flow_str[0] = '\0';
 
-#define FIELD(USE, TYPE, V5, V9, ID)                             \
-	if (USE) {                                               \
-		flow_debug_add_field(sizeof(TYPE), ID, flow->V9, \
-			debug_flow_str);                         \
+#define FIELD(USE, TYPE, V5, V9, ID)                                 \
+	if (USE) {                                                   \
+		flow_debug_add_field(sizeof(flow->V9), ID, flow->V9, \
+			debug_flow_str);                             \
 	}
 NF5_FIELDS
 #undef FIELD
@@ -625,11 +625,12 @@ parse_netflow_v5(struct xe_data *data, size_t thread_id,
 		memset(&flow, 0, sizeof(struct nf_flow_info));
 
 		/* parse flow */
-#define FIELD(USE, TYPE, V5, V9, ID)                               \
-	if (USE) {                                                 \
-		memcpy(&flow.V9, &pkt->flows[i].V5, sizeof(TYPE)); \
-		flow.has_##V9 = 1;                                 \
-		flow.V9##_size = sizeof(TYPE);                     \
+#define FIELD(USE, TYPE, V5, V9, ID)                                      \
+	if (USE) {                                                        \
+		size_t shift = sizeof(flow.V9) - sizeof(TYPE);            \
+		memcpy(&flow.V9[shift], &pkt->flows[i].V5, sizeof(TYPE)); \
+		flow.has_##V9 = 1;                                        \
+		flow.V9##_size = sizeof(TYPE);                            \
 	}
 NF5_FIELDS
 #undef FIELD
@@ -656,7 +657,7 @@ NF5_FIELDS
 
 				print_netflow_v5_flowset(&flow,
 					debug_flow_str);
-				flow_print_str(&data->debug, &flow,
+				flow_print_str(&mo->debug, &flow,
 					debug_flow_str);
 			}
 
