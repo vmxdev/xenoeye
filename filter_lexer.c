@@ -122,7 +122,7 @@ whitespace(struct filter_input *q)
 static int
 id_sym(int c)
 {
-	int stop_symbols[] = {' ', '\t', '\r', '\n', '(', ')', 0};
+	int stop_symbols[] = {' ', '\t', ',', '\r', '\n', '(', ')', 0};
 	int *sptr = stop_symbols;
 
 	if (c == '\0') {
@@ -149,9 +149,9 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 	} else if (MATCH("dst")) {
 		*id = DST;
 
-#define FIELD(NAME, STR, TYPE, SRC, DST)                      \
-		} else if (MATCH(STR)) {                      \
-			*id = NAME;
+#define FIELD(NAME, STR, TYPE, SRC, DST)              \
+	} else if (MATCH(STR)) {                      \
+		*id = NAME;
 #include "filter.def"
 
 	} else if (MATCH("or")) {
@@ -160,15 +160,18 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 		*id = AND;
 	} else if (MATCH("not")) {
 		*id = NOT;
+	/* filter fields */
 	} else if (MATCH("asc")) {
-		/*filter fields*/
 		*id = ASC;
 	} else if (MATCH("desc")) {
 		*id = DESC;
+	/* functions */
+	} else if (MATCH("div")) {
+		*id = DIV;
 
-#define FIELD(NAME, STR, FLD, SCALE)                          \
-		} else if (MATCH(STR)) {                      \
-			*id = NAME;
+#define FIELD(NAME, STR, FLD, SCALE)                  \
+	} else if (MATCH(STR)) {                      \
+		*id = NAME;
 #include "filter-ag.def"
 
 	} else {
@@ -191,6 +194,8 @@ read_token(struct filter_input *q)
 		SINGLE_SYM_TOKEN(q, LPAREN);
 	} else if (*(q->s) == ')') {
 		SINGLE_SYM_TOKEN(q, RPAREN);
+	} else if (*(q->s) == ',') {
+		SINGLE_SYM_TOKEN(q, COMMA);
 	} else {
 		/* read rest of token */
 		do {

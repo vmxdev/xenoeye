@@ -99,8 +99,102 @@ rule_without_direction(struct filter_input *q, struct filter_expr *e, int dir)
 }
 
 static int
+nf_aggr_field_to_off(const char *name, unsigned int *off, unsigned int *size)
+{
+	if (0) {
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)           \
+	} else if (strcmp(#NAME, name) == 0) {                        \
+		*off = offsetof(struct nf_flow_info, NAME);           \
+		*size = SIZEMAX;                                      \
+		return 1;
+#include "netflow.def"
+	}
+
+	return 0;
+}
+
+static int
+nf_aggr_field_off_size(struct filter_input *q, unsigned int *off,
+	unsigned int *size)
+{
+	if (0) {
+
+#define FIELD(NAME, STR, FLD, SCALE)                                  \
+	} else if (accept_(q, NAME)) {                                \
+		return nf_aggr_field_to_off(#FLD, off, size);
+#include "filter-ag.def"
+
+	}
+
+	return 0;
+}
+
+static int
+function(struct filter_input *q, struct filter_expr *e)
+{
+	/* DIV function */
+	if (accept_(q, DIV)) {
+		unsigned int dividend_off = 0, divisor_off = 0;
+		unsigned int dividend_size = 0, divisor_size = 0;
+		struct filter_basic *fb;
+
+		if (!accept_(q, LPAREN)) {
+			mkerror(q, "Expected '(' after 'div'");
+			return 0;
+		}
+
+		if (!nf_aggr_field_off_size(q, &dividend_off, &dividend_size)) {
+			mkerror(q, "Expected aggregable field name");
+			return 0;
+		}
+
+		if (!accept_(q, COMMA)) {
+			mkerror(q, "Expected ',' after field name");
+			return 0;
+		}
+
+		if (!nf_aggr_field_off_size(q, &divisor_off, &divisor_size)) {
+			mkerror(q, "Expected aggregable field name after comma");
+			return 0;
+		}
+
+		if (!accept_(q, RPAREN)) {
+			mkerror(q, "Expected ')'");
+			return 0;
+		}
+
+		if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+				FILTER_BASIC_NAME_DIV,
+				FILTER_BASIC_DIR_NONE)) {
+
+			return 0;
+		}
+
+		fb = e->filter[e->n - 1].arg;
+		fb->div = malloc(sizeof(struct function_div));
+		if (!fb->div) {
+			return 0;
+		}
+
+		fb->div->dividend_off = dividend_off;
+		fb->div->dividend_size = dividend_size;
+
+		fb->div->divisor_off = divisor_off;
+		fb->div->divisor_size = divisor_size;
+
+		return id(q, e, FILTER_BASIC_RANGE);
+	}
+
+	return 0;
+}
+
+static int
 rule(struct filter_input *q, struct filter_expr *e)
 {
+	if (function(q, e)) {
+		return 1;
+	}
+
 	if (rule_without_direction(q, e, FILTER_BASIC_DIR_BOTH)) {
 		return 1;
 	}
@@ -307,7 +401,7 @@ field_mk_names(struct filter_input *in, char *s,
 static int
 field_without_order(struct filter_input *in, struct field *fld, char *err)
 {
-	/* check if field is aggregatable */
+	/* check if field is aggregable */
 #define AGGR_FIELD(IN, FLD, NAME, NF_FIELD, SCALE)                            \
 do {                                                                          \
 	if (accept_(IN, NAME)) {                                              \

@@ -163,7 +163,7 @@ config_field_append(char *s, struct mo_mavg *window)
 		return 0;
 	}
 
-	/* separate aggregatable and non-aggregatable fields */
+	/* separate aggregable and non-aggregable fields */
 	if (fld.aggr) {
 		if (!do_field_append(&window->fieldset.aggr,
 			&window->fieldset.n_aggr, &fld)) {

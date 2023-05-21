@@ -58,12 +58,17 @@ enum TOKEN_ID
 	SRC,
 	DST,
 
-	/* windows fields */
-	PACKETS,
-	OCTETS,
-	BITS,
+	/* aggregable fields */
+#define FIELD(NAME, STR, FLD, SCALE)  \
+	NAME,
+#include "filter-ag.def"
+
 	ASC,
-	DESC
+	DESC,
+
+	/* functions */
+	DIV,
+	COMMA
 };
 
 struct token
@@ -78,6 +83,7 @@ struct token
 };
 
 /* filter_basic */
+#define FILTER_BASIC_DIR_NONE 0
 #define FILTER_BASIC_DIR_SRC  1
 #define FILTER_BASIC_DIR_DST  2
 #define FILTER_BASIC_DIR_BOTH (FILTER_BASIC_DIR_SRC | FILTER_BASIC_DIR_DST)
@@ -105,7 +111,18 @@ enum FILTER_BASIC_NAME
 #define FIELD(NAME, STR, TYPE, SRC, DST)  \
 	FILTER_BASIC_NAME_##NAME,
 #include "filter.def"
-	FILTER_BASIC_NAME_DUMMY
+
+	FILTER_BASIC_NAME_DIV
+};
+
+struct function_div
+{
+	/* offsets and sizes in struct nf_flow_info */
+	unsigned int dividend_off;
+	unsigned int dividend_size;
+
+	unsigned int divisor_off;
+	unsigned int divisor_size;
 };
 
 struct filter_basic
@@ -116,6 +133,8 @@ struct filter_basic
 
 	size_t n;
 	struct filter_basic_data *data;
+
+	struct function_div *div;
 };
 
 enum FILTER_OP
@@ -161,9 +180,12 @@ struct field
 	size_t nf_offset;
 	int size;
 
-	/* aggregate fields */
+	/* aggregable fields */
 	int aggr;
 	int scale;
+
+	/* functions */
+	int is_function;
 };
 
 struct filter_expr *parse_filter(struct filter_input *f);
@@ -184,6 +206,29 @@ int filter_match(struct filter_expr *expr, struct nf_flow_info *flow);
 
 void filter_dump(struct filter_expr *e, FILE *f);
 void filter_free(struct filter_expr *e);
+
+static inline uint64_t
+get_nf_val(uintptr_t ptr, unsigned int size)
+{
+	uint64_t val;
+
+	switch (size) {
+		case sizeof(uint64_t):
+			val = be64toh(*(uint64_t *)ptr);
+			break;
+		case sizeof(uint32_t):
+			val = be32toh(*(uint32_t *)ptr);
+			break;
+		case sizeof(uint16_t):
+			val = be16toh(*(uint16_t *)ptr);
+			break;
+		default:
+			val = 0;
+			break;
+	}
+
+	return val;
+}
 
 #endif
 

@@ -32,6 +32,8 @@ filter_add_basic_filter(struct filter_expr *e, enum FILTER_BASIC_TYPE type,
 	fb->data = NULL;
 	fb->direction = dir;
 
+	fb->div = NULL;
+
 
 	tmpfo = realloc(e->filter, sizeof(struct filter_op) * (e->n + 1));
 	if (!tmpfo) {
@@ -436,7 +438,7 @@ filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
 	void *tmp;
 
 	switch (fb->name) {
-#define FIELD(NAME, STR, TYPE, SRC, DST)                \
+#define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
 		case FILTER_BASIC_NAME_##NAME:                               \
 			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
 				tmp = flow->SRC;                             \
@@ -503,11 +505,45 @@ filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
 	return 0;
 }
 
+static int
+filter_function_div(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	struct function_div *div = fb->div;
+	uint64_t dividend, divisor;
+	int quotient;
+
+	dividend = get_nf_val((uintptr_t)flow + div->dividend_off,
+		div->dividend_size);
+	divisor = get_nf_val((uintptr_t)flow + div->divisor_off,
+		div->divisor_size);
+
+	if (divisor == 0) {
+		LOG("Division by zero");
+		return 0;
+	}
+
+	quotient = dividend / divisor;
+
+	for (i=0; i<fb->n; i++) {
+		if ((quotient >= fb->data[i].data.range.low)
+			&& (quotient <= fb->data[i].data.range.high)) {
+
+			return 1;
+		}
+	}
+
+	return 0;
+}
 
 static int
 filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	int ret = 0;
+
+	if (fb->div) {
+		return filter_function_div(fb, flow);
+	}
 
 	if (fb->type == FILTER_BASIC_ADDR4) {
 		ret = filter_basic_match_addr4(fb, flow);
@@ -587,6 +623,8 @@ filter_free(struct filter_expr *e)
 		if (fb) {
 			free(fb->data);
 			fb->data = NULL;
+			free(fb->div);
+			fb->div = NULL;
 			free(fb);
 		}
 		e->filter[i].arg = NULL;
@@ -629,7 +667,9 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 {
 	size_t i;
 
-	if (fb->direction == FILTER_BASIC_DIR_SRC) {
+	if (fb->direction == FILTER_BASIC_DIR_NONE) {
+		/* no direction */
+	} else if (fb->direction == FILTER_BASIC_DIR_SRC) {
 		fprintf(f, "SRC ");
 	} else if (fb->direction == FILTER_BASIC_DIR_DST) {
 		fprintf(f, "DST ");
@@ -646,6 +686,12 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 			fprintf(f, #STR" ");                  \
 			break;
 #include "filter.def"
+
+		case FILTER_BASIC_NAME_DIV:
+			fprintf(f, "DIV ([offset %d]/[offset %d])",
+				(int)fb->div->dividend_off,
+				(int)fb->div->divisor_off);
+			break;
 
 		default:
 			fprintf(f, "<Unknown name %d> ", fb->name);

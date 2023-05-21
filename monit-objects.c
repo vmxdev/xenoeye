@@ -447,7 +447,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 		} else if ((rc == TKVDB_EMPTY) || (rc == TKVDB_NOT_FOUND)) {
 			/* try to add new key-value pair */
 
-			/* init new aggregatable values */
+			/* init new aggregable values */
 			for (j=0; j<fwm->fieldset.n_aggr; j++) {
 				struct field *fld = &fwm->fieldset.aggr[j];
 				uint64_t val = monit_object_nf_val(flow, fld);
