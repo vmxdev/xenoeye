@@ -130,68 +130,77 @@ nf_aggr_field_off_size(struct filter_input *q, unsigned int *off,
 }
 
 static int
-function(struct filter_input *q, struct filter_expr *e)
+function_div_parse(struct filter_input *in, struct function_div *div)
 {
-	/* DIV function */
-	if (accept_(q, DIV)) {
-		unsigned int dividend_off = 0, divisor_off = 0;
-		unsigned int dividend_size = 0, divisor_size = 0;
-		struct filter_basic *fb;
-
-		if (!accept_(q, LPAREN)) {
-			mkerror(q, "Expected '(' after 'div'");
-			return 0;
-		}
-
-		if (!nf_aggr_field_off_size(q, &dividend_off, &dividend_size)) {
-			mkerror(q, "Expected aggregable field name");
-			return 0;
-		}
-
-		if (!accept_(q, COMMA)) {
-			mkerror(q, "Expected ',' after field name");
-			return 0;
-		}
-
-		if (!nf_aggr_field_off_size(q, &divisor_off, &divisor_size)) {
-			mkerror(q, "Expected aggregable field name after comma");
-			return 0;
-		}
-
-		if (!accept_(q, RPAREN)) {
-			mkerror(q, "Expected ')'");
-			return 0;
-		}
-
-		if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
-				FILTER_BASIC_NAME_DIV,
-				FILTER_BASIC_DIR_NONE)) {
-
-			return 0;
-		}
-
-		fb = e->filter[e->n - 1].arg;
-		fb->div = malloc(sizeof(struct function_div));
-		if (!fb->div) {
-			return 0;
-		}
-
-		fb->div->dividend_off = dividend_off;
-		fb->div->dividend_size = dividend_size;
-
-		fb->div->divisor_off = divisor_off;
-		fb->div->divisor_size = divisor_size;
-
-		return id(q, e, FILTER_BASIC_RANGE);
+	if (!accept_(in, DIV)) {
+		return 0;
 	}
 
-	return 0;
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after 'div'");
+		return 0;
+	}
+
+	if (!nf_aggr_field_off_size(in, &div->dividend_off,
+		&div->dividend_size)) {
+
+		mkerror(in, "Expected aggregable field name");
+		return 0;
+	}
+
+	if (!accept_(in, COMMA)) {
+		mkerror(in, "Expected ',' after field name");
+		return 0;
+	}
+
+	if (!nf_aggr_field_off_size(in, &div->divisor_off,
+		&div->divisor_size)) {
+
+		mkerror(in, "Expected aggregable field name after comma");
+		return 0;
+	}
+
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
 }
+
+static int
+function_div(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_div div;
+	struct filter_basic *fb;
+
+	if (!function_div_parse(in, &div)) {
+		return 0;
+	}
+
+	if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+			FILTER_BASIC_NAME_DIV,
+			FILTER_BASIC_DIR_NONE)) {
+
+		return 0;
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->div = malloc(sizeof(struct function_div));
+	if (!fb->div) {
+		return 0;
+	}
+
+	*fb->div = div;
+
+	return id(in, e, FILTER_BASIC_RANGE);
+}
+
 
 static int
 rule(struct filter_input *q, struct filter_expr *e)
 {
-	if (function(q, e)) {
+	if (function_div(q, e)) {
 		return 1;
 	}
 
@@ -460,9 +469,15 @@ parse_field(char *s, struct field *fld, char *err)
 		return 0;
 	}
 
-	/* parse field without ASC/DESC suffix */
-	if (!field_without_order(&in, fld, err)) {
-		return 0;
+	if (function_div_parse(&in, &fld->div)) {
+		fld->is_div = 1;
+		fld->type = FILTER_BASIC_RANGE;
+		fld->size = sizeof(uint64_t);
+	} else {
+		/* parse field without ASC/DESC suffix */
+		if (!field_without_order(&in, fld, err)) {
+			return 0;
+		}
 	}
 
 	/* optional order */

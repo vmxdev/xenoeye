@@ -185,7 +185,8 @@ struct field
 	int scale;
 
 	/* functions */
-	int is_function;
+	int is_div;
+	struct function_div div;
 };
 
 struct filter_expr *parse_filter(struct filter_input *f);

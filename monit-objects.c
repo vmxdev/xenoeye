@@ -202,6 +202,7 @@ monit_objects_init(struct xe_data *data)
 		LOG("Adding monitoring object '%s'", dir->d_name);
 
 		if (!monit_object_info_parse(data, dir->d_name, mofile)) {
+			LOG("Monitoring object '%s' not added", dir->d_name);
 			continue;
 		}
 
@@ -230,7 +231,8 @@ monit_objects_init(struct xe_data *data)
 				data->notif_dir, mo->name, mavg->name);
 
 			if (strlen(tmp_pfx) >= PATH_MAX) {
-				LOG("Filename too big: %s/%s", mo->dir, mavg->name);
+				LOG("Filename too big: %s/%s", mo->dir,
+					mavg->name);
 				return 0;
 			}
 
@@ -254,6 +256,8 @@ monit_objects_init(struct xe_data *data)
 		/* store path to monitoring object directory */
 		sprintf(mofile, "%s/%s/", data->mo_dir, dir->d_name);
 		strcpy(mo->dir, mofile);
+
+		LOG("Monitoring object '%s' added", dir->d_name);
 	}
 
 	closedir(d);
@@ -384,6 +388,27 @@ monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 	fputs(str, f);
 }
 
+static void
+monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
+	uint8_t *key)
+{
+	uint64_t quotient, dividend, divisor;
+
+	dividend = get_nf_val((uintptr_t)flow + fld->div.dividend_off,
+		fld->div.dividend_size);
+	divisor = get_nf_val((uintptr_t)flow + fld->div.divisor_off,
+		fld->div.divisor_size);
+
+	if (divisor) {
+		quotient = htobe64(dividend / divisor);
+	} else {
+		/* division by zero */
+		/* FIXME: warn user? log or write some value for notification? */
+		quotient = htobe64(0);
+	}
+
+	memcpy(key, &quotient, sizeof(quotient));
+}
 
 int
 monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
@@ -421,8 +446,13 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 		for (f=0; f<fwm->fieldset.n_naggr; f++) {
 			struct field *fld = &fwm->fieldset.naggr[f];
 
-			uintptr_t flow_fld = (uintptr_t)flow + fld->nf_offset;
-			memcpy(key, (void *)flow_fld, fld->size);
+			if (fld->is_div) {
+				monit_object_func_div(fld, flow, key);
+			} else {
+				uintptr_t flow_fld = (uintptr_t)flow
+					+ fld->nf_offset;
+				memcpy(key, (void *)flow_fld, fld->size);
+			}
 			key += fld->size;
 		}
 
