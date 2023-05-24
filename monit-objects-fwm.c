@@ -284,6 +284,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	fprintf(f, "BEGIN;\n");
 	do {
 		uint8_t *data = c->key(c);
+		uint8_t data_mut[256];
 
 		fprintf(f, "insert into \"%s\" ", table_name);
 		fprintf(f, "values ( to_timestamp(%llu), ",
@@ -318,13 +319,16 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 
 					for (j=0; j<fld->size; j++) {
 						/* invert value */
-						data[j] = ~data[j];
+						data_mut[j] = ~*data;
+						data++;
 					}
+					monit_object_field_print(fld, f,
+						data_mut, 1);
+				} else {
+					monit_object_field_print(fld, f,
+						data, 1);
+					data += fld->size;
 				}
-
-				monit_object_field_print(fld, f, data, 1);
-
-				data += fld->size;
 			}
 		}
 
@@ -471,12 +475,15 @@ fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 
 					for (j=0; j<fld->size; j++) {
 						/* invert value */
-						naggr[j] = ~naggr[j];
+						*kptr = ~*naggr;
+						kptr++;
+						naggr++;
 					}
+				} else {
+					memcpy(kptr, naggr, fld->size);
+					kptr += fld->size;
+					naggr += fld->size;
 				}
-				memcpy(kptr, naggr, fld->size);
-				kptr += fld->size;
-				naggr += fld->size;
 			}
 		}
 

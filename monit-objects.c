@@ -388,6 +388,7 @@ monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 	fputs(str, f);
 }
 
+
 static void
 monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
 	uint8_t *key)
@@ -409,6 +410,7 @@ monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
 
 	memcpy(key, &quotient, sizeof(quotient));
 }
+
 
 int
 monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
