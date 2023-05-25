@@ -411,6 +411,17 @@ monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
 	memcpy(key, &quotient, sizeof(quotient));
 }
 
+void
+monit_object_key_add_fld(struct field *fld, uint8_t *key,
+	struct nf_flow_info *flow)
+{
+	if (fld->is_div) {
+		monit_object_func_div(fld, flow, key);
+	} else {
+		uintptr_t flow_fld = (uintptr_t)flow + fld->nf_offset;
+		memcpy(key, (void *)flow_fld, fld->size);
+	}
+}
 
 int
 monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
@@ -448,13 +459,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 		for (f=0; f<fwm->fieldset.n_naggr; f++) {
 			struct field *fld = &fwm->fieldset.naggr[f];
 
-			if (fld->is_div) {
-				monit_object_func_div(fld, flow, key);
-			} else {
-				uintptr_t flow_fld = (uintptr_t)flow
-					+ fld->nf_offset;
-				memcpy(key, (void *)flow_fld, fld->size);
-			}
+			monit_object_key_add_fld(fld, key, flow);
 			key += fld->size;
 		}
 

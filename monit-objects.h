@@ -193,6 +193,9 @@ void monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 void monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 	int print_spaces);
 
+void monit_object_key_add_fld(struct field *fld, uint8_t *key,
+	struct nf_flow_info *flow);
+
 /* fixed windows in memory */
 int fwm_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
 int fwm_fields_init(size_t nthreads, struct mo_fwm *window);

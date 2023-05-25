@@ -808,8 +808,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 		for (f=0; f<mavg->fieldset.n_naggr; f++) {
 			struct field *fld = &mavg->fieldset.naggr[f];
 
-			uintptr_t flow_fld = (uintptr_t)flow + fld->nf_offset;
-			memcpy(key, (void *)flow_fld, fld->size);
+			monit_object_key_add_fld(fld, key, flow);
 			key += fld->size;
 		}
 
