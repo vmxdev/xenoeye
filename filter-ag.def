@@ -2,4 +2,8 @@
 FIELD(OCTETS,	"octets",	in_bytes,	1)
 FIELD(BITS,	"bits",		in_bytes,	8)
 FIELD(PACKETS,	"packets",	in_pkts,	1)
+FIELD(IOCTETS,	"ioctets",	ioctets,	1)
+FIELD(ROCTETS,	"roctets",	roctets,	1)
+FIELD(IPACKETS,	"ipackets",	ipackets,	1)
+FIELD(RPACKETS,	"rpackets",	rpackets,	1)
 #undef FIELD
