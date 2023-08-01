@@ -19,12 +19,16 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#include <netdb.h>
 
 #include "utils.h"
 #include "monit-objects.h"
 #include "monit-objects-common.h"
 #include "netflow.h"
+
+#define TMP_STR_LEN 1024
 
 int
 classification_fields_init(size_t nthreads, struct mo_classification *clsf)
@@ -161,10 +165,73 @@ classification_config(struct aajson *a, aajson_val *value,
 }
 
 static void
-classification_field_to_string(struct field *fld, char *str, uint8_t *data)
+field_to_string(struct field *fld, char *str, uint8_t *data)
 {
-	/*if (fld->id == )*/
-	monit_object_field_print_str(fld, str, data, 0);
+	if (fld->id == PROTO) {
+		int proto = *data;
+		struct protoent pe, *pe_res;
+
+		if (getprotobynumber_r(proto, &pe, str,
+			TMP_STR_LEN, &pe_res) != 0) {
+
+			monit_object_field_print_str(fld, str, data, 0);
+		}
+	} else {
+		monit_object_field_print_str(fld, str, data, 0);
+	}
+}
+
+static void
+update_clsf_dir(const char *clsf_dir, const char *mo_name,
+	const char *class_dir, const char *class_name,
+	uint64_t s, uint64_t sum)
+{
+	char path[PATH_MAX];
+	struct stat st;
+	FILE *f;
+
+	sprintf(path, "%s/%s", clsf_dir, mo_name);
+	if (stat(path, &st) != 0) {
+		/* try to create directory */
+		if (mkdir(path, 0755) != 0) {
+			LOG("Can't create dir '%s': %s", path,
+				strerror(errno));
+			return;
+		}
+	}
+
+	sprintf(path, "%s/%s/%s", clsf_dir, mo_name, class_dir);
+	if (stat(path, &st) != 0) {
+		/* try to create directory */
+		if (mkdir(path, 0755) != 0) {
+			LOG("Can't create dir '%s': %s", path,
+				strerror(errno));
+			return;
+		}
+	}
+
+	sprintf(path, "%s/%s/%s/name", clsf_dir, mo_name, class_dir);
+	if (stat(path, &st) != 0) {
+		/* no file */
+		f = fopen(path, "w");
+		if (f) {
+			fprintf(f, "%s", class_name);
+			fclose(f);
+		} else {
+			LOG("Can't open file '%s': %s", path,
+				strerror(errno));
+		}
+	}
+
+	sprintf(path, "%s/%s/%s/stats", clsf_dir, mo_name, class_dir);
+	f = fopen(path, "w");
+	if (!f) {
+		LOG("Can't create file '%s': %s", path,
+			strerror(errno));
+		return;
+	}
+	fprintf(f, "%lu of %lu, %f%%\n", s, sum, (double)s * 100.0 / sum);
+	fclose(f);
 }
 
 static int
@@ -174,6 +241,7 @@ classification_dump(struct mo_classification *clsf, tkvdb_tr *tr,
 	int ret = 0;
 	tkvdb_cursor *c;
 	uint64_t sum = 0, sumtmp = 0;
+	char class_dir[CLASS_NAME_MAX + 1];
 	char class_name[CLASS_NAME_MAX + 1];
 
 	c = tkvdb_cursor_create(tr);
@@ -189,27 +257,34 @@ classification_dump(struct mo_classification *clsf, tkvdb_tr *tr,
 
 	/* first pass, calculate sum */
 	do {
-		uint64_t *s = c->key(c);
-		sum += *s;
+		uint64_t *s_ptr = c->key(c);
+
+		uint64_t s = clsf->val->descending ? be64toh(~(*s_ptr))
+			: be64toh(*s_ptr);
+
+		sum += s;
 	} while (c->next(c) == TKVDB_OK);
 
 	/* second pass, get top % */
 	c->first(c);
 	do {
-		FILE *f;
-		char path[PATH_MAX];
 		uint8_t ktmp[64];
-		char str[64];
+		char str[TMP_STR_LEN];
 		size_t i;
 
-		uint64_t *s = c->key(c);
+		uint64_t *s_ptr = c->key(c);
+
 		uint8_t *naggr = c->key(c);
 
-		sumtmp += *s;
+		uint64_t s = clsf->val->descending ? be64toh(~(*s_ptr))
+			: be64toh(*s_ptr);
+
+		sumtmp += s;
 
 		naggr += sizeof(uint64_t);
  
 		class_name[0] = '\0';
+		class_dir[0] = '\0';
 		for (i=0; i<clsf->nfields; i++) {
 			struct field *fld = &clsf->fields[i];
 
@@ -226,27 +301,29 @@ classification_dump(struct mo_classification *clsf, tkvdb_tr *tr,
 				naggr += fld->size;
 			}
 
-			classification_field_to_string(fld, str, ktmp);
+			monit_object_field_print_str(fld, str, ktmp, 0);
+			strcat(class_dir, str);
+
+			field_to_string(fld, str, ktmp);
 			strcat(class_name, str);
-			strcat(class_name, ".");
+
+			if ((i + 1) < clsf->nfields) {
+				strcat(class_name, ".");
+				strcat(class_dir, ".");
+			}
 		}
-		sprintf(path, "%s/%s-%s", clsf_dir, mo_name, class_name);
 
+		update_clsf_dir(clsf_dir, mo_name, class_dir, class_name,
+			s, sum);
+/*
 		f = fopen(path, "w");
-		fprintf(f, "stats: %lu\n", *s * 100 / sum);
+		fprintf(f, "stats: %lu of %lu, stmp == %lu\n", s, sum, sumtmp);
 		fclose(f);
-
+*/
 		if ((sumtmp * 100 / sum) >= clsf->top_percents) {
 			break;
 		}
 	} while (c->next(c) == TKVDB_OK);
-
-	/* rest */
-	sumtmp = 0;
-	while (c->next(c) == TKVDB_OK) {
-		uint64_t *s = c->key(c);
-		sumtmp += *s;
-	}
 
 	ret = 1;
 
@@ -260,7 +337,7 @@ cursor_fail:
 
 
 static int
-classification_sort_tr(struct mo_classification *clsf, tkvdb_tr *tr,
+classification_sort_dump(struct mo_classification *clsf, tkvdb_tr *tr,
 	const char *mo_name, const char *clsf_dir)
 {
 	int ret = 0;
@@ -300,9 +377,9 @@ classification_sort_tr(struct mo_classification *clsf, tkvdb_tr *tr,
 
 		/* make key for correct sorting */
 		if (clsf->val->descending) {
-			tmpv = ~*v;
+			tmpv = ~htobe64(*v);
 		} else {
-			tmpv = *v;
+			tmpv = htobe64(*v);
 		}
 		memcpy(kptr, &tmpv, sizeof(uint64_t));
 		kptr += sizeof(uint64_t);
@@ -436,7 +513,7 @@ classification_merge(struct mo_classification *clsf, size_t nthreads,
 		classification_merge_tr(tr_merge, tr);
 	}
 
-	classification_sort_tr(clsf, tr_merge, mo_name, clsf_dir);
+	classification_sort_dump(clsf, tr_merge, mo_name, clsf_dir);
 
 	tr_merge->free(tr_merge);
 

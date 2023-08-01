@@ -20,6 +20,9 @@
 /*#define MAVG_TYPE __float128*/
 #define MAVG_TYPE double
 
+#define CLSF_DEFAULT_TIMEOUT 30
+#define CLASS_NAME_MAX 32
+
 struct xe_data;
 struct nf_flow_info;
 
@@ -70,6 +73,40 @@ struct mo_fwm
 	/* each thread has it's own data */
 	struct fwm_thread_data *thread_data;
 };
+
+
+/* classification */
+struct classification_thread_data
+{
+	/* using two banks */
+	tkvdb_tr *trs[2];
+
+	/* current bank index */
+	_Atomic uint64_t tr_idx;
+
+	uint8_t *key;
+	uint64_t val;
+
+	size_t keysize;
+};
+
+struct mo_classification
+{
+	int on;
+
+	time_t last_export;
+	int time;
+	unsigned int top_percents;
+
+	size_t nfields;
+	struct field *fields;
+
+	struct field *val;
+
+	/* each thread has it's own data */
+	struct classification_thread_data *thread_data;
+};
+
 
 /* moving average */
 struct mavg_val
@@ -178,6 +215,9 @@ struct monit_object
 	/* moving averages */
 	size_t nmavg;
 	struct mo_mavg *mavgs;
+
+	/* classification */
+	struct mo_classification classification;
 };
 
 
@@ -210,6 +250,14 @@ int monit_object_mavg_process_nf(struct xe_data *globl,
 	struct monit_object *mo, size_t thread_id,
 	uint64_t time_ns, struct nf_flow_info *flow);
 
+/* classification */
+void *classification_bg_thread(void *);
+int classification_config(struct aajson *a, aajson_val *value,
+	struct monit_object *mo);
+int classification_fields_init(size_t nthreads,
+	struct mo_classification *clsf);
+int classification_process_nf(struct xe_data *globl,
+	struct monit_object *mo, size_t thread_id, struct nf_flow_info *flow);
 
 void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);

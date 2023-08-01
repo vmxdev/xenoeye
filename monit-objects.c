@@ -75,6 +75,10 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 		return mavg_config(a, value, mo);
 	}
 
+	if (STRCMP(a, 1, "classification") == 0) {
+		return classification_config(a, value, mo);
+	}
+
 	return 1;
 }
 
@@ -253,6 +257,21 @@ monit_objects_init(struct xe_data *data)
 			}
 		}
 
+		/* classification */
+		if (!classification_fields_init(data->nthreads,
+			&mo->classification)) {
+
+			return 0;
+		}
+
+		if (mo->classification.time == 0) {
+			LOG("warning: time for '%s' classifier is not set"
+				", using default %d",
+				mo->name,
+				CLSF_DEFAULT_TIMEOUT);
+			mo->classification.time = CLSF_DEFAULT_TIMEOUT;
+		}
+
 		/* store path to monitoring object directory */
 		sprintf(mofile, "%s/%s/", data->mo_dir, dir->d_name);
 		strcpy(mo->dir, mofile);
@@ -293,8 +312,18 @@ monit_objects_init(struct xe_data *data)
 		goto fail_mavgthread;
 	}
 
+	/* classifier thread */
+	thread_err = pthread_create(&data->clsf_tid, NULL,
+		&classification_bg_thread, data);
+
+	if (thread_err) {
+		LOG("Can't start thread: %s", strerror(thread_err));
+		goto fail_clsfthread;
+	}
+
 	ret = 1;
 
+fail_clsfthread:
 fail_mavgthread:
 fail_fwmthread:
 	/* FIXME: free monitoring objects */
@@ -429,6 +458,14 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 {
 	size_t i, j, f;
 
+	/* reset class */
+	flow->class[0] = '\0';
+	if (mo->classification.on) {
+		classification_process_nf(globl, mo, thread_id, flow);
+	} else {
+		flow->has_class = 0;
+	}
+
 	/* fixed windows */
 	for (i=0; i<mo->nfwm; i++) {
 		tkvdb_tr *tr;
@@ -455,6 +492,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 		fdata = &fwm->thread_data[thread_id];
 		key = fdata->key;
 
+		/* fwm */
 		/* make key */
 		for (f=0; f<fwm->fieldset.n_naggr; f++) {
 			struct field *fld = &fwm->fieldset.naggr[f];

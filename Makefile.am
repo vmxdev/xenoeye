@@ -11,6 +11,7 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	pcapture.c monit-objects.c monit-objects.h \
 	monit-objects-fwm.c monit-objects-mavg.c \
 	monit-objects-mavg-act.c monit-objects-mavg-dump.c \
+	classification.c \
 	flow_debug.h flow_debug.c \
 	devices.h devices.c \
 	iplist.h iplist.c
@@ -32,4 +33,6 @@ install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/mo"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/exp"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/expfailed"
+	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/iplists"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/notifications"
+	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/clsf"

@@ -56,6 +56,9 @@ struct xe_data
 	pthread_t mavg_dump_tid, mavg_act_tid;
 	_Atomic size_t mavg_db_bank_idx;
 
+	/* classification thread */
+	pthread_t clsf_tid;
+
 	/* templates */
 	int allow_templates_in_future;
 	char templates_db[PATH_MAX];
@@ -77,6 +80,9 @@ struct xe_data
 
 	/* path to notification files */
 	char notif_dir[PATH_MAX];
+
+	/* path to dir with classification */
+	char clsf_dir[PATH_MAX];
 
 	/* notify threads about stop */
 	atomic_int stop;
