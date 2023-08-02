@@ -172,13 +172,52 @@ field_to_string(struct field *fld, char *str, uint8_t *data)
 		struct protoent pe, *pe_res;
 
 		if (getprotobynumber_r(proto, &pe, str,
-			TMP_STR_LEN, &pe_res) != 0) {
+			TMP_STR_LEN, &pe_res) == 0) {
 
-			monit_object_field_print_str(fld, str, data, 0);
+			return;
 		}
-	} else {
-		monit_object_field_print_str(fld, str, data, 0);
+	} else if (fld->id == PORT) {
+		int port = *((uint16_t *)data);
+		struct servent se, *se_res;
+
+		if (getservbyport_r(port, NULL, &se, str,
+			TMP_STR_LEN, &se_res) == 0) {
+
+			return;
+		}
+	} else if (fld->id == TCPFLAGS) {
+		uint8_t flags = *data;
+		int has_flag = 0;
+
+		str[0] = '\0';
+
+#define PRINT_FLAG(N, STR)                \
+do {                                      \
+	if (flags & N) {                  \
+		if (has_flag) {           \
+			strcat(str, "+"); \
+		}                         \
+		strcat(str, STR);         \
+		has_flag = 1;             \
+	}                                 \
+} while (0)
+
+		PRINT_FLAG(0x80, "CWR");
+		PRINT_FLAG(0x40, "ECE");
+		PRINT_FLAG(0x20, "URG");
+		PRINT_FLAG(0x10, "ACK");
+		PRINT_FLAG(0x08, "PSH");
+		PRINT_FLAG(0x04, "RST");
+		PRINT_FLAG(0x02, "SYN");
+		PRINT_FLAG(0x01, "FIN");
+#undef PRINT_FLAG
+
+		if (has_flag) {
+			return;
+		}
 	}
+
+	monit_object_field_print_str(fld, str, data, 0);
 }
 
 static void
