@@ -262,6 +262,9 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 				continue;
 			}
 
+			monit_object_process_nf(data, mo, thread_id,
+				npi->time_ns, &flow);
+
 			if (mo->debug.print_flows) {
 				char debug_flow_str[1024];
 
@@ -272,9 +275,6 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 				flow_print_str(&mo->debug, &flow,
 					debug_flow_str);
 			}
-
-			monit_object_process_nf(data, mo, thread_id,
-				npi->time_ns, &flow);
 		}
 #ifdef FLOWS_CNT
 		atomic_fetch_add_explicit(&data->nflows, 1,
@@ -507,6 +507,9 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 				continue;
 			}
 
+			monit_object_process_nf(data, mo, thread_id,
+				npi->time_ns, &flow);
+
 			if (mo->debug.print_flows) {
 				char debug_flow_str[1024];
 
@@ -517,9 +520,6 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 				flow_print_str(&mo->debug, &flow,
 					debug_flow_str);
 			}
-
-			monit_object_process_nf(data, mo, thread_id,
-				npi->time_ns, &flow);
 		}
 #ifdef FLOWS_CNT
 		atomic_fetch_add_explicit(&data->nflows, 1,
@@ -652,6 +652,9 @@ NF5_FIELDS
 				continue;
 			}
 
+			monit_object_process_nf(data, mo, thread_id,
+				npi->time_ns, &flow);
+
 			if (mo->debug.print_flows) {
 				char debug_flow_str[1024];
 
@@ -660,9 +663,6 @@ NF5_FIELDS
 				flow_print_str(&mo->debug, &flow,
 					debug_flow_str);
 			}
-
-			monit_object_process_nf(data, mo, thread_id,
-				npi->time_ns, &flow);
 		}
 #ifdef FLOWS_CNT
 		atomic_fetch_add_explicit(&data->nflows, 1,

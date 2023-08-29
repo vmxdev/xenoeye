@@ -26,6 +26,14 @@
 struct xe_data;
 struct nf_flow_info;
 
+struct two_banks_db
+{
+	tkvdb_tr *bank[2];
+
+	/* current bank */
+	size_t _Atomic idx;
+};
+
 struct mo_fieldset
 {
 	/* all fields */
@@ -105,6 +113,9 @@ struct mo_classification
 
 	/* each thread has it's own data */
 	struct classification_thread_data *thread_data;
+
+	/* classidier db */
+	struct two_banks_db db;
 };
 
 
@@ -256,8 +267,8 @@ int classification_config(struct aajson *a, aajson_val *value,
 	struct monit_object *mo);
 int classification_fields_init(size_t nthreads,
 	struct mo_classification *clsf);
-int classification_process_nf(struct xe_data *globl,
-	struct monit_object *mo, size_t thread_id, struct nf_flow_info *flow);
+int classification_process_nf(struct monit_object *mo, size_t thread_id,
+	struct nf_flow_info *flow);
 
 void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);

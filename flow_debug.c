@@ -102,7 +102,13 @@ void
 flow_print_str(struct xe_debug *debug, struct nf_flow_info *fi, char *flow_str)
 {
 	char devinfo[128];
+	char classinfo[16 + CLASS_NAME_MAX];
 	uint32_t dev_id;
+
+	if (fi->has_class) {
+		sprintf(classinfo, "; *class: %s", fi->class);
+		strcat(flow_str, classinfo);
+	}
 
 	memcpy(&dev_id, &fi->dev_id[0], sizeof(uint32_t));
 

@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <dirent.h>
 
 #include "utils.h"
 #include "monit-objects.h"
@@ -79,6 +80,22 @@ classification_fields_init(size_t nthreads, struct mo_classification *clsf)
 		atomic_store_explicit(&clsf->thread_data[i].tr_idx,
 			0, memory_order_relaxed);
 	}
+
+	/* init classifier db */
+	clsf->db.bank[0] = tkvdb_tr_create(NULL, NULL);
+	if (!clsf->db.bank[0]) {
+		LOG("tkvdb_tr_create() failed");
+		return 0;
+	}
+	clsf->db.bank[1] = tkvdb_tr_create(NULL, NULL);
+	if (!clsf->db.bank[1]) {
+		LOG("tkvdb_tr_create() failed");
+		return 0;
+	}
+	clsf->db.bank[0]->begin(clsf->db.bank[0]);
+	clsf->db.bank[1]->begin(clsf->db.bank[1]);
+
+	atomic_store_explicit(&clsf->db.idx, 0, memory_order_relaxed);
 
 	return 1;
 }
@@ -163,6 +180,143 @@ classification_config(struct aajson *a, aajson_val *value,
 
 	return 1;
 }
+
+
+static void
+load_db(struct mo_classification *clsf, const char *clsf_dir,
+	const char *mo_name)
+{
+	DIR *d;
+	struct dirent *dir;
+	tkvdb_tr *db;
+	TKVDB_RES rc;
+	size_t b_idx, i;
+	int j;
+	char clsf_path[PATH_MAX];
+
+	/* get unused bank */
+	b_idx = (atomic_load_explicit(&clsf->db.idx, memory_order_relaxed) + 1)
+		% 2;
+
+	db = clsf->db.bank[b_idx];
+	/* reset data */
+	db->rollback(db);
+	db->begin(db);
+
+	sprintf(clsf_path, "%s/%s", clsf_dir, mo_name);
+	d = opendir(clsf_path);
+	if (!d) {
+		LOG("Can't open directory '%s': %s", clsf_path,
+			strerror(errno));
+		return;
+	}
+
+	while ((dir = readdir(d)) != NULL) {
+		tkvdb_datum dtk, dtv;
+		char nmfile[PATH_MAX + 1];
+		FILE *f;
+		char cdir[PATH_MAX + 1];
+		char *cptr;
+
+		char class_name[CLASS_NAME_MAX + 1];
+		size_t class_name_len;
+		char *nl;
+
+		uint8_t key[4096];
+		uint8_t *kptr = key;
+
+		if (dir->d_name[0] == '.') {
+			continue;
+		}
+
+		if (dir->d_type != DT_DIR) {
+			continue;
+		}
+
+		/* build a key from dir name */
+		strcpy(cdir, dir->d_name);
+		cptr = cdir;
+		for (i=0; i<clsf->nfields; i++) {
+			long long int data;
+			char *end;
+			struct field *fld = &clsf->fields[i];
+
+			if (!cptr) {
+				data = 0;
+			} else {
+				/* search for separator in dir name */
+				end = strchr(cptr, '-');
+				if (end) {
+					*end = '\0';
+					data = atoll(cptr);
+					cptr = end + 1;
+				} else {
+					data = atoll(cptr);
+					cptr = NULL;
+				}
+			}
+
+			switch (fld->size) {
+				case sizeof(uint8_t):
+					*kptr = data;
+					break;
+				case sizeof(uint16_t):
+					*(uint16_t *)kptr = fld->descending ?
+						~htobe16(data) : htobe16(data);
+					break;
+				case sizeof(uint32_t):
+					*(uint32_t *)kptr = fld->descending ?
+						~htobe32(data) : htobe32(data);
+					break;
+				case sizeof(uint64_t):
+					*(uint64_t *)kptr = fld->descending ?
+						~htobe64(data) : htobe64(data);
+					break;
+
+				default:
+					/* ??? */
+					for (j=0; j<fld->size; j++) {
+						kptr[j] = 0;
+					}
+					break;
+			}
+
+			kptr += fld->size;
+		}
+
+		/* get name */
+		sprintf(nmfile, "%s/%s/name", clsf_path, dir->d_name);
+		f = fopen(nmfile, "r");
+		if (!f) {
+			LOG("Can't open '%s': %s", nmfile, strerror(errno));
+			continue;
+		}
+		class_name_len = fread(class_name, 1, CLASS_NAME_MAX, f);
+		class_name[class_name_len] = '\0';
+		/* search for \n */
+		nl = strchr(class_name, '\n');
+		if (nl) {
+			*nl = '\0';
+			class_name_len = strlen(class_name);
+		}
+		fclose(f);
+
+		dtk.data = key;
+		dtk.size = kptr - key;
+
+		dtv.data = class_name;
+		dtv.size = class_name_len;
+
+		rc = db->put(db, &dtk, &dtv);
+		if (rc != TKVDB_OK) {
+			LOG("put() failed with code %d", rc);
+		}
+	}
+
+	/* swap db banks */
+	atomic_fetch_add_explicit(&clsf->db.idx, 1, memory_order_relaxed);
+}
+
 
 static void
 field_to_string(struct field *fld, char *str, uint8_t *data)
@@ -347,18 +501,14 @@ classification_dump(struct mo_classification *clsf, tkvdb_tr *tr,
 			strcat(class_name, str);
 
 			if ((i + 1) < clsf->nfields) {
-				strcat(class_name, ".");
-				strcat(class_dir, ".");
+				strcat(class_name, ",");
+				strcat(class_dir, "-");
 			}
 		}
 
 		update_clsf_dir(clsf_dir, mo_name, class_dir, class_name,
 			s, sum);
-/*
-		f = fopen(path, "w");
-		fprintf(f, "stats: %lu of %lu, stmp == %lu\n", s, sum, sumtmp);
-		fclose(f);
-*/
+
 		if ((sumtmp * 100 / sum) >= clsf->top_percents) {
 			break;
 		}
@@ -598,6 +748,8 @@ classification_bg_thread(void *arg)
 				} else {
 					continue;
 				}
+
+				load_db(clsf, data->clsf_dir, mo->name);
 			}
 		}
 
@@ -609,8 +761,9 @@ classification_bg_thread(void *arg)
 	return NULL;
 }
 
-int classification_process_nf(struct xe_data *globl,
-	struct monit_object *mo, size_t thread_id, struct nf_flow_info *flow)
+int
+classification_process_nf(struct monit_object *mo, size_t thread_id,
+	struct nf_flow_info *flow)
 {
 	size_t i;
 	struct mo_classification *clsf = &mo->classification;
@@ -621,6 +774,9 @@ int classification_process_nf(struct xe_data *globl,
 
 	size_t tr_idx;
 	tkvdb_tr *tr;
+
+	size_t clsf_b_idx;
+	tkvdb_tr *clsf_db;
 	tkvdb_datum dtkey, dtval;
 	TKVDB_RES rc;
 
@@ -637,6 +793,12 @@ int classification_process_nf(struct xe_data *globl,
 		% 2;
 
 	tr = cdata->trs[tr_idx];
+
+	/* get classifier db */
+	clsf_b_idx = atomic_load_explicit(&clsf->db.idx, memory_order_relaxed)
+		% 2;
+
+	clsf_db = clsf->db.bank[clsf_b_idx];
 
 	dtkey.data = cdata->key;
 	dtkey.size = cdata->keysize;
@@ -671,6 +833,18 @@ int classification_process_nf(struct xe_data *globl,
 	} else {
 		LOG("Can't find key, error code %d", rc);
 		return 0;
+	}
+
+	flow->has_class = 0;
+
+	/* search for class in db */
+	rc = clsf_db->get(clsf_db, &dtkey, &dtval);
+	if (rc == TKVDB_OK) {
+		/* copy class name to flow */
+		char *class_name = dtval.data;
+		memcpy((char *)flow->class, class_name, dtval.size);
+		flow->class[dtval.size] = '\0';
+		flow->has_class = 1;
 	}
 
 	return 1;

@@ -461,7 +461,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 	/* reset class */
 	flow->class[0] = '\0';
 	if (mo->classification.on) {
-		classification_process_nf(globl, mo, thread_id, flow);
+		classification_process_nf(mo, thread_id, flow);
 	} else {
 		flow->has_class = 0;
 	}
