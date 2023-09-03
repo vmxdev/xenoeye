@@ -424,10 +424,10 @@ monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
 {
 	uint64_t quotient, dividend, divisor;
 
-	dividend = get_nf_val((uintptr_t)flow + fld->div.dividend_off,
-		fld->div.dividend_size);
-	divisor = get_nf_val((uintptr_t)flow + fld->div.divisor_off,
-		fld->div.divisor_size);
+	dividend = get_nf_val((uintptr_t)flow + fld->func_data.div.dividend_off,
+		fld->func_data.div.dividend_size);
+	divisor = get_nf_val((uintptr_t)flow + fld->func_data.div.divisor_off,
+		fld->func_data.div.divisor_size);
 
 	if (divisor) {
 		quotient = htobe64(dividend / divisor);
@@ -440,12 +440,37 @@ monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
 	memcpy(key, &quotient, sizeof(quotient));
 }
 
+static void
+monit_object_func_min(struct field *fld, struct nf_flow_info *flow,
+	uint8_t *key)
+{
+	uint64_t arg1, arg2, res;
+
+	arg1 = get_nf_val((uintptr_t)flow + fld->func_data.min.arg1_off,
+		fld->func_data.min.arg1_size);
+	arg2 = get_nf_val((uintptr_t)flow + fld->func_data.min.arg2_off,
+		fld->func_data.min.arg2_size);
+
+	res = (arg1 < arg2) ? arg1 : arg2;
+
+	memcpy(key, &res, sizeof(res));
+}
+
 void
 monit_object_key_add_fld(struct field *fld, uint8_t *key,
 	struct nf_flow_info *flow)
 {
-	if (fld->is_div) {
-		monit_object_func_div(fld, flow, key);
+	if (fld->is_func) {
+		switch (fld->id) {
+			case DIV:
+				monit_object_func_div(fld, flow, key);
+				break;
+			case MIN:
+				monit_object_func_min(fld, flow, key);
+				break;
+			default:
+				break;
+		}
 	} else {
 		uintptr_t flow_fld = (uintptr_t)flow + fld->nf_offset;
 		memcpy(key, (void *)flow_fld, fld->size);

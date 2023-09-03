@@ -99,7 +99,7 @@ rule_without_direction(struct filter_input *q, struct filter_expr *e, int dir)
 }
 
 static int
-nf_aggr_field_to_off(const char *name, unsigned int *off, unsigned int *size)
+nf_field_to_off(const char *name, unsigned int *off, unsigned int *size)
 {
 	if (0) {
 #define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)           \
@@ -121,8 +121,34 @@ nf_aggr_field_off_size(struct filter_input *q, unsigned int *off,
 
 #define FIELD(NAME, STR, FLD, SCALE)                                  \
 	} else if (accept_(q, NAME)) {                                \
-		return nf_aggr_field_to_off(#FLD, off, size);
+		return nf_field_to_off(#FLD, off, size);
 #include "filter-ag.def"
+
+	}
+
+	return 0;
+}
+
+static int
+nf_field_off_size(struct filter_input *in, unsigned int *off,
+	unsigned int *size, int dir)
+{
+	if (0) {
+
+#define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
+	} else if (accept_(in, NAME)) {                                      \
+		if (dir == FILTER_BASIC_DIR_SRC) {                           \
+			return nf_field_to_off(#SRC, off, size);             \
+		} else if (dir == FILTER_BASIC_DIR_DST) {                    \
+			return nf_field_to_off(#DST, off, size);             \
+		} else {                                                     \
+			if (strcmp(#SRC, #DST) != 0) {                       \
+				mkerror(in, "This field requires direction");\
+				return 0;                                    \
+			}                                                    \
+			return nf_field_to_off(#SRC, off, size);             \
+		}
+#include "filter.def"
 
 	}
 
@@ -186,21 +212,128 @@ function_div(struct filter_input *in, struct filter_expr *e)
 	}
 
 	fb = e->filter[e->n - 1].arg;
-	fb->div = malloc(sizeof(struct function_div));
-	if (!fb->div) {
+	fb->func_data.div = malloc(sizeof(struct function_div));
+	if (!fb->func_data.div) {
 		return 0;
 	}
 
-	*fb->div = div;
+	*fb->func_data.div = div;
+
+	fb->is_func = 1;
 
 	return id(in, e, FILTER_BASIC_RANGE);
 }
 
 
 static int
+function_min_parse(struct filter_input *in, struct function_min *min)
+{
+	if (!accept_(in, MIN)) {
+		return 0;
+	}
+
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after 'min'");
+		return 0;
+	}
+
+	/* arg1 */
+	if (accept_(in, SRC)) {
+		if (!nf_field_off_size(in, &min->arg1_off, &min->arg1_size,
+			FILTER_BASIC_DIR_SRC)) {
+
+			return 0;
+		}
+	} else if (accept_(in, DST)) {
+		if (!nf_field_off_size(in, &min->arg1_off, &min->arg1_size,
+			FILTER_BASIC_DIR_DST)) {
+
+			return 0;
+		}
+	} else {
+		if (!nf_field_off_size(in, &min->arg1_off, &min->arg1_size,
+			FILTER_BASIC_DIR_BOTH)) {
+
+			return 0;
+		}
+	}
+
+
+	if (!accept_(in, COMMA)) {
+		mkerror(in, "Expected ',' after field name");
+		return 0;
+	}
+
+	/* arg2 */
+	if (accept_(in, SRC)) {
+		if (!nf_field_off_size(in, &min->arg2_off, &min->arg2_size,
+			FILTER_BASIC_DIR_SRC)) {
+
+			return 0;
+		}
+	} else if (accept_(in, DST)) {
+		if (!nf_field_off_size(in, &min->arg2_off, &min->arg2_size,
+			FILTER_BASIC_DIR_DST)) {
+
+			return 0;
+		}
+	} else {
+		if (!nf_field_off_size(in, &min->arg2_off, &min->arg2_size,
+			FILTER_BASIC_DIR_BOTH)) {
+
+			return 0;
+		}
+	}
+
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+static int
+function_min(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_min min;
+	struct filter_basic *fb;
+
+	if (!function_min_parse(in, &min)) {
+		return 0;
+	}
+
+	if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+			FILTER_BASIC_NAME_MIN,
+			FILTER_BASIC_DIR_NONE)) {
+
+		return 0;
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->func_data.min = malloc(sizeof(struct function_min));
+	if (!fb->func_data.min) {
+		return 0;
+	}
+
+	*fb->func_data.min = min;
+
+	fb->is_func = 1;
+
+	return id(in, e, FILTER_BASIC_RANGE);
+}
+
+
+
+static int
 rule(struct filter_input *q, struct filter_expr *e)
 {
 	if (function_div(q, e)) {
+		return 1;
+	}
+
+	if (function_min(q, e)) {
 		return 1;
 	}
 
@@ -469,8 +602,14 @@ parse_field(char *s, struct field *fld, char *err)
 		return 0;
 	}
 
-	if (function_div_parse(&in, &fld->div)) {
-		fld->is_div = 1;
+	if (function_div_parse(&in, &fld->func_data.div)) {
+		fld->is_func = 1;
+		fld->id = DIV;
+		fld->type = FILTER_BASIC_RANGE;
+		fld->size = sizeof(uint64_t);
+	} else if (function_min_parse(&in, &fld->func_data.min)) {
+		fld->is_func = 1;
+		fld->id = MIN;
 		fld->type = FILTER_BASIC_RANGE;
 		fld->size = sizeof(uint64_t);
 	} else {

@@ -68,6 +68,7 @@ enum TOKEN_ID
 
 	/* functions */
 	DIV,
+	MIN,
 	COMMA
 };
 
@@ -112,7 +113,8 @@ enum FILTER_BASIC_NAME
 	FILTER_BASIC_NAME_##NAME,
 #include "filter.def"
 
-	FILTER_BASIC_NAME_DIV
+	FILTER_BASIC_NAME_DIV,
+	FILTER_BASIC_NAME_MIN
 };
 
 struct function_div
@@ -125,6 +127,16 @@ struct function_div
 	unsigned int divisor_size;
 };
 
+struct function_min
+{
+	/* offsets and sizes in struct nf_flow_info */
+	unsigned int arg1_off;
+	unsigned int arg1_size;
+
+	unsigned int arg2_off;
+	unsigned int arg2_size;
+};
+
 struct filter_basic
 {
 	enum FILTER_BASIC_TYPE type;
@@ -134,7 +146,11 @@ struct filter_basic
 	size_t n;
 	struct filter_basic_data *data;
 
-	struct function_div *div;
+	int is_func;
+	union filter_func_data {
+		struct function_div *div;
+		struct function_min *min;
+	} func_data;
 };
 
 enum FILTER_OP
@@ -185,8 +201,11 @@ struct field
 	int scale;
 
 	/* functions */
-	int is_div;
-	struct function_div div;
+	int is_func;
+	union field_func_data {
+		struct function_div div;
+		struct function_min min;
+	} func_data;
 };
 
 struct filter_expr *parse_filter(struct filter_input *f);

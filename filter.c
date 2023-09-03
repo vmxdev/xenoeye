@@ -32,7 +32,7 @@ filter_add_basic_filter(struct filter_expr *e, enum FILTER_BASIC_TYPE type,
 	fb->data = NULL;
 	fb->direction = dir;
 
-	fb->div = NULL;
+	fb->is_func = 0;
 
 
 	tmpfo = realloc(e->filter, sizeof(struct filter_op) * (e->n + 1));
@@ -505,11 +505,12 @@ filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
 	return 0;
 }
 
+/* functions */
 static int
 filter_function_div(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	size_t i;
-	struct function_div *div = fb->div;
+	struct function_div *div = fb->func_data.div;
 	uint64_t dividend, divisor;
 	int quotient;
 
@@ -537,12 +538,45 @@ filter_function_div(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
+filter_function_min(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	struct function_min *min = fb->func_data.min;
+	uint64_t arg1, arg2;
+	int64_t res;
+
+	arg1 = get_nf_val((uintptr_t)flow + min->arg1_off,
+		min->arg1_size);
+	arg2 = get_nf_val((uintptr_t)flow + min->arg2_off,
+		min->arg2_size);
+
+	res = (arg1 < arg2) ? arg1 : arg2;
+
+	for (i=0; i<fb->n; i++) {
+		if ((res >= fb->data[i].data.range.low)
+			&& (res <= fb->data[i].data.range.high)) {
+
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int
 filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	int ret = 0;
 
-	if (fb->div) {
-		return filter_function_div(fb, flow);
+	if (fb->is_func) {
+		switch (fb->name) {
+			case FILTER_BASIC_NAME_DIV:
+				return filter_function_div(fb, flow);
+			case FILTER_BASIC_NAME_MIN:
+				return filter_function_min(fb, flow);
+			default:
+				break;
+		}
 	}
 
 	if (fb->type == FILTER_BASIC_ADDR4) {
@@ -623,8 +657,20 @@ filter_free(struct filter_expr *e)
 		if (fb) {
 			free(fb->data);
 			fb->data = NULL;
-			free(fb->div);
-			fb->div = NULL;
+			if (fb->is_func) {
+				switch (fb->name) {
+					case FILTER_BASIC_NAME_DIV:
+						free(fb->func_data.div);
+						fb->func_data.div = NULL;
+						break;
+					case FILTER_BASIC_NAME_MIN:
+						free(fb->func_data.min);
+						fb->func_data.min = NULL;
+						break;
+					default:
+						break;
+				}
+			}
 			free(fb);
 		}
 		e->filter[i].arg = NULL;
@@ -689,8 +735,14 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 
 		case FILTER_BASIC_NAME_DIV:
 			fprintf(f, "DIV ([offset %d]/[offset %d])",
-				(int)fb->div->dividend_off,
-				(int)fb->div->divisor_off);
+				(int)fb->func_data.div->dividend_off,
+				(int)fb->func_data.div->divisor_off);
+			break;
+
+		case FILTER_BASIC_NAME_MIN:
+			fprintf(f, "MIN ([offset %d]/[offset %d])",
+				(int)fb->func_data.min->arg1_off,
+				(int)fb->func_data.min->arg2_off);
 			break;
 
 		default:

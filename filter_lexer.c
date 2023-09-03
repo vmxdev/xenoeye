@@ -168,6 +168,8 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 	/* functions */
 	} else if (MATCH("div")) {
 		*id = DIV;
+	}  else if (MATCH("min")) {
+		*id = MIN;
 
 #define FIELD(NAME, STR, FLD, SCALE)                  \
 	} else if (MATCH(STR)) {                      \
