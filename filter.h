@@ -227,6 +227,16 @@ int filter_match(struct filter_expr *expr, struct nf_flow_info *flow);
 void filter_dump(struct filter_expr *e, FILE *f);
 void filter_free(struct filter_expr *e);
 
+
+int accept_(struct filter_input *i, enum TOKEN_ID token);
+int id(struct filter_input *f, struct filter_expr *e,
+	enum FILTER_BASIC_TYPE type);
+
+int function_div_parse(struct filter_input *in, struct function_div *div);
+int function_div(struct filter_input *in, struct filter_expr *e);
+int function_min_parse(struct filter_input *in, struct function_min *min);
+int function_min(struct filter_input *in, struct filter_expr *e);
+
 static inline uint64_t
 get_nf_val(uintptr_t ptr, unsigned int size)
 {

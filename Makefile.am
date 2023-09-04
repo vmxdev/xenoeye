@@ -8,6 +8,7 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	tkvdb/tkvdb.c tkvdb/tkvdb.h \
 	aajson/aajson.h \
 	filter.c filter.h filter_lexer.c filter_parser.c \
+	filter-parser-funcs.c \
 	pcapture.c monit-objects.c monit-objects.h \
 	monit-objects-fwm.c monit-objects-mavg.c \
 	monit-objects-mavg-act.c monit-objects-mavg-dump.c \

@@ -451,7 +451,7 @@ monit_object_func_min(struct field *fld, struct nf_flow_info *flow,
 	arg2 = get_nf_val((uintptr_t)flow + fld->func_data.min.arg2_off,
 		fld->func_data.min.arg2_size);
 
-	res = (arg1 < arg2) ? arg1 : arg2;
+	res = htobe64((arg1 < arg2) ? arg1 : arg2);
 
 	memcpy(key, &res, sizeof(res));
 }
