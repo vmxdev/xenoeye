@@ -835,8 +835,6 @@ classification_process_nf(struct monit_object *mo, size_t thread_id,
 		return 0;
 	}
 
-	flow->has_class = 0;
-
 	/* search for class in db */
 	rc = clsf_db->get(clsf_db, &dtkey, &dtval);
 	if (rc == TKVDB_OK) {
@@ -844,7 +842,8 @@ classification_process_nf(struct monit_object *mo, size_t thread_id,
 		char *class_name = dtval.data;
 		memcpy((char *)flow->class, class_name, dtval.size);
 		flow->class[dtval.size] = '\0';
-		flow->has_class = 1;
+	} else {
+		flow->class[0] = '\0';
 	}
 
 	return 1;
