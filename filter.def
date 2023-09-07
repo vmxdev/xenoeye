@@ -20,4 +20,5 @@ FIELD(SAMPLER_ID,"smplr",	RANGE,	sampler_id,	sampler_id)
 FIELD(INGRS_VRF,"vrf",		RANGE,	ingrs_vrf,	egrs_vrf)
 FIELD(DEV_IP,	"dev-ip",	ADDR4,	dev_ip,		dev_ip)
 FIELD(DEV_ID,	"dev-id",	RANGE,	dev_id,		dev_id)
+FIELD(CLASS,	"class",	STRING,	class,		class)
 #undef FIELD

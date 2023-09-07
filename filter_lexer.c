@@ -198,6 +198,19 @@ read_token(struct filter_input *q)
 		SINGLE_SYM_TOKEN(q, RPAREN);
 	} else if (*(q->s) == ',') {
 		SINGLE_SYM_TOKEN(q, COMMA);
+	} else if (*(q->s) == '\'') {
+		/* string */
+		do {
+			/* FIXME: check for \n? */
+			q->current_token.data.str[q->current_token.str_len]
+				= *(q->s);
+			q->current_token.str_len++;
+
+			q->s++;
+			q->col++;
+		} while (*(q->s) != '\'');
+
+		q->current_token.id = STRING;
 	} else {
 		/* read rest of token */
 		do {

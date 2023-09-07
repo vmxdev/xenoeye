@@ -43,6 +43,7 @@ enum TOKEN_ID
 {
 	ID,
 	INT_RANGE,
+	STRING,
 
 	LPAREN,
 	RPAREN,
@@ -96,6 +97,7 @@ struct filter_basic_data
 		struct int_range range;
 		struct ip_addr_and_mask ip;
 		struct iplist *addr_list;
+		char *str;
 	} data;
 };
 
@@ -103,7 +105,8 @@ enum FILTER_BASIC_TYPE
 {
 	FILTER_BASIC_ADDR4,
 	FILTER_BASIC_ADDR6,
-	FILTER_BASIC_RANGE
+	FILTER_BASIC_RANGE,
+	FILTER_BASIC_STRING
 };
 
 enum FILTER_BASIC_NAME

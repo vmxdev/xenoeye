@@ -402,6 +402,14 @@ monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 			}
 			break;
 
+		case FILTER_BASIC_STRING:
+			if (print_spaces) {
+				sprintf(str, " '%s' ", (char *)data);
+			} else {
+				sprintf(str, "%s", (char *)data);
+			}
+			break;
+
 		default:
 			break;
 	}

@@ -187,6 +187,8 @@ filter_add_to_basic_filter(struct filter_input *f,
 	} else if (tok->id == INT_RANGE) {
 		fb->data[fb->n].data.range.low = tok->data.range.low;
 		fb->data[fb->n].data.range.high = tok->data.range.high;
+	} else if (tok->id == STRING) {
+		fb->data[fb->n].data.str = strdup(tok->data.str);
 	} else {
 		return 0;
 	}
@@ -505,6 +507,56 @@ filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
 	return 0;
 }
 
+static int
+filter_basic_match_string(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	size_t len1, len2;
+
+	char *tmp1, *tmp2;
+
+	switch (fb->name) {
+#define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
+		case FILTER_BASIC_NAME_##NAME:                               \
+			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
+				tmp1 = (char *)flow->SRC;                    \
+				len1 = flow->SRC##_size;                     \
+			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
+				tmp1 = (char *)flow->DST;                    \
+				len1 = flow->DST##_size;                     \
+			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
+				tmp1 = (char *)flow->SRC;                    \
+				tmp2 = (char *)flow->DST;                    \
+				len1 = flow->SRC##_size;                     \
+				len2 = flow->DST##_size;                     \
+			} else {                                             \
+				return 0;                                    \
+			}                                                    \
+			break;
+#include "filter.def"
+		default:
+			return 0;
+	}
+
+	for (i=0; i<fb->n; i++) {
+		if (fb->direction != FILTER_BASIC_DIR_BOTH) {
+			if (strncmp(fb->data[i].data.str, tmp1, len1) == 0) {
+				return 1;
+			}
+
+			if (strncmp(fb->data[i].data.str, tmp2, len2) == 0) {
+				return 1;
+			}
+		} else {
+			if (strncmp(fb->data[i].data.str, tmp1, len1) == 0) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
 /* functions */
 static int
 filter_function_div(struct filter_basic *fb, struct nf_flow_info *flow)
@@ -585,6 +637,8 @@ filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 		ret = filter_basic_match_addr6(fb, flow);
 	} else if (fb->type == FILTER_BASIC_RANGE) {
 		ret = filter_basic_match_range(fb, flow);
+	} else if (fb->type == FILTER_BASIC_STRING) {
+		ret = filter_basic_match_string(fb, flow);
 	} else {
 		/* unknown filter type */
 	}
@@ -780,6 +834,10 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 		for (i=0; i<fb->n; i++) {
 			fprintf(f, " %d-%d", fb->data[i].data.range.low,
 				fb->data[i].data.range.high);
+		}
+	} else if (fb->type == FILTER_BASIC_STRING) {
+		for (i=0; i<fb->n; i++) {
+			fprintf(f, " %s", fb->data[i].data.str);
 		}
 	} else {
 		fprintf(f, "<Unknown type %d>", fb->type);

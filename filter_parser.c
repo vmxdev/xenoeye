@@ -46,9 +46,10 @@ int
 id(struct filter_input *f, struct filter_expr *e, enum FILTER_BASIC_TYPE type)
 {
 	if ((f->current_token.id != ID)
-		&& (f->current_token.id != INT_RANGE)) {
+		&& (f->current_token.id != INT_RANGE)
+		&& (f->current_token.id != STRING)) {
 
-		mkerror(f, "Expected ID, INT or INT_RANGE");
+		mkerror(f, "Expected ID, INT, INT_RANGE or STRING");
 		return 0;
 	}
 
@@ -63,7 +64,8 @@ id(struct filter_input *f, struct filter_expr *e, enum FILTER_BASIC_TYPE type)
 		}
 
 		if ((f->current_token.id == ID)
-			|| (f->current_token.id == INT_RANGE)) {
+			|| (f->current_token.id == INT_RANGE)
+			|| (f->current_token.id == STRING)) {
 
 			filter_add_to_basic_filter(f, e, &f->current_token,
 				type);
@@ -102,6 +104,7 @@ rule_without_direction(struct filter_input *q, struct filter_expr *e, int dir)
 static int
 rule(struct filter_input *q, struct filter_expr *e)
 {
+	/* functions */
 	if (function_div(q, e)) {
 		return 1;
 	}
@@ -110,6 +113,7 @@ rule(struct filter_input *q, struct filter_expr *e)
 		return 1;
 	}
 
+	/* simple rules */
 	if (rule_without_direction(q, e, FILTER_BASIC_DIR_BOTH)) {
 		return 1;
 	}
