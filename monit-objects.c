@@ -264,7 +264,7 @@ monit_objects_init(struct xe_data *data)
 			return 0;
 		}
 
-		if (mo->classification.time == 0) {
+		if (mo->classification.on && (mo->classification.time == 0)) {
 			LOG("warning: time for '%s' classifier is not set"
 				", using default %d",
 				mo->name,
