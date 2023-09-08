@@ -281,6 +281,13 @@ function_mfreq_parse(struct filter_input *in, struct function_mfreq *mfreq)
 		return 0;
 	}
 
+	/* init freqmap */
+	mfreq->freqmap = calloc(UINT16_MAX, sizeof(uint64_t));
+	if (!mfreq->freqmap) {
+		LOG("calloc() failed");
+		return 0;
+	}
+
 	return 1;
 }
 
@@ -292,11 +299,6 @@ function_mfreq(struct filter_input *in, struct filter_expr *e)
 	struct filter_basic *fb;
 
 	if (!function_mfreq_parse(in, &mfreq)) {
-		return 0;
-	}
-
-	mfreq.freqmap = calloc(UINT16_MAX, sizeof(uint64_t));
-	if (!mfreq.freqmap) {
 		return 0;
 	}
 

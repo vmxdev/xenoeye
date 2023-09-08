@@ -151,7 +151,7 @@ struct function_mfreq
 	unsigned int arg2_off;
 	unsigned int arg2_size;
 
-	uint64_t *freqmap;
+	_Atomic uint64_t *freqmap;
 };
 
 

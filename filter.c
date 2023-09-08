@@ -640,9 +640,10 @@ filter_function_mfreq(struct filter_basic *fb, struct nf_flow_info *flow)
 	}
 
 	/* update freqmap */
-	/* FIXME: atomic? */
-	mfreq->freqmap[arg1]++;
-	mfreq->freqmap[arg2]++;
+	atomic_fetch_add_explicit(&mfreq->freqmap[arg1], 1,
+		memory_order_relaxed);
+	atomic_fetch_add_explicit(&mfreq->freqmap[arg1], 1,
+		memory_order_relaxed);
 
 
 	for (i=0; i<fb->n; i++) {

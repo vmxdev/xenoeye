@@ -468,8 +468,9 @@ static void
 monit_object_func_mfreq(struct field *fld, struct nf_flow_info *flow,
 	uint8_t *key)
 {
-	uint16_t arg1, arg2, res;
+	uint16_t arg1, arg2;
 	uint64_t freq1, freq2;
+	uint64_t res;
 
 	arg1 = get_nf_val((uintptr_t)flow + fld->func_data.mfreq.arg1_off,
 		fld->func_data.mfreq.arg1_size);
@@ -486,9 +487,10 @@ monit_object_func_mfreq(struct field *fld, struct nf_flow_info *flow,
 	}
 
 	/* update freqmap */
-	/* FIXME: atomic? */
-	fld->func_data.mfreq.freqmap[arg1]++;
-	fld->func_data.mfreq.freqmap[arg2]++;
+	atomic_fetch_add_explicit(&fld->func_data.mfreq.freqmap[arg1], 1,
+		memory_order_relaxed);
+	atomic_fetch_add_explicit(&fld->func_data.mfreq.freqmap[arg2], 1,
+		memory_order_relaxed);
 
 	memcpy(key, &res, sizeof(res));
 }
