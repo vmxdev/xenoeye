@@ -322,6 +322,25 @@ load_db(struct mo_classification *clsf, const char *clsf_dir,
 static void
 field_to_string(struct field *fld, char *str, uint8_t *data)
 {
+	/* functions mfreq/min with ports */
+	if ((strstr(fld->name, "mfreq") != NULL)
+		|| (strstr(fld->name, "min") != NULL)) {
+
+		if (strstr(fld->name, "port") != NULL) {
+			uint64_t port64 = be64toh(*((uint64_t *)data));
+			int port = htobe16(port64);
+			struct servent se, *se_res;
+
+			if (getservbyport_r(port, NULL, &se, str,
+				TMP_STR_LEN, &se_res) == 0) {
+
+				if (se_res != NULL) {
+					return;
+				}
+			}
+		}
+	}
+
 	if (fld->id == PROTO) {
 		int proto = *data;
 		struct protoent pe, *pe_res;
@@ -338,7 +357,9 @@ field_to_string(struct field *fld, char *str, uint8_t *data)
 		if (getservbyport_r(port, NULL, &se, str,
 			TMP_STR_LEN, &se_res) == 0) {
 
-			return;
+			if (se_res != NULL) {
+				return;
+			}
 		}
 	} else if (fld->id == TCPFLAGS) {
 		uint8_t flags = *data;
