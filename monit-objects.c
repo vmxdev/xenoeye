@@ -464,6 +464,35 @@ monit_object_func_min(struct field *fld, struct nf_flow_info *flow,
 	memcpy(key, &res, sizeof(res));
 }
 
+static void
+monit_object_func_mfreq(struct field *fld, struct nf_flow_info *flow,
+	uint8_t *key)
+{
+	uint16_t arg1, arg2, res;
+	uint64_t freq1, freq2;
+
+	arg1 = get_nf_val((uintptr_t)flow + fld->func_data.mfreq.arg1_off,
+		fld->func_data.mfreq.arg1_size);
+	arg2 = get_nf_val((uintptr_t)flow + fld->func_data.mfreq.arg2_off,
+		fld->func_data.mfreq.arg2_size);
+
+	freq1 = fld->func_data.mfreq.freqmap[arg1];
+	freq2 = fld->func_data.mfreq.freqmap[arg2];
+
+	if (freq1 != freq2) {
+		res = htobe64((freq1 > freq2) ? arg1 : arg2);
+	} else {
+		res = htobe64((arg1 < arg2) ? arg1 : arg2);
+	}
+
+	/* update freqmap */
+	/* FIXME: atomic? */
+	fld->func_data.mfreq.freqmap[arg1]++;
+	fld->func_data.mfreq.freqmap[arg2]++;
+
+	memcpy(key, &res, sizeof(res));
+}
+
 void
 monit_object_key_add_fld(struct field *fld, uint8_t *key,
 	struct nf_flow_info *flow)
@@ -475,6 +504,9 @@ monit_object_key_add_fld(struct field *fld, uint8_t *key,
 				break;
 			case MIN:
 				monit_object_func_min(fld, flow, key);
+				break;
+			case MFREQ:
+				monit_object_func_mfreq(fld, flow, key);
 				break;
 			default:
 				break;

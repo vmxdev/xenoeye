@@ -70,6 +70,7 @@ enum TOKEN_ID
 	/* functions */
 	DIV,
 	MIN,
+	MFREQ,
 	COMMA
 };
 
@@ -117,7 +118,8 @@ enum FILTER_BASIC_NAME
 #include "filter.def"
 
 	FILTER_BASIC_NAME_DIV,
-	FILTER_BASIC_NAME_MIN
+	FILTER_BASIC_NAME_MIN,
+	FILTER_BASIC_NAME_MFREQ
 };
 
 struct function_div
@@ -140,6 +142,19 @@ struct function_min
 	unsigned int arg2_size;
 };
 
+struct function_mfreq
+{
+	/* offsets and sizes in struct nf_flow_info */
+	unsigned int arg1_off;
+	unsigned int arg1_size;
+
+	unsigned int arg2_off;
+	unsigned int arg2_size;
+
+	uint64_t *freqmap;
+};
+
+
 struct filter_basic
 {
 	enum FILTER_BASIC_TYPE type;
@@ -153,6 +168,7 @@ struct filter_basic
 	union filter_func_data {
 		struct function_div *div;
 		struct function_min *min;
+		struct function_mfreq *mfreq;
 	} func_data;
 };
 
@@ -208,6 +224,7 @@ struct field
 	union field_func_data {
 		struct function_div div;
 		struct function_min min;
+		struct function_mfreq mfreq;
 	} func_data;
 };
 
@@ -239,6 +256,8 @@ int function_div_parse(struct filter_input *in, struct function_div *div);
 int function_div(struct filter_input *in, struct filter_expr *e);
 int function_min_parse(struct filter_input *in, struct function_min *min);
 int function_min(struct filter_input *in, struct filter_expr *e);
+int function_mfreq_parse(struct filter_input *in, struct function_mfreq *mfreq);
+int function_mfreq(struct filter_input *in, struct filter_expr *e);
 
 static inline uint64_t
 get_nf_val(uintptr_t ptr, unsigned int size)

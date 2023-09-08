@@ -239,3 +239,84 @@ function_min(struct filter_input *in, struct filter_expr *e)
 	return id(in, e, FILTER_BASIC_RANGE);
 }
 
+int
+function_mfreq_parse(struct filter_input *in, struct function_mfreq *mfreq)
+{
+	if (!accept_(in, MFREQ)) {
+		return 0;
+	}
+
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after 'mfreq'");
+		return 0;
+	}
+
+	/* arg1 */
+	if (!parse_nonaggr_field(in, &mfreq->arg1_off, &mfreq->arg1_size)) {
+		mkerror(in, "Incorrect field name");
+		return 0;
+	}
+
+	if (mfreq->arg1_size > sizeof(uint16_t)) {
+		LOG("Field is too big for mfreq");
+	}
+
+	if (!accept_(in, COMMA)) {
+		mkerror(in, "Expected ',' after field name");
+		return 0;
+	}
+
+	/* arg2 */
+	if (!parse_nonaggr_field(in, &mfreq->arg2_off, &mfreq->arg2_size)) {
+		mkerror(in, "Incorrect field name after comma");
+		return 0;
+	}
+
+	if (mfreq->arg2_size > sizeof(uint16_t)) {
+		LOG("Field is too big for mfreq");
+	}
+
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+int
+function_mfreq(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_mfreq mfreq;
+	struct filter_basic *fb;
+
+	if (!function_mfreq_parse(in, &mfreq)) {
+		return 0;
+	}
+
+	mfreq.freqmap = calloc(UINT16_MAX, sizeof(uint64_t));
+	if (!mfreq.freqmap) {
+		return 0;
+	}
+
+	if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+			FILTER_BASIC_NAME_MFREQ,
+			FILTER_BASIC_DIR_NONE)) {
+
+		return 0;
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->func_data.mfreq = malloc(sizeof(struct function_mfreq));
+	if (!fb->func_data.mfreq) {
+		return 0;
+	}
+
+	*fb->func_data.mfreq = mfreq;
+
+	fb->is_func = 1;
+
+	return id(in, e, FILTER_BASIC_RANGE);
+}
+

@@ -113,6 +113,10 @@ rule(struct filter_input *q, struct filter_expr *e)
 		return 1;
 	}
 
+	if (function_mfreq(q, e)) {
+		return 1;
+	}
+
 	/* simple rules */
 	if (rule_without_direction(q, e, FILTER_BASIC_DIR_BOTH)) {
 		return 1;
@@ -387,6 +391,11 @@ parse_field(char *s, struct field *fld, char *err)
 	} else if (function_min_parse(&in, &fld->func_data.min)) {
 		fld->is_func = 1;
 		fld->id = MIN;
+		fld->type = FILTER_BASIC_RANGE;
+		fld->size = sizeof(uint64_t);
+	} else if (function_mfreq_parse(&in, &fld->func_data.mfreq)) {
+		fld->is_func = 1;
+		fld->id = MFREQ;
 		fld->type = FILTER_BASIC_RANGE;
 		fld->size = sizeof(uint64_t);
 	} else {

@@ -616,6 +616,48 @@ filter_function_min(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
+filter_function_mfreq(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	struct function_mfreq *mfreq = fb->func_data.mfreq;
+	uint16_t arg1, arg2;
+	uint64_t freq1, freq2;
+	int64_t res;
+
+	arg1 = get_nf_val((uintptr_t)flow + mfreq->arg1_off,
+		mfreq->arg1_size);
+	arg2 = get_nf_val((uintptr_t)flow + mfreq->arg2_off,
+		mfreq->arg2_size);
+
+	freq1 = mfreq->freqmap[arg1];
+	freq2 = mfreq->freqmap[arg2];
+
+	if (freq1 != freq2) {
+		res = (freq1 > freq2) ? arg1 : arg2;
+	} else {
+		/* same frequencies */
+		res = (arg1 < arg2) ? arg1 : arg2;
+	}
+
+	/* update freqmap */
+	/* FIXME: atomic? */
+	mfreq->freqmap[arg1]++;
+	mfreq->freqmap[arg2]++;
+
+
+	for (i=0; i<fb->n; i++) {
+		if ((res >= fb->data[i].data.range.low)
+			&& (res <= fb->data[i].data.range.high)) {
+
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+
+static int
 filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	int ret = 0;
@@ -626,6 +668,8 @@ filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 				return filter_function_div(fb, flow);
 			case FILTER_BASIC_NAME_MIN:
 				return filter_function_min(fb, flow);
+			case FILTER_BASIC_NAME_MFREQ:
+				return filter_function_mfreq(fb, flow);
 			default:
 				break;
 		}
@@ -721,6 +765,12 @@ filter_free(struct filter_expr *e)
 						free(fb->func_data.min);
 						fb->func_data.min = NULL;
 						break;
+					case FILTER_BASIC_NAME_MFREQ:
+						free(fb->func_data.mfreq
+							->freqmap);
+						free(fb->func_data.mfreq);
+						fb->func_data.mfreq = NULL;
+						break;
 					default:
 						break;
 				}
@@ -797,6 +847,12 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 			fprintf(f, "MIN ([offset %d]/[offset %d])",
 				(int)fb->func_data.min->arg1_off,
 				(int)fb->func_data.min->arg2_off);
+			break;
+
+		case FILTER_BASIC_NAME_MFREQ:
+			fprintf(f, "MFREQ ([offset %d]/[offset %d])",
+				(int)fb->func_data.mfreq->arg1_off,
+				(int)fb->func_data.mfreq->arg2_off);
 			break;
 
 		default:
