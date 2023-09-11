@@ -525,9 +525,10 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 {
 	size_t i, j, f;
 
-	/* reset class */
-	flow->class[0] = '\0';
 	if (mo->classification.on) {
+		/* reset class */
+		memset(flow->class, 0, CLASS_NAME_MAX);
+		flow->class[0] = '\0';
 		flow->has_class = 1;
 		classification_process_nf(mo, thread_id, flow);
 	} else {

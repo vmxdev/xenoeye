@@ -406,6 +406,9 @@ mavg_limits_parse_line(struct mo_mavg *window, char *line, uint8_t *key,
 						"IPv6 address", token);
 					return 0;
 				}
+			} else if (fld->type == FILTER_BASIC_STRING) {
+				memset(key, 0, fld->size);
+				strcpy((char *)key, token);
 			} else {
 				/* FIXME: check? */
 				long long int v = atoll(token);
