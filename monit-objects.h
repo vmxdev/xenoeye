@@ -22,6 +22,15 @@
 
 #define CLSF_DEFAULT_TIMEOUT 30
 #define CLASS_NAME_MAX 32
+#define CLASSES_MAX 5
+
+/* helper for classes processing */
+#define FOR_LIST_OF_CLASSES \
+	DO(0, class0)       \
+	DO(1, class1)       \
+	DO(2, class2)       \
+	DO(3, class3)       \
+	DO(4, class4)
 
 struct xe_data;
 struct nf_flow_info;
@@ -100,7 +109,7 @@ struct classification_thread_data
 
 struct mo_classification
 {
-	int on;
+	int id;
 
 	time_t last_export;
 	int time;
@@ -227,8 +236,9 @@ struct monit_object
 	size_t nmavg;
 	struct mo_mavg *mavgs;
 
-	/* classification */
-	struct mo_classification classification;
+	/* classifications */
+	size_t nclassifications;
+	struct mo_classification *classifications;
 };
 
 

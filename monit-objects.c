@@ -258,18 +258,23 @@ monit_objects_init(struct xe_data *data)
 		}
 
 		/* classification */
-		if (!classification_fields_init(data->nthreads,
-			&mo->classification)) {
+		for (i=0; i<mo->nclassifications; i++) {
+			if (!classification_fields_init(data->nthreads,
+				&mo->classifications[i])) {
 
-			return 0;
-		}
+				return 0;
+			}
 
-		if (mo->classification.on && (mo->classification.time == 0)) {
-			LOG("warning: time for '%s' classifier is not set"
-				", using default %d",
-				mo->name,
-				CLSF_DEFAULT_TIMEOUT);
-			mo->classification.time = CLSF_DEFAULT_TIMEOUT;
+			if (mo->classifications[i].time == 0) {
+
+				LOG("warning: time for '%s' class%d is "
+					"not set, using default %d",
+					mo->name,
+					mo->classifications[i].id,
+					CLSF_DEFAULT_TIMEOUT);
+				mo->classifications[i].time
+					= CLSF_DEFAULT_TIMEOUT;
+			}
 		}
 
 		/* store path to monitoring object directory */
@@ -525,15 +530,7 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 {
 	size_t i, j, f;
 
-	if (mo->classification.on) {
-		/* reset class */
-		memset(flow->class, 0, CLASS_NAME_MAX);
-		flow->class[0] = '\0';
-		flow->has_class = 1;
-		classification_process_nf(mo, thread_id, flow);
-	} else {
-		flow->has_class = 0;
-	}
+	classification_process_nf(mo, thread_id, flow);
 
 	/* fixed windows */
 	for (i=0; i<mo->nfwm; i++) {

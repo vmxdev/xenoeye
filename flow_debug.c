@@ -105,10 +105,14 @@ flow_print_str(struct xe_debug *debug, struct nf_flow_info *fi, char *flow_str)
 	char classinfo[16 + CLASS_NAME_MAX];
 	uint32_t dev_id;
 
-	if (fi->has_class) {
-		sprintf(classinfo, "; *class: %s", fi->class);
-		strcat(flow_str, classinfo);
+	/* print classes */
+#define DO(ID, CLASS)                                               \
+	if (fi->has_##CLASS) {                                      \
+		sprintf(classinfo, "; *"#CLASS": %s", fi->CLASS);   \
+		strcat(flow_str, classinfo);                        \
 	}
+FOR_LIST_OF_CLASSES
+#undef DO
 
 	memcpy(&dev_id, &fi->dev_id[0], sizeof(uint32_t));
 
