@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2023, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -364,22 +364,71 @@ mavg_config(struct aajson *a, aajson_val *value,
 	return 1;
 }
 
+static void
+csv_next(char **line, char *token)
+{
+	char *ptr = *line, *end;
+	size_t len;
+
+	/* skip spaces */
+	while (isspace(*ptr)) {
+		ptr++;
+	}
+
+	if (*ptr == '\0') {
+		/* empty token */
+		token[0] = '\0';
+		return;
+	}
+
+	if (*ptr == '\'') {
+		/* string */
+		ptr++;
+		end = strchr(ptr, '\'');
+		if (!end) {
+			/* no closing quote */
+			strcpy(token, ptr);
+			*line = strchr(ptr, '\0');
+			return;
+		}
+		len = end - ptr;
+		memcpy(token, ptr, len);
+		token[len] = '\0';
+
+		end = strchr(end, ',');
+		if (!end) {
+			*line = strchr(ptr, '\0');
+			return;
+		}
+		*line = end + 1;
+	} else {
+		end = strchr(ptr, ',');
+		if (!end) {
+			/* no comma */
+			strcpy(token, ptr);
+			*line = strchr(ptr, '\0');
+			return;
+		}
+		len = end - ptr;
+		memcpy(token, ptr, len);
+		token[len] = '\0';
+		*line = end + 1;
+	}
+}
+
 static int
 mavg_limits_parse_line(struct mo_mavg *window, char *line, uint8_t *key,
 	MAVG_TYPE *val)
 {
-	char* token;
-	const char separators[] = ",";
-	size_t i = 0;
+	char token[TOKEN_MAX_SIZE];
+	size_t i;
 	size_t validx = 0;
 
-	token = strtok(line, separators);
-	while (token != NULL) {
+	for (i=0; i<window->fieldset.n; i++) {
 		struct field *fld = &window->fieldset.fields[i];
 
-		if (i >= window->fieldset.n) {
-			break;
-		}
+		/* get token */
+		csv_next(&line, token);
 
 		if (fld->aggr) {
 			val[validx] = strtod(token, NULL);
@@ -434,13 +483,11 @@ mavg_limits_parse_line(struct mo_mavg *window, char *line, uint8_t *key,
 
 			key += fld->size;
 		}
-
-		token = strtok(NULL, separators);
-		i++;
 	}
 
 	return 1;
 }
+
 
 /* load CSV file with limits */
 static int
