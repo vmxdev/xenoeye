@@ -226,7 +226,7 @@ load_db(struct mo_classification *clsf, const char *clsf_dir,
 	TKVDB_RES rc;
 	size_t b_idx, i;
 	int j;
-	char clsf_path[PATH_MAX*2];
+	char clsf_path[PATH_MAX*2 + 10];
 
 	/* get unused bank */
 	b_idx = (atomic_load_explicit(&clsf->db.idx, memory_order_relaxed) + 1)
@@ -247,7 +247,7 @@ load_db(struct mo_classification *clsf, const char *clsf_dir,
 
 	while ((dir = readdir(d)) != NULL) {
 		tkvdb_datum dtk, dtv;
-		char nmfile[PATH_MAX*2 + 261];
+		char nmfile[PATH_MAX*2 + 271];
 		FILE *f;
 		char cdir[PATH_MAX + 1];
 		char *cptr;
@@ -435,7 +435,7 @@ update_clsf_dir(const char *clsf_dir, int class_id, const char *mo_name,
 	const char *class_dir, const char *class_name,
 	uint64_t s, uint64_t sum)
 {
-	char path[PATH_MAX*2 + 7];
+	char path[PATH_MAX*2 + 17];
 	struct stat st;
 	FILE *f;
 
