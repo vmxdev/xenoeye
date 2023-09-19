@@ -436,14 +436,16 @@ monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
 	uint8_t *key)
 {
 	uint64_t quotient, dividend, divisor;
+	struct function_div *div = &fld->func_data.div;
 
-	dividend = get_nf_val((uintptr_t)flow + fld->func_data.div.dividend_off,
-		fld->func_data.div.dividend_size);
-	divisor = get_nf_val((uintptr_t)flow + fld->func_data.div.divisor_off,
-		fld->func_data.div.divisor_size);
+	dividend = get_nf_val((uintptr_t)flow + div->dividend_off,
+		div->dividend_size);
+	divisor = get_nf_val((uintptr_t)flow + div->divisor_off,
+		div->divisor_size);
 
 	if (divisor) {
-		quotient = htobe64(dividend / divisor);
+		int q = xdiv(dividend, divisor, div->is_log, div->k);
+		quotient = htobe64(q);
 	} else {
 		/* division by zero */
 		/* FIXME: warn user? log or write some value for notification? */
@@ -507,6 +509,8 @@ monit_object_key_add_fld(struct field *fld, uint8_t *key,
 	if (fld->is_func) {
 		switch (fld->id) {
 			case DIV:
+			case DIV_L:
+			case DIV_R:
 				monit_object_func_div(fld, flow, key);
 				break;
 			case MIN:

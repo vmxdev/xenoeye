@@ -168,6 +168,10 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 	/* functions */
 	} else if (MATCH("div")) {
 		*id = DIV;
+	} else if (MATCH("div_r")) {
+		*id = DIV_R;
+	} else if (MATCH("div_l")) {
+		*id = DIV_L;
 	}  else if (MATCH("min")) {
 		*id = MIN;
 	}  else if (MATCH("mfreq")) {

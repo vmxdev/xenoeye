@@ -79,9 +79,17 @@ nf_field_off_size(struct filter_input *in, unsigned int *off,
 
 /* div */
 int
-function_div_parse(struct filter_input *in, struct function_div *div)
+function_div_parse(struct filter_input *in, struct function_div *div,
+	enum TOKEN_ID *tok)
 {
-	if (!accept_(in, DIV)) {
+	if (accept_(in, DIV)) {
+		*tok = DIV;
+	} else if (accept_(in, DIV_L)) {
+		*tok = DIV_L;
+		div->is_log = 1;
+	} else if (accept_(in, DIV_R)) {
+		*tok = DIV_R;
+	} else {
 		return 0;
 	}
 
@@ -109,6 +117,21 @@ function_div_parse(struct filter_input *in, struct function_div *div)
 		return 0;
 	}
 
+	if ((*tok == DIV_L) || (*tok == DIV_R)) {
+		int k;
+		if (!accept_(in, COMMA)) {
+			mkerror(in, "Expected ',' after second field name");
+			return 0;
+		}
+
+		k = in->current_token.data.range.low;
+		if (!accept_(in, INT_RANGE)) {
+			mkerror(in, "Expected INT");
+			return 0;
+		}
+		div->k = k;
+	}
+
 	if (!accept_(in, RPAREN)) {
 		mkerror(in, "Expected ')'");
 		return 0;
@@ -118,20 +141,39 @@ function_div_parse(struct filter_input *in, struct function_div *div)
 }
 
 int
-function_div(struct filter_input *in, struct filter_expr *e)
+function_div(struct filter_input *in, struct filter_expr *e,
+	enum TOKEN_ID *tok)
 {
 	struct function_div div;
 	struct filter_basic *fb;
 
-	if (!function_div_parse(in, &div)) {
+	div.is_log = 0;
+	div.k = 1;
+	if (!function_div_parse(in, &div, tok)) {
 		return 0;
 	}
 
-	if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
-			FILTER_BASIC_NAME_DIV,
-			FILTER_BASIC_DIR_NONE)) {
+	if (*tok == DIV) {
+		if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+				FILTER_BASIC_NAME_DIV,
+				FILTER_BASIC_DIR_NONE)) {
 
-		return 0;
+			return 0;
+		}
+	} else if (*tok == DIV_L) {
+		if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+				FILTER_BASIC_NAME_DIV_L,
+				FILTER_BASIC_DIR_NONE)) {
+
+			return 0;
+		}
+	} else if (*tok == DIV_R) {
+		if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+				FILTER_BASIC_NAME_DIV_R,
+				FILTER_BASIC_DIR_NONE)) {
+
+			return 0;
+		}
 	}
 
 	fb = e->filter[e->n - 1].arg;

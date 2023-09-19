@@ -105,7 +105,8 @@ static int
 rule(struct filter_input *q, struct filter_expr *e)
 {
 	/* functions */
-	if (function_div(q, e)) {
+	enum TOKEN_ID div_tok;
+	if (function_div(q, e, &div_tok)) {
 		return 1;
 	}
 
@@ -370,6 +371,7 @@ int
 parse_field(char *s, struct field *fld, char *err)
 {
 	struct filter_input in;
+	enum TOKEN_ID div_tok;
 
 	memset(&in, 0, sizeof(struct filter_input));
 	in.s = s;
@@ -383,9 +385,9 @@ parse_field(char *s, struct field *fld, char *err)
 		return 0;
 	}
 
-	if (function_div_parse(&in, &fld->func_data.div)) {
+	if (function_div_parse(&in, &fld->func_data.div, &div_tok)) {
 		fld->is_func = 1;
-		fld->id = DIV;
+		fld->id = div_tok;
 		fld->type = FILTER_BASIC_RANGE;
 		fld->size = sizeof(uint64_t);
 	} else if (function_min_parse(&in, &fld->func_data.min)) {

@@ -2,6 +2,7 @@
 #define filter_h_included
 
 #include <stdint.h>
+#include <math.h>
 #include "xenoeye.h"
 #include "iplist.h"
 
@@ -69,6 +70,8 @@ enum TOKEN_ID
 
 	/* functions */
 	DIV,
+	DIV_R,
+	DIV_L,
 	MIN,
 	MFREQ,
 	COMMA
@@ -118,6 +121,8 @@ enum FILTER_BASIC_NAME
 #include "filter.def"
 
 	FILTER_BASIC_NAME_DIV,
+	FILTER_BASIC_NAME_DIV_R,
+	FILTER_BASIC_NAME_DIV_L,
 	FILTER_BASIC_NAME_MIN,
 	FILTER_BASIC_NAME_MFREQ
 };
@@ -130,6 +135,9 @@ struct function_div
 
 	unsigned int divisor_off;
 	unsigned int divisor_size;
+
+	int is_log;
+	int k;
 };
 
 struct function_min
@@ -252,8 +260,10 @@ int accept_(struct filter_input *i, enum TOKEN_ID token);
 int id(struct filter_input *f, struct filter_expr *e,
 	enum FILTER_BASIC_TYPE type);
 
-int function_div_parse(struct filter_input *in, struct function_div *div);
-int function_div(struct filter_input *in, struct filter_expr *e);
+int function_div_parse(struct filter_input *in, struct function_div *div,
+	enum TOKEN_ID *tok);
+int function_div(struct filter_input *in, struct filter_expr *e,
+	enum TOKEN_ID *tok);
 int function_min_parse(struct filter_input *in, struct function_min *min);
 int function_min(struct filter_input *in, struct filter_expr *e);
 int function_mfreq_parse(struct filter_input *in, struct function_mfreq *mfreq);
@@ -281,6 +291,31 @@ get_nf_val(uintptr_t ptr, unsigned int size)
 
 	return val;
 }
+
+static inline int
+xdiv(uint64_t dividend, uint64_t divisor, int is_log, int k)
+{
+	int quotient;
+
+	if (divisor == 0) {
+		return 0;
+	}
+
+	quotient = dividend / divisor;
+
+	if (is_log) {
+		int lg = log(quotient) / log(k);
+		quotient = pow(k, lg);
+	} else {
+		if (k > 1) {
+			quotient /= k;
+			quotient *= k;
+		}
+	}
+
+	return quotient;
+}
+
 
 #endif
 

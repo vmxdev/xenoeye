@@ -28,6 +28,10 @@ AC_SEARCH_LIBS([__atomic_load_16], [atomic], [], [
   AC_MSG_ERROR([unable to find the __atomic_load_16() function])
 ])
 
+AC_SEARCH_LIBS([log], [m], [], [
+  AC_MSG_ERROR([unable to find the log() function])
+])
+
 # pthreads
 
 AX_PTHREAD([

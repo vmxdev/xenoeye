@@ -571,12 +571,7 @@ filter_function_div(struct filter_basic *fb, struct nf_flow_info *flow)
 	divisor = get_nf_val((uintptr_t)flow + div->divisor_off,
 		div->divisor_size);
 
-	if (divisor == 0) {
-		LOG("Division by zero");
-		return 0;
-	}
-
-	quotient = dividend / divisor;
+	quotient = xdiv(dividend, divisor, div->is_log, div->k);
 
 	for (i=0; i<fb->n; i++) {
 		if ((quotient >= fb->data[i].data.range.low)
@@ -666,6 +661,8 @@ filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 	if (fb->is_func) {
 		switch (fb->name) {
 			case FILTER_BASIC_NAME_DIV:
+			case FILTER_BASIC_NAME_DIV_R:
+			case FILTER_BASIC_NAME_DIV_L:
 				return filter_function_div(fb, flow);
 			case FILTER_BASIC_NAME_MIN:
 				return filter_function_min(fb, flow);
@@ -759,6 +756,8 @@ filter_free(struct filter_expr *e)
 			if (fb->is_func) {
 				switch (fb->name) {
 					case FILTER_BASIC_NAME_DIV:
+					case FILTER_BASIC_NAME_DIV_R:
+					case FILTER_BASIC_NAME_DIV_L:
 						free(fb->func_data.div);
 						fb->func_data.div = NULL;
 						break;
@@ -842,6 +841,20 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 			fprintf(f, "DIV ([offset %d]/[offset %d])",
 				(int)fb->func_data.div->dividend_off,
 				(int)fb->func_data.div->divisor_off);
+			break;
+
+		case FILTER_BASIC_NAME_DIV_R:
+			fprintf(f, "DIV_R ([offset %d]/[offset %d]/k %d)",
+				(int)fb->func_data.div->dividend_off,
+				(int)fb->func_data.div->divisor_off,
+				fb->func_data.div->k);
+			break;
+
+		case FILTER_BASIC_NAME_DIV_L:
+			fprintf(f, "DIV_L ([offset %d]/[offset %d]/k %d)",
+				(int)fb->func_data.div->dividend_off,
+				(int)fb->func_data.div->divisor_off,
+				fb->func_data.div->k);
 			break;
 
 		case FILTER_BASIC_NAME_MIN:
