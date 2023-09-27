@@ -26,7 +26,7 @@
 In minimal Debian, you need to install the following packages to build:
 
 ```sh
-$ sudo apt -y install git autoconf gcc make libpcap-dev
+$ sudo apt -y install git autoconf gcc make libpcap-dev libtool
 ```
 
 Clone the repository and initialize the submodules

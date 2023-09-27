@@ -26,7 +26,7 @@
 В минимальном Debian для сборки нужно доустановить такие пакеты:
 
 ```sh
-$ sudo apt -y install git autoconf gcc make libpcap-dev
+$ sudo apt -y install git autoconf gcc make libpcap-dev libtool
 ```
 
 Склонируйте репозиторий и инициализируйте подмодули
