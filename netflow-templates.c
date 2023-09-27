@@ -23,7 +23,7 @@
 #include <errno.h>
 
 #include "utils.h"
-#include "netflow_templates.h"
+#include "netflow-templates.h"
 #include "tkvdb/tkvdb.h"
 
 static const char *templates_db;             /* path to templates db file */

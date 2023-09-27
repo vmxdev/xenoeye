@@ -20,7 +20,7 @@
 #include "netflow.h"
 #include "utils.h"
 
-#include "flow_debug.h"
+#include "flow-debug.h"
 
 typedef void (*flow_fldprnt_func_t)(char *str, int flength, uint8_t *fptr);
 static flow_fldprnt_func_t flow_fldprnt_functions[UINT16_MAX];

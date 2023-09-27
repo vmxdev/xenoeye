@@ -4,18 +4,19 @@ AM_CPPFLAGS = -I$(srcdir)/tkvdb
 bin_PROGRAMS = xenoeye
 xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	utils.h netflow.h netflow.c \
-	netflow_templates.c netflow_templates.h \
+	netflow-templates.c netflow-templates.h \
 	tkvdb/tkvdb.c tkvdb/tkvdb.h \
 	aajson/aajson.h \
-	filter.c filter.h filter_lexer.c filter_parser.c \
+	filter.c filter.h filter-lexer.c filter-parser.c \
 	filter-parser-funcs.c \
 	pcapture.c monit-objects.c monit-objects.h \
 	monit-objects-fwm.c monit-objects-mavg.c \
 	monit-objects-mavg-act.c monit-objects-mavg-dump.c \
 	classification.c \
-	flow_debug.h flow_debug.c \
+	flow-debug.h flow-debug.c \
 	devices.h devices.c \
-	iplist.h iplist.c
+	iplist.h iplist.c \
+	geoip.h geoip.c
 
 #xemkrep_SOURCES = xemkrep.c \
 #	tkvdb/tkvdb.c tkvdb/tkvdb.h
@@ -23,7 +24,7 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 # checks
 check_PROGRAMS = test_filters
 test_filters_SOURCES = tests/test_filters.c \
-	filter.c filter_lexer.c filter_parser.c iplist.c
+	filter.c filter-lexer.c filter-parser.c iplist.c filter-parser-funcs.c
 TESTS = $(check_PROGRAMS)
 
 # config file

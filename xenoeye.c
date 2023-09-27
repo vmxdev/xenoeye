@@ -32,8 +32,8 @@
 
 #include "utils.h"
 #include "netflow.h"
-#include "netflow_templates.h"
-#include "flow_debug.h"
+#include "netflow-templates.h"
+#include "flow-debug.h"
 #include "xenoeye.h"
 #include "devices.h"
 

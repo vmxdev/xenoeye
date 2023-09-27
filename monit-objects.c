@@ -28,7 +28,7 @@
 #include "utils.h"
 #include "xenoeye.h"
 #include "filter.h"
-#include "flow_debug.h"
+#include "flow-debug.h"
 #include "netflow.h"
 
 #include "tkvdb.h"

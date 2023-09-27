@@ -33,10 +33,10 @@
 
 #include "utils.h"
 #include "netflow.h"
-#include "netflow_templates.h"
+#include "netflow-templates.h"
 #include "xenoeye.h"
 #include "filter.h"
-#include "flow_debug.h"
+#include "flow-debug.h"
 #include "devices.h"
 
 
