@@ -118,6 +118,10 @@ rule(struct filter_input *q, struct filter_expr *e)
 		return 1;
 	}
 
+	if (function_country(q, e)) {
+		return 1;
+	}
+
 	/* simple rules */
 	if (rule_without_direction(q, e, FILTER_BASIC_DIR_BOTH)) {
 		return 1;
@@ -400,6 +404,11 @@ parse_field(char *s, struct field *fld, char *err)
 		fld->id = MFREQ;
 		fld->type = FILTER_BASIC_RANGE;
 		fld->size = sizeof(uint64_t);
+	} else if (function_country_parse(&in, &fld->func_data.country)) {
+		fld->is_func = 1;
+		fld->id = COUNTRY;
+		fld->type = FILTER_BASIC_STRING;
+		fld->size = 2; //??
 	} else {
 		/* parse field without ASC/DESC suffix */
 		if (!field_without_order(&in, fld, err)) {

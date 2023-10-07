@@ -77,6 +77,7 @@ nf_field_off_size(struct filter_input *in, unsigned int *off,
 	return 0;
 }
 
+
 /* div */
 int
 function_div_parse(struct filter_input *in, struct function_div *div,
@@ -194,7 +195,6 @@ static int
 parse_nonaggr_field(struct filter_input *in, unsigned int *off,
 	unsigned int *size)
 {
-	/* arg2 */
 	if (accept_(in, SRC)) {
 		if (!nf_field_off_size(in, off, size, FILTER_BASIC_DIR_SRC)) {
 			return 0;
@@ -362,5 +362,96 @@ function_mfreq(struct filter_input *in, struct filter_expr *e)
 	fb->is_func = 1;
 
 	return id(in, e, FILTER_BASIC_RANGE);
+}
+
+/* geo */
+static int
+parse_nonaggr_field2(struct filter_input *in, unsigned int *off1,
+	unsigned int *size1, unsigned int *off2, unsigned int *size2)
+{
+	if (accept_(in, SRC)) {
+		if (!nf_field_off_size(in, off1, size1, FILTER_BASIC_DIR_SRC)) {
+			return 0;
+		}
+	} else if (accept_(in, DST)) {
+		if (!nf_field_off_size(in, off1, size1, FILTER_BASIC_DIR_DST)) {
+			return 0;
+		}
+	} else {
+		/* FILTER_BASIC_DIR_BOTH */
+		if (0) {
+#define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
+		} else if (accept_(in, NAME)) {                              \
+			if (!nf_field_to_off(#SRC, off1, size1)) {           \
+				return 0;                                    \
+			}                                                    \
+			return nf_field_to_off(#DST, off2, size2);
+#include "filter.def"
+		}
+	}
+
+	return 1;
+}
+
+int
+function_country_parse(struct filter_input *in,
+	struct function_country *country)
+{
+	if (!accept_(in, COUNTRY)) {
+		return 0;
+	}
+
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after 'country'");
+		return 0;
+	}
+
+	/* arg */
+	if (!parse_nonaggr_field2(in,
+			&country->arg1_off, &country->arg1_size,
+			&country->arg2_off, &country->arg2_size)) {
+
+		mkerror(in, "Incorrect field name");
+		return 0;
+	}
+
+	/* check args? */
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+int
+function_country(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_country country;
+	struct filter_basic *fb;
+
+	if (!function_country_parse(in, &country)) {
+		return 0;
+	}
+
+	if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+			FILTER_BASIC_NAME_COUNTRY,
+			FILTER_BASIC_DIR_NONE)) {
+
+		return 0;
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->func_data.country = malloc(sizeof(struct function_country));
+	if (!fb->func_data.country) {
+		return 0;
+	}
+
+	*fb->func_data.country = country;
+
+	fb->is_func = 1;
+
+	return id(in, e, FILTER_BASIC_STRING);
 }
 

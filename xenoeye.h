@@ -84,6 +84,10 @@ struct xe_data
 	/* path to dir with classification */
 	char clsf_dir[PATH_MAX];
 
+	/* geoip */
+	size_t ngeoip_files;
+	char *geoip_files;
+
 	/* notify threads about stop */
 	atomic_int stop;
 

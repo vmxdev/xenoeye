@@ -176,6 +176,8 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 		*id = MIN;
 	}  else if (MATCH("mfreq")) {
 		*id = MFREQ;
+	}  else if (MATCH("country")) {
+		*id = COUNTRY;
 
 #define FIELD(NAME, STR, FLD, SCALE)                  \
 	} else if (MATCH(STR)) {                      \
@@ -206,6 +208,9 @@ read_token(struct filter_input *q)
 		SINGLE_SYM_TOKEN(q, COMMA);
 	} else if (*(q->s) == '\'') {
 		/* string */
+		q->s++;
+		q->col++;
+
 		do {
 			/* FIXME: check for \n? */
 			q->current_token.data.str[q->current_token.str_len]
@@ -215,6 +220,11 @@ read_token(struct filter_input *q)
 			q->s++;
 			q->col++;
 		} while (*(q->s) != '\'');
+
+		q->s++;
+		q->col++;
+
+		q->current_token.data.str[q->current_token.str_len] = '\0';
 
 		q->current_token.id = STRING;
 	} else {

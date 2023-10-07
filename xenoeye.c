@@ -36,6 +36,7 @@
 #include "flow-debug.h"
 #include "xenoeye.h"
 #include "devices.h"
+#include "geoip.h"
 
 #define DEFAULT_CONFIG_FILE "/etc/xenoeye/xenoeye.conf"
 #define DEFAULT_TEMPLATES_FILE "/var/lib/xenoeye/templates.tkv"
@@ -145,6 +146,24 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 
 	if (STRCMP(a, 1, "clsf-dir") == 0) {
 		strcpy(data->clsf_dir, value->str);
+	}
+
+	/* geoip */
+	if (STRCMP(a, 1, "geoip") == 0) {
+		idx = a->path_stack[2].data.array_idx;
+
+		if (data->ngeoip_files < (idx + 1)) {
+			char *tmp = realloc(data->geoip_files,
+				(idx + 1) * PATH_MAX);
+
+			if (!tmp) {
+				LOG("realloc() failed");
+				return 0;
+			}
+			data->geoip_files = tmp;
+			data->ngeoip_files = idx + 1;
+		}
+		strcpy(&data->geoip_files[idx * PATH_MAX], value->str);
 	}
 
 	if (a->path_stack_pos < 2) {
@@ -518,6 +537,11 @@ main(int argc, char *argv[])
 		}
 	}
 #endif
+
+	/* geoip */
+	for (i=0; i<data.ngeoip_files; i++) {
+		geoip_add_file(&data.geoip_files[i * PATH_MAX]);
+	}
 
 	if (!monit_objects_init(&data)) {
 		LOG("Can't init monitoring objects");

@@ -7,6 +7,7 @@
 #include "filter.h"
 #include "netflow.h"
 #include "utils.h"
+#include "geoip.h"
 
 void
 mkerror(struct filter_input *f, char *msg)
@@ -652,6 +653,54 @@ filter_function_mfreq(struct filter_basic *fb, struct nf_flow_info *flow)
 	return 0;
 }
 
+static int
+filter_function_country(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	struct function_country *country = fb->func_data.country;
+
+	char *res1 = "", *res2 = "";
+	struct geoip_info *g;
+
+	if (country->arg1_size == sizeof(uint32_t)) {
+		uint32_t addr1 = *((uint32_t *)
+			((uintptr_t)flow + country->arg1_off));
+
+		if (!geoip_lookup4(addr1, &g)) {
+			return 0;
+		}
+		res1 = g->country;
+	}
+
+	if (country->arg2_size == sizeof(uint32_t)) {
+		uint32_t addr2 = *((uint32_t *)
+			((uintptr_t)flow + country->arg2_off));
+
+		if (!geoip_lookup4(addr2, &g)) {
+			return 0;
+		}
+		res2 = g->country;
+	}
+
+	for (i=0; i<fb->n; i++) {
+		if (fb->direction != FILTER_BASIC_DIR_BOTH) {
+			if (strncmp(fb->data[i].data.str, res1, 2) == 0) {
+				return 1;
+			}
+
+			if (strncmp(fb->data[i].data.str, res2, 2) == 0) {
+				return 1;
+			}
+		} else {
+			if (strncmp(fb->data[i].data.str, res1, 2) == 0) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
 
 static int
 filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
@@ -668,6 +717,8 @@ filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 				return filter_function_min(fb, flow);
 			case FILTER_BASIC_NAME_MFREQ:
 				return filter_function_mfreq(fb, flow);
+			case FILTER_BASIC_NAME_COUNTRY:
+				return filter_function_country(fb, flow);
 			default:
 				break;
 		}
@@ -771,6 +822,10 @@ filter_free(struct filter_expr *e)
 						free(fb->func_data.mfreq);
 						fb->func_data.mfreq = NULL;
 						break;
+					case FILTER_BASIC_NAME_COUNTRY:
+						free(fb->func_data.country);
+						fb->func_data.country = NULL;
+						break;
 					default:
 						break;
 				}
@@ -867,6 +922,12 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 			fprintf(f, "MFREQ ([offset %d]/[offset %d])",
 				(int)fb->func_data.mfreq->arg1_off,
 				(int)fb->func_data.mfreq->arg2_off);
+			break;
+
+		case FILTER_BASIC_NAME_COUNTRY:
+			fprintf(f, "COUNTRY ([offset %d]/[offset %d])",
+				(int)fb->func_data.country->arg1_off,
+				(int)fb->func_data.country->arg2_off);
 			break;
 
 		default:
