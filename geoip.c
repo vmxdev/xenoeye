@@ -109,6 +109,10 @@ geoip_lookup4(uint32_t key, struct geoip_info **g)
 		node = next;
 	}
 
+	if (!geodb[node].is_leaf) {
+		return 0;
+	}
+
 	*g = &geodb[node].g;
 
 	return 1;

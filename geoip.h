@@ -1,16 +1,18 @@
 #ifndef geoip_h_included
 #define geoip_h_included
 
+/* string sizes taken from files geolocationDatabaseIPv4.csv and
+ * geolocationDatabaseIPv6.csv */
 struct geoip_info
 {
-	char country[2];
-	char continent[2];
+	char country[3];
+	char continent[3];
 
-	char country_full[50];
-	char state[10];
-	char city[25];
-	char zip[20];
-	char latitude[10], longitude[10];
+	char country_full[35];
+	char state[64];
+	char city[51];
+	char zip[15];
+	char latitude[20], longitude[23];
 };
 
 int  geoip_add_file(const char *dp_path);

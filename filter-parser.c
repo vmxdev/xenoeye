@@ -408,7 +408,7 @@ parse_field(char *s, struct field *fld, char *err)
 		fld->is_func = 1;
 		fld->id = COUNTRY;
 		fld->type = FILTER_BASIC_STRING;
-		fld->size = 2; //??
+		fld->size = 3; //??
 	} else {
 		/* parse field without ASC/DESC suffix */
 		if (!field_without_order(&in, fld, err)) {

@@ -397,6 +397,8 @@ int
 function_country_parse(struct filter_input *in,
 	struct function_country *country)
 {
+	memset(country, 0, sizeof(struct function_country));
+
 	if (!accept_(in, COUNTRY)) {
 		return 0;
 	}

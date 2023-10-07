@@ -35,6 +35,7 @@
 
 #include "monit-objects.h"
 #include "monit-objects-common.h"
+#include "geoip.h"
 
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
@@ -502,6 +503,26 @@ monit_object_func_mfreq(struct field *fld, struct nf_flow_info *flow,
 	memcpy(key, &res, sizeof(res));
 }
 
+static void
+monit_object_func_country(struct field *fld, struct nf_flow_info *flow,
+	uint8_t *key)
+{
+	struct function_country *country = &fld->func_data.country;
+	struct geoip_info *g;
+
+	memset(key, 0, 3);
+	if (country->arg1_size == sizeof(uint32_t)) {
+		uint32_t addr1 = *((uint32_t *)
+			((uintptr_t)flow + country->arg1_off));
+
+		if (!geoip_lookup4(addr1, &g)) {
+			key[0] = '?';
+			return;
+		}
+		memcpy(key, g->country, 2);
+	}
+}
+
 void
 monit_object_key_add_fld(struct field *fld, uint8_t *key,
 	struct nf_flow_info *flow)
@@ -518,6 +539,9 @@ monit_object_key_add_fld(struct field *fld, uint8_t *key,
 				break;
 			case MFREQ:
 				monit_object_func_mfreq(fld, flow, key);
+				break;
+			case COUNTRY:
+				monit_object_func_country(fld, flow, key);
 				break;
 			default:
 				break;
