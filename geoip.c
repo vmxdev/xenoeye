@@ -223,6 +223,31 @@ csv_scan_field(char *line, char *val, int lower_case)
 		return NULL;
 	}
 
+	if (line[0] == '\"') {
+		char *quote = strchr(line + 1, '\"');
+		if (!quote) {
+			val[0] = '\0';
+			return NULL;
+		}
+		*quote = '\0';
+
+		strcpy(val, line + 1);
+		if (lower_case) {
+			for (i=0; i<strlen(val); i++) {
+				val[i] = tolower(val[i]);
+			}
+		}
+
+		char *comma = strchr(line, ',');
+		if (comma) {
+			line = comma + 1;
+			return line;
+		} else {
+			line = quote + 1;
+			return line;
+		}
+	}
+
 	char *comma = strchr(line, ',');
 	if (!comma) {
 		val[0] = '\0';
