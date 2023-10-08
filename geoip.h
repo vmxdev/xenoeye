@@ -1,6 +1,8 @@
 #ifndef geoip_h_included
 #define geoip_h_included
 
+#include "utils.h"
+
 /* string sizes taken from files geolocationDatabaseIPv4.csv and
  * geolocationDatabaseIPv6.csv */
 struct geoip_info
@@ -18,7 +20,8 @@ struct geoip_info
 int  geoip_add_file(const char *dp_path);
 void geoip_free(void);
 
-int geoip_lookup4(uint32_t key, struct geoip_info **g);
+int geoip_lookup4(uint32_t addr, struct geoip_info **g);
+int geoip_lookup6(xe_ip *addr, struct geoip_info **g);
 
 #endif
 

@@ -365,34 +365,6 @@ function_mfreq(struct filter_input *in, struct filter_expr *e)
 }
 
 /* geo */
-static int
-parse_nonaggr_field2(struct filter_input *in, unsigned int *off1,
-	unsigned int *size1, unsigned int *off2, unsigned int *size2)
-{
-	if (accept_(in, SRC)) {
-		if (!nf_field_off_size(in, off1, size1, FILTER_BASIC_DIR_SRC)) {
-			return 0;
-		}
-	} else if (accept_(in, DST)) {
-		if (!nf_field_off_size(in, off1, size1, FILTER_BASIC_DIR_DST)) {
-			return 0;
-		}
-	} else {
-		/* FILTER_BASIC_DIR_BOTH */
-		if (0) {
-#define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
-		} else if (accept_(in, NAME)) {                              \
-			if (!nf_field_to_off(#SRC, off1, size1)) {           \
-				return 0;                                    \
-			}                                                    \
-			return nf_field_to_off(#DST, off2, size2);
-#include "filter.def"
-		}
-	}
-
-	return 1;
-}
-
 int
 function_country_parse(struct filter_input *in,
 	struct function_country *country)
@@ -409,10 +381,7 @@ function_country_parse(struct filter_input *in,
 	}
 
 	/* arg */
-	if (!parse_nonaggr_field2(in,
-			&country->arg1_off, &country->arg1_size,
-			&country->arg2_off, &country->arg2_size)) {
-
+	if (!parse_nonaggr_field(in, &country->ip_off, &country->ip_size)) {
 		mkerror(in, "Incorrect field name");
 		return 0;
 	}

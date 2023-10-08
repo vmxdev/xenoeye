@@ -166,14 +166,10 @@ struct function_mfreq
 
 struct function_country
 {
-	/* offsets and sizes in struct nf_flow_info */
-	unsigned int arg1_off;
-	unsigned int arg1_size;
-	int *has_arg1;
-
-	unsigned int arg2_off;
-	unsigned int arg2_size;
-	int *has_arg2;
+	/* offset and size in struct nf_flow_info */
+	unsigned int ip_off;
+	unsigned int ip_size;
+	int *has_ip;
 };
 
 

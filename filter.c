@@ -659,42 +659,30 @@ filter_function_country(struct filter_basic *fb, struct nf_flow_info *flow)
 	size_t i;
 	struct function_country *country = fb->func_data.country;
 
-	char *res1 = "", *res2 = "";
+	char *res = "";
 	struct geoip_info *g;
 
-	if (country->arg1_size == sizeof(uint32_t)) {
-		uint32_t addr1 = *((uint32_t *)
-			((uintptr_t)flow + country->arg1_off));
+	if (country->ip_size == sizeof(uint32_t)) {
+		uint32_t addr = *((uint32_t *)
+			((uintptr_t)flow + country->ip_off));
 
-		if (!geoip_lookup4(addr1, &g)) {
+		if (!geoip_lookup4(addr, &g)) {
 			return 0;
 		}
-		res1 = g->country;
-	}
+		res = g->country;
+	} else if (country->ip_size == sizeof(xe_ip)) {
+		xe_ip addr = *((xe_ip *)
+			((uintptr_t)flow + country->ip_off));
 
-	if (country->arg2_size == sizeof(uint32_t)) {
-		uint32_t addr2 = *((uint32_t *)
-			((uintptr_t)flow + country->arg2_off));
-
-		if (!geoip_lookup4(addr2, &g)) {
+		if (!geoip_lookup6(&addr, &g)) {
 			return 0;
 		}
-		res2 = g->country;
+		res = g->country;
 	}
 
 	for (i=0; i<fb->n; i++) {
-		if (fb->direction != FILTER_BASIC_DIR_BOTH) {
-			if (strncmp(fb->data[i].data.str, res1, 2) == 0) {
-				return 1;
-			}
-
-			if (strncmp(fb->data[i].data.str, res2, 2) == 0) {
-				return 1;
-			}
-		} else {
-			if (strncmp(fb->data[i].data.str, res1, 2) == 0) {
-				return 1;
-			}
+		if (strcmp(fb->data[i].data.str, res) == 0) {
+			return 1;
 		}
 	}
 
@@ -925,9 +913,9 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 			break;
 
 		case FILTER_BASIC_NAME_COUNTRY:
-			fprintf(f, "COUNTRY ([offset %d]/[offset %d])",
-				(int)fb->func_data.country->arg1_off,
-				(int)fb->func_data.country->arg2_off);
+			fprintf(f, "COUNTRY ([offset %d]/[size %d])",
+				(int)fb->func_data.country->ip_off,
+				(int)fb->func_data.country->ip_off);
 			break;
 
 		default:

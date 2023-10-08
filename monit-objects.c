@@ -511,11 +511,20 @@ monit_object_func_country(struct field *fld, struct nf_flow_info *flow,
 	struct geoip_info *g;
 
 	memset(key, 0, 3);
-	if (country->arg1_size == sizeof(uint32_t)) {
-		uint32_t addr1 = *((uint32_t *)
-			((uintptr_t)flow + country->arg1_off));
+	if (country->ip_size == sizeof(uint32_t)) {
+		uint32_t addr = *((uint32_t *)
+			((uintptr_t)flow + country->ip_off));
 
-		if (!geoip_lookup4(addr1, &g)) {
+		if (!geoip_lookup4(addr, &g)) {
+			key[0] = '?';
+			return;
+		}
+		memcpy(key, g->country, 2);
+	} else if (country->ip_size == sizeof(xe_ip)) {
+		xe_ip addr = *((xe_ip *)
+			((uintptr_t)flow + country->ip_off));
+
+		if (!geoip_lookup6(&addr, &g)) {
 			key[0] = '?';
 			return;
 		}
