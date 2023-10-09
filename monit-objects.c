@@ -504,31 +504,35 @@ monit_object_func_mfreq(struct field *fld, struct nf_flow_info *flow,
 }
 
 static void
-monit_object_func_country(struct field *fld, struct nf_flow_info *flow,
+monit_object_func_geoip(struct field *fld, struct nf_flow_info *flow,
 	uint8_t *key)
 {
-	struct function_country *country = &fld->func_data.country;
+	struct function_geoip *geoip = &fld->func_data.geoip;
 	struct geoip_info *g;
+	int size;
 
-	memset(key, 0, 3);
-	if (country->ip_size == sizeof(uint32_t)) {
+	size = geoip_get_field_size(geoip->field);
+
+	memset(key, 0, size);
+
+	if (geoip->ip_size == sizeof(uint32_t)) {
 		uint32_t addr = *((uint32_t *)
-			((uintptr_t)flow + country->ip_off));
+			((uintptr_t)flow + geoip->ip_off));
 
 		if (!geoip_lookup4(addr, &g)) {
 			key[0] = '?';
 			return;
 		}
-		memcpy(key, g->country, 2);
-	} else if (country->ip_size == sizeof(xe_ip)) {
+		memcpy(key, geoip_get_field(g, geoip->field), size - 1);
+	} else if (geoip->ip_size == sizeof(xe_ip)) {
 		xe_ip addr = *((xe_ip *)
-			((uintptr_t)flow + country->ip_off));
+			((uintptr_t)flow + geoip->ip_off));
 
 		if (!geoip_lookup6(&addr, &g)) {
 			key[0] = '?';
 			return;
 		}
-		memcpy(key, g->country, 2);
+		memcpy(key, geoip_get_field(g, geoip->field), size - 1);
 	}
 }
 
@@ -549,8 +553,11 @@ monit_object_key_add_fld(struct field *fld, uint8_t *key,
 			case MFREQ:
 				monit_object_func_mfreq(fld, flow, key);
 				break;
-			case COUNTRY:
-				monit_object_func_country(fld, flow, key);
+/* geoip */
+#define DO(FIELD, SIZE) case FIELD:
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
+				monit_object_func_geoip(fld, flow, key);
 				break;
 			default:
 				break;

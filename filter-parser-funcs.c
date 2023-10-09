@@ -366,22 +366,31 @@ function_mfreq(struct filter_input *in, struct filter_expr *e)
 
 /* geo */
 int
-function_country_parse(struct filter_input *in,
-	struct function_country *country)
+function_geoip_parse(struct filter_input *in, struct function_geoip *geoip,
+	enum TOKEN_ID *tok)
 {
-	memset(country, 0, sizeof(struct function_country));
+	memset(geoip, 0, sizeof(struct function_geoip));
 
-	if (!accept_(in, COUNTRY)) {
+	if (0) {
+
+#define DO(FIELD, SIZE)                            \
+	} else if (accept_(in, FIELD)) {           \
+		geoip->field = GEOIP_##FIELD;      \
+		*tok = FIELD;
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
+
+	} else {
 		return 0;
 	}
 
 	if (!accept_(in, LPAREN)) {
-		mkerror(in, "Expected '(' after 'country'");
+		mkerror(in, "Expected '(' after GeoIP function");
 		return 0;
 	}
 
 	/* arg */
-	if (!parse_nonaggr_field(in, &country->ip_off, &country->ip_size)) {
+	if (!parse_nonaggr_field(in, &geoip->ip_off, &geoip->ip_size)) {
 		mkerror(in, "Incorrect field name");
 		return 0;
 	}
@@ -397,29 +406,37 @@ function_country_parse(struct filter_input *in,
 
 
 int
-function_country(struct filter_input *in, struct filter_expr *e)
+function_geoip(struct filter_input *in, struct filter_expr *e)
 {
-	struct function_country country;
+	struct function_geoip geoip;
 	struct filter_basic *fb;
+	enum TOKEN_ID tok;
 
-	if (!function_country_parse(in, &country)) {
+	if (!function_geoip_parse(in, &geoip, &tok)) {
 		return 0;
 	}
 
-	if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
-			FILTER_BASIC_NAME_COUNTRY,
-			FILTER_BASIC_DIR_NONE)) {
 
-		return 0;
-	}
+	if (0) {
+
+#define DO(FIELD, SIZE)                                               \
+	} else if (tok == FIELD) {                                    \
+		if (!filter_add_basic_filter(e, FILTER_BASIC_STRING,  \
+				FILTER_BASIC_NAME_##FIELD,            \
+				FILTER_BASIC_DIR_NONE)) {             \
+			return 0;                                     \
+		}
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
+	} /* end if */
 
 	fb = e->filter[e->n - 1].arg;
-	fb->func_data.country = malloc(sizeof(struct function_country));
-	if (!fb->func_data.country) {
+	fb->func_data.geoip = malloc(sizeof(struct function_geoip));
+	if (!fb->func_data.geoip) {
 		return 0;
 	}
 
-	*fb->func_data.country = country;
+	*fb->func_data.geoip = geoip;
 
 	fb->is_func = 1;
 

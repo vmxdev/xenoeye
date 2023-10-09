@@ -118,7 +118,7 @@ rule(struct filter_input *q, struct filter_expr *e)
 		return 1;
 	}
 
-	if (function_country(q, e)) {
+	if (function_geoip(q, e)) {
 		return 1;
 	}
 
@@ -376,6 +376,7 @@ parse_field(char *s, struct field *fld, char *err)
 {
 	struct filter_input in;
 	enum TOKEN_ID div_tok;
+	enum TOKEN_ID geoip_tok;
 
 	memset(&in, 0, sizeof(struct filter_input));
 	in.s = s;
@@ -404,11 +405,12 @@ parse_field(char *s, struct field *fld, char *err)
 		fld->id = MFREQ;
 		fld->type = FILTER_BASIC_RANGE;
 		fld->size = sizeof(uint64_t);
-	} else if (function_country_parse(&in, &fld->func_data.country)) {
+	} else if (function_geoip_parse(&in, &fld->func_data.geoip,
+			&geoip_tok)) {
 		fld->is_func = 1;
-		fld->id = COUNTRY;
+		fld->id = geoip_tok;
 		fld->type = FILTER_BASIC_STRING;
-		fld->size = 3; //??
+		fld->size = geoip_get_field_size(fld->func_data.geoip.field);
 	} else {
 		/* parse field without ASC/DESC suffix */
 		if (!field_without_order(&in, fld, err)) {

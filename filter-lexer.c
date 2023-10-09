@@ -176,8 +176,12 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 		*id = MIN;
 	}  else if (MATCH("mfreq")) {
 		*id = MFREQ;
-	}  else if (MATCH("country")) {
-		*id = COUNTRY;
+/* geoip */
+#define DO(FIELD, SIZE)                               \
+	}  else if (MATCH(#FIELD)) {                  \
+		*id = FIELD;
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
 
 #define FIELD(NAME, STR, FLD, SCALE)                  \
 	} else if (MATCH(STR)) {                      \

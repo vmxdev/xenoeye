@@ -385,18 +385,23 @@ process_line_ipapi(char *line, char *err)
 	struct geoip_info g;
 	char ip_ver[5];
 	char addr[100], addr1[100], addr2[100];
+	char tz[100];
 	char *maskpos;
 	int mask;
 	struct in_addr ip, ip2;
 
+	memset(&g, 0, sizeof(g));
 	lptr = csv_scan_field(lptr, ip_ver, 0);
 	lptr = csv_scan_field(lptr, addr, 0);
-	lptr = csv_scan_field(lptr, g.continent, 1);
-	lptr = csv_scan_field(lptr, g.country, 1);
-	lptr = csv_scan_field(lptr, g.country_full, 0);
-	lptr = csv_scan_field(lptr, g.state, 0);
-	lptr = csv_scan_field(lptr, g.city, 0);
-	lptr = csv_scan_field(lptr, g.zip, 0);
+	lptr = csv_scan_field(lptr, g.CONTINENT, 1);
+	lptr = csv_scan_field(lptr, g.COUNTRY, 1);
+	lptr = csv_scan_field(lptr, g.COUNTRY_FULL, 0);
+	lptr = csv_scan_field(lptr, g.STATE, 0);
+	lptr = csv_scan_field(lptr, g.CITY, 0);
+	lptr = csv_scan_field(lptr, g.ZIP, 0);
+	lptr = csv_scan_field(lptr, tz, 0);
+	lptr = csv_scan_field(lptr, g.LAT, 0);
+	lptr = csv_scan_field(lptr, g.LONG, 0);
 
 	if (strcmp(ip_ver, "ipv6") == 0) {
 		xe_ip ipv6_1, ipv6_2;

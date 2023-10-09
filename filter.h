@@ -5,6 +5,7 @@
 #include <math.h>
 #include "xenoeye.h"
 #include "iplist.h"
+#include "geoip.h"
 
 #define ERR_MSG_LEN     1024
 
@@ -74,7 +75,10 @@ enum TOKEN_ID
 	DIV_L,
 	MIN,
 	MFREQ,
-	COUNTRY,
+/* geoip */
+#define DO(FIELD, SIZE) FIELD,
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
 	COMMA
 };
 
@@ -126,7 +130,10 @@ enum FILTER_BASIC_NAME
 	FILTER_BASIC_NAME_DIV_L,
 	FILTER_BASIC_NAME_MIN,
 	FILTER_BASIC_NAME_MFREQ,
-	FILTER_BASIC_NAME_COUNTRY
+/* geoip */
+#define DO(FIELD, SIZE) FILTER_BASIC_NAME_##FIELD,
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
 };
 
 struct function_div
@@ -164,12 +171,14 @@ struct function_mfreq
 	_Atomic uint64_t *freqmap;
 };
 
-struct function_country
+struct function_geoip
 {
 	/* offset and size in struct nf_flow_info */
 	unsigned int ip_off;
 	unsigned int ip_size;
 	int *has_ip;
+
+	enum GEOIP_FIELD field;
 };
 
 
@@ -187,7 +196,7 @@ struct filter_basic
 		struct function_div *div;
 		struct function_min *min;
 		struct function_mfreq *mfreq;
-		struct function_country *country;
+		struct function_geoip *geoip;
 	} func_data;
 };
 
@@ -244,7 +253,7 @@ struct field
 		struct function_div div;
 		struct function_min min;
 		struct function_mfreq mfreq;
-		struct function_country country;
+		struct function_geoip geoip;
 	} func_data;
 };
 
@@ -280,9 +289,9 @@ int function_min_parse(struct filter_input *in, struct function_min *min);
 int function_min(struct filter_input *in, struct filter_expr *e);
 int function_mfreq_parse(struct filter_input *in, struct function_mfreq *mfreq);
 int function_mfreq(struct filter_input *in, struct filter_expr *e);
-int function_country_parse(struct filter_input *in,
-	struct function_country *mfreq);
-int function_country(struct filter_input *in, struct filter_expr *e);
+int function_geoip_parse(struct filter_input *in, struct function_geoip *mfreq,
+	enum TOKEN_ID *tok);
+int function_geoip(struct filter_input *in, struct filter_expr *e);
 
 static inline uint64_t
 get_nf_val(uintptr_t ptr, unsigned int size)

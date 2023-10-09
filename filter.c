@@ -654,30 +654,30 @@ filter_function_mfreq(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
-filter_function_country(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_function_geoip(struct filter_basic *fb, struct nf_flow_info *flow)
 {
 	size_t i;
-	struct function_country *country = fb->func_data.country;
+	struct function_geoip *geoip = fb->func_data.geoip;
 
 	char *res = "";
 	struct geoip_info *g;
 
-	if (country->ip_size == sizeof(uint32_t)) {
+	if (geoip->ip_size == sizeof(uint32_t)) {
 		uint32_t addr = *((uint32_t *)
-			((uintptr_t)flow + country->ip_off));
+			((uintptr_t)flow + geoip->ip_off));
 
 		if (!geoip_lookup4(addr, &g)) {
 			return 0;
 		}
-		res = g->country;
-	} else if (country->ip_size == sizeof(xe_ip)) {
+		res = geoip_get_field(g, geoip->field);
+	} else if (geoip->ip_size == sizeof(xe_ip)) {
 		xe_ip addr = *((xe_ip *)
-			((uintptr_t)flow + country->ip_off));
+			((uintptr_t)flow + geoip->ip_off));
 
 		if (!geoip_lookup6(&addr, &g)) {
 			return 0;
 		}
-		res = g->country;
+		res = geoip_get_field(g, geoip->field);
 	}
 
 	for (i=0; i<fb->n; i++) {
@@ -705,8 +705,11 @@ filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 				return filter_function_min(fb, flow);
 			case FILTER_BASIC_NAME_MFREQ:
 				return filter_function_mfreq(fb, flow);
-			case FILTER_BASIC_NAME_COUNTRY:
-				return filter_function_country(fb, flow);
+/* geoip */
+#define DO(FIELD, SIZE) case FILTER_BASIC_NAME_##FIELD:
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
+				return filter_function_geoip(fb, flow);
 			default:
 				break;
 		}
@@ -810,9 +813,12 @@ filter_free(struct filter_expr *e)
 						free(fb->func_data.mfreq);
 						fb->func_data.mfreq = NULL;
 						break;
-					case FILTER_BASIC_NAME_COUNTRY:
-						free(fb->func_data.country);
-						fb->func_data.country = NULL;
+/* geoip */
+#define DO(FIELD, SIZE) case FILTER_BASIC_NAME_##FIELD:
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
+						free(fb->func_data.geoip);
+						fb->func_data.geoip = NULL;
 						break;
 					default:
 						break;
@@ -912,11 +918,15 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 				(int)fb->func_data.mfreq->arg2_off);
 			break;
 
-		case FILTER_BASIC_NAME_COUNTRY:
-			fprintf(f, "COUNTRY ([offset %d]/[size %d])",
-				(int)fb->func_data.country->ip_off,
-				(int)fb->func_data.country->ip_off);
+/* geoip */
+#define DO(FIELD, SIZE) \
+		case FILTER_BASIC_NAME_##FIELD:                        \
+			fprintf(f, #FIELD" ([offset %d]/[size %d])",   \
+				(int)fb->func_data.geoip->ip_off,      \
+				(int)fb->func_data.geoip->ip_size);    \
 			break;
+FOR_LIST_OF_GEOIP_FIELDS
+#undef DO
 
 		default:
 			fprintf(f, "<Unknown name %d> ", fb->name);
