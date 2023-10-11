@@ -37,6 +37,8 @@
 #include "monit-objects-common.h"
 #include "geoip.h"
 
+#define STR_MAX_LEN 512
+
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
 static int
@@ -347,6 +349,10 @@ monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 	uint64_t d64;
 	char s[INET6_ADDRSTRLEN + 1];
 
+	char esc[STR_MAX_LEN];
+	char *escptr;
+	size_t i;
+
 	switch (fld->type) {
 		case FILTER_BASIC_ADDR4:
 			inet_ntop(AF_INET, data, s, INET_ADDRSTRLEN);
@@ -409,10 +415,27 @@ monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 			break;
 
 		case FILTER_BASIC_STRING:
+			escptr = esc;
+			for (i=0; data[i] != 0; i++) {
+				if (data[i] == '\'') {
+					*escptr = '\\';
+					*(escptr + 1) = '\'';
+					escptr++;
+				} else if (data[i] == '\"') {
+					*escptr = '\\';
+					*(escptr + 1) = '\"';
+					escptr++;
+				} else {
+					*escptr = data[i];
+				}
+				escptr++;
+			}
+			*escptr = '\0';
+
 			if (print_spaces) {
-				sprintf(str, " '%s' ", (char *)data);
+				sprintf(str, " '%s' ", esc);
 			} else {
-				sprintf(str, "%s", (char *)data);
+				sprintf(str, "%s", esc);
 			}
 			break;
 
@@ -426,7 +449,8 @@ void
 monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 	int print_spaces)
 {
-	char str[INET6_ADDRSTRLEN + 10];
+	char str[STR_MAX_LEN];
+
 	monit_object_field_print_str(fld, str, data, print_spaces);
 	fputs(str, f);
 }
@@ -536,6 +560,52 @@ monit_object_func_geoip(struct field *fld, struct nf_flow_info *flow,
 	}
 }
 
+static void
+monit_object_func_as(struct field *fld, struct nf_flow_info *flow,
+	uint8_t *key)
+{
+	struct function_as *as = &fld->func_data.as;
+	struct as_info *a;
+	int size;
+	int not_found = 0;
+
+	if (as->num) {
+		size = sizeof(((struct as_info *)0)->asn);
+	} else {
+		size = sizeof(((struct as_info *)0)->asd);
+	}
+
+	memset(key, 0, size);
+
+	if (as->ip_size == sizeof(uint32_t)) {
+		uint32_t addr = *((uint32_t *)
+			((uintptr_t)flow + as->ip_off));
+
+		if (!as_lookup4(addr, &a)) {
+			not_found = 1;
+		}
+	} else if (as->ip_size == sizeof(xe_ip)) {
+		xe_ip addr = *((xe_ip *)
+			((uintptr_t)flow + as->ip_off));
+
+		if (!as_lookup6(&addr, &a)) {
+			not_found = 1;
+		}
+	}
+
+	if (as->num) {
+		if (!not_found) {
+			memcpy(key, &a->asn, size);
+		}
+	} else {
+		if (not_found) {
+			key[0] = '?';
+		} else {
+			memcpy(key, &a->asd, size);
+		}
+	}
+}
+
 void
 monit_object_key_add_fld(struct field *fld, uint8_t *key,
 	struct nf_flow_info *flow)
@@ -558,6 +628,10 @@ monit_object_key_add_fld(struct field *fld, uint8_t *key,
 FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
 				monit_object_func_geoip(fld, flow, key);
+				break;
+			case ASN:
+			case ASD:
+				monit_object_func_as(fld, flow, key);
 				break;
 			default:
 				break;

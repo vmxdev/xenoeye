@@ -182,6 +182,11 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 		*id = FIELD;
 FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
+/* as */
+	}  else if (MATCH("asn")) {
+		*id = ASN;
+	}  else if (MATCH("asd")) {
+		*id = ASD;
 
 #define FIELD(NAME, STR, FLD, SCALE)                  \
 	} else if (MATCH(STR)) {                      \

@@ -122,6 +122,10 @@ rule(struct filter_input *q, struct filter_expr *e)
 		return 1;
 	}
 
+	if (function_as(q, e)) {
+		return 1;
+	}
+
 	/* simple rules */
 	if (rule_without_direction(q, e, FILTER_BASIC_DIR_BOTH)) {
 		return 1;
@@ -377,6 +381,7 @@ parse_field(char *s, struct field *fld, char *err)
 	struct filter_input in;
 	enum TOKEN_ID div_tok;
 	enum TOKEN_ID geoip_tok;
+	enum TOKEN_ID as_tok;
 
 	memset(&in, 0, sizeof(struct filter_input));
 	in.s = s;
@@ -411,6 +416,16 @@ parse_field(char *s, struct field *fld, char *err)
 		fld->id = geoip_tok;
 		fld->type = FILTER_BASIC_STRING;
 		fld->size = geoip_get_field_size(fld->func_data.geoip.field);
+	} else if (function_as_parse(&in, &fld->func_data.as, &as_tok)) {
+		fld->is_func = 1;
+		fld->id = as_tok;
+		if (as_tok == ASN) {
+			fld->type = FILTER_BASIC_RANGE;
+			fld->size = sizeof(((struct as_info *)0)->asn);
+		} else {
+			fld->type = FILTER_BASIC_STRING;
+			fld->size = sizeof(((struct as_info *)0)->asd);
+		}
 	} else {
 		/* parse field without ASC/DESC suffix */
 		if (!field_without_order(&in, fld, err)) {

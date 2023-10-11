@@ -49,6 +49,70 @@ string_trim(char *str)
 	return str;
 }
 
+static inline void
+csv_next(char **line, char *val)
+{
+	char *ptr = *line, *end;
+	size_t len;
+
+	/* skip spaces */
+	while (isspace(*ptr)) {
+		ptr++;
+	}
+
+	if (*ptr == '\0') {
+		/* empty */
+		val[0] = '\0';
+		return;
+	}
+
+	if (*ptr == '\"') {
+		/* string */
+		ptr++;
+
+		for (;;) {
+			if (*ptr == '\0') {
+				/* unexpected end, no closing quote */
+				*val = '\0';
+				*line = ptr;
+				return;
+			} else if (*ptr == '\"') {
+				if (*(ptr + 1) == '\"') {
+					*val = '\"';
+					val++;
+					ptr += 2;
+				} else {
+					ptr++;
+					break;
+				}
+			} else {
+				*val = *ptr;
+				val++;
+				ptr++;
+			}
+		}
+
+		end = strchr(ptr, ',');
+		if (!end) {
+			*line = strchr(ptr, '\0');
+			return;
+		}
+		*line = end + 1;
+	} else {
+		end = strchr(ptr, ',');
+		if (!end) {
+			/* no comma */
+			strcpy(val, ptr);
+			*line = strchr(ptr, '\0');
+			return;
+		}
+		len = end - ptr;
+		memcpy(val, ptr, len);
+		val[len] = '\0';
+		*line = end + 1;
+	}
+}
+
 typedef __int128_t xe_ip;
 
 #endif

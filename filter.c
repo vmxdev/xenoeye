@@ -689,6 +689,53 @@ filter_function_geoip(struct filter_basic *fb, struct nf_flow_info *flow)
 	return 0;
 }
 
+static int
+filter_function_as(struct filter_basic *fb, struct nf_flow_info *flow)
+{
+	size_t i;
+	struct function_as *as = fb->func_data.as;
+
+	struct as_info *a;
+
+	if (as->ip_size == sizeof(uint32_t)) {
+		uint32_t addr = *((uint32_t *)
+			((uintptr_t)flow + as->ip_off));
+
+		if (!as_lookup4(addr, &a)) {
+			return 0;
+		}
+	} else if (as->ip_size == sizeof(xe_ip)) {
+		xe_ip addr = *((xe_ip *)
+			((uintptr_t)flow + as->ip_off));
+
+		if (!as_lookup6(&addr, &a)) {
+			return 0;
+		}
+	}
+
+	if (as->num) {
+		/* asn */
+		int32_t res = a->asn;
+
+		for (i=0; i<fb->n; i++) {
+			if ((res >= fb->data[i].data.range.low)
+				&& (res <= fb->data[i].data.range.high)) {
+
+				return 1;
+			}
+		}
+	} else {
+		/* asd */
+		for (i=0; i<fb->n; i++) {
+			if (strcmp(fb->data[i].data.str, a->asd) == 0) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
 
 static int
 filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
@@ -710,6 +757,11 @@ filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
 FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
 				return filter_function_geoip(fb, flow);
+
+			case FILTER_BASIC_NAME_ASN:
+			case FILTER_BASIC_NAME_ASD:
+				return filter_function_as(fb, flow);
+
 			default:
 				break;
 		}
@@ -820,6 +872,11 @@ FOR_LIST_OF_GEOIP_FIELDS
 						free(fb->func_data.geoip);
 						fb->func_data.geoip = NULL;
 						break;
+					case FILTER_BASIC_NAME_ASN:
+					case FILTER_BASIC_NAME_ASD:
+						free(fb->func_data.as);
+						fb->func_data.as = NULL;
+						break;
 					default:
 						break;
 				}
@@ -927,6 +984,12 @@ filter_dump_basic(struct filter_basic *fb, FILE *f)
 			break;
 FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
+		case FILTER_BASIC_NAME_ASN:
+		case FILTER_BASIC_NAME_ASD:
+			fprintf(f, "AS ([offset %d]/[size %d])",
+				(int)fb->func_data.as->ip_off,
+				(int)fb->func_data.as->ip_size);
+			break;
 
 		default:
 			fprintf(f, "<Unknown name %d> ", fb->name);

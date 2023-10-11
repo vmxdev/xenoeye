@@ -79,6 +79,8 @@ enum TOKEN_ID
 #define DO(FIELD, SIZE) FIELD,
 FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
+	ASN,
+	ASD,
 	COMMA
 };
 
@@ -134,6 +136,8 @@ enum FILTER_BASIC_NAME
 #define DO(FIELD, SIZE) FILTER_BASIC_NAME_##FIELD,
 FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
+	FILTER_BASIC_NAME_ASN,
+	FILTER_BASIC_NAME_ASD
 };
 
 struct function_div
@@ -181,6 +185,15 @@ struct function_geoip
 	enum GEOIP_FIELD field;
 };
 
+struct function_as
+{
+	/* offset and size in struct nf_flow_info */
+	unsigned int ip_off;
+	unsigned int ip_size;
+	int *has_ip;
+
+	int num;
+};
 
 struct filter_basic
 {
@@ -197,6 +210,7 @@ struct filter_basic
 		struct function_min *min;
 		struct function_mfreq *mfreq;
 		struct function_geoip *geoip;
+		struct function_as *as;
 	} func_data;
 };
 
@@ -254,6 +268,7 @@ struct field
 		struct function_min min;
 		struct function_mfreq mfreq;
 		struct function_geoip geoip;
+		struct function_as as;
 	} func_data;
 };
 
@@ -285,13 +300,20 @@ int function_div_parse(struct filter_input *in, struct function_div *div,
 	enum TOKEN_ID *tok);
 int function_div(struct filter_input *in, struct filter_expr *e,
 	enum TOKEN_ID *tok);
+
 int function_min_parse(struct filter_input *in, struct function_min *min);
 int function_min(struct filter_input *in, struct filter_expr *e);
+
 int function_mfreq_parse(struct filter_input *in, struct function_mfreq *mfreq);
 int function_mfreq(struct filter_input *in, struct filter_expr *e);
-int function_geoip_parse(struct filter_input *in, struct function_geoip *mfreq,
+
+int function_geoip_parse(struct filter_input *in, struct function_geoip *geoip,
 	enum TOKEN_ID *tok);
 int function_geoip(struct filter_input *in, struct filter_expr *e);
+
+int function_as_parse(struct filter_input *in, struct function_as *as,
+	enum TOKEN_ID *tok);
+int function_as(struct filter_input *in, struct filter_expr *e);
 
 static inline uint64_t
 get_nf_val(uintptr_t ptr, unsigned int size)

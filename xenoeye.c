@@ -165,6 +165,23 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		}
 		strcpy(&data->geoip_files[idx * PATH_MAX], value->str);
 	}
+	/* as */
+	if (STRCMP(a, 1, "as") == 0) {
+		idx = a->path_stack[2].data.array_idx;
+
+		if (data->nas_files < (idx + 1)) {
+			char *tmp = realloc(data->as_files,
+				(idx + 1) * PATH_MAX);
+
+			if (!tmp) {
+				LOG("realloc() failed");
+				return 0;
+			}
+			data->as_files = tmp;
+			data->nas_files = idx + 1;
+		}
+		strcpy(&data->as_files[idx * PATH_MAX], value->str);
+	}
 
 	if (a->path_stack_pos < 2) {
 		return 1;
@@ -541,6 +558,10 @@ main(int argc, char *argv[])
 	/* geoip */
 	for (i=0; i<data.ngeoip_files; i++) {
 		geoip_add_file(&data.geoip_files[i * PATH_MAX]);
+	}
+	/* as */
+	for (i=0; i<data.nas_files; i++) {
+		as_add_file(&data.as_files[i * PATH_MAX]);
 	}
 
 	if (!monit_objects_init(&data)) {

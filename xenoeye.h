@@ -88,6 +88,10 @@ struct xe_data
 	size_t ngeoip_files;
 	char *geoip_files;
 
+	/* as */
+	size_t nas_files;
+	char *as_files;
+
 	/* notify threads about stop */
 	atomic_int stop;
 

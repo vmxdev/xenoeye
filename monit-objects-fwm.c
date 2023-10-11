@@ -286,7 +286,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	fprintf(f, "BEGIN;\n");
 	do {
 		uint8_t *data = c->key(c);
-		uint8_t data_mut[256];
+		uint8_t data_mut[512];
 
 		fprintf(f, "insert into \"%s\" ", table_name);
 		fprintf(f, "values ( to_timestamp(%llu), ",

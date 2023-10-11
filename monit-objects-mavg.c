@@ -364,6 +364,7 @@ mavg_config(struct aajson *a, aajson_val *value,
 	return 1;
 }
 
+#if 0
 static void
 csv_next(char **line, char *token)
 {
@@ -415,6 +416,7 @@ csv_next(char **line, char *token)
 		*line = end + 1;
 	}
 }
+#endif
 
 static int
 mavg_limits_parse_line(struct mo_mavg *window, char *line, uint8_t *key,

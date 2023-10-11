@@ -443,3 +443,83 @@ FOR_LIST_OF_GEOIP_FIELDS
 	return id(in, e, FILTER_BASIC_STRING);
 }
 
+/* as */
+int
+function_as_parse(struct filter_input *in, struct function_as *as,
+	enum TOKEN_ID *tok)
+{
+	memset(as, 0, sizeof(struct function_as));
+
+	if (accept_(in, ASN)) {
+		as->num = 1;
+		*tok = ASN;
+	} else if (accept_(in, ASD)) {
+		as->num = 0;
+		*tok = ASD;
+	} else {
+		return 0;
+	}
+
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after AS function");
+		return 0;
+	}
+
+	/* arg */
+	if (!parse_nonaggr_field(in, &as->ip_off, &as->ip_size)) {
+		mkerror(in, "Incorrect field name");
+		return 0;
+	}
+
+	/* check args? */
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+int
+function_as(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_as as;
+	struct filter_basic *fb;
+	enum TOKEN_ID tok;
+
+	if (!function_as_parse(in, &as, &tok)) {
+		return 0;
+	}
+
+	if (tok == ASN) {
+		if (!filter_add_basic_filter(e, FILTER_BASIC_RANGE,
+				FILTER_BASIC_NAME_ASN,
+				FILTER_BASIC_DIR_NONE)) {
+			return 0;
+		}
+	} else {
+		if (!filter_add_basic_filter(e, FILTER_BASIC_STRING,
+				FILTER_BASIC_NAME_ASD,
+				FILTER_BASIC_DIR_NONE)) {
+			return 0;
+		}
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->func_data.as = malloc(sizeof(struct function_as));
+	if (!fb->func_data.as) {
+		return 0;
+	}
+
+	*fb->func_data.as = as;
+
+	fb->is_func = 1;
+
+	if (tok == ASN) {
+		return id(in, e, FILTER_BASIC_RANGE);
+	} else {
+		return id(in, e, FILTER_BASIC_STRING);
+	}
+}
+
