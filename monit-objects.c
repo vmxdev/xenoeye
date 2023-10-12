@@ -418,12 +418,8 @@ monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 			escptr = esc;
 			for (i=0; data[i] != 0; i++) {
 				if (data[i] == '\'') {
-					*escptr = '\\';
+					*escptr = '\'';
 					*(escptr + 1) = '\'';
-					escptr++;
-				} else if (data[i] == '\"') {
-					*escptr = '\\';
-					*(escptr + 1) = '\"';
 					escptr++;
 				} else {
 					*escptr = data[i];

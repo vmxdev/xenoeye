@@ -9,18 +9,13 @@
 #include <fcntl.h>
 #include <netinet/ether.h>
 #include <arpa/inet.h>
+#include <byteswap.h>
 
 #include "geoip.h"
 #include "ip-btrie.h"
 
-#define GEOIP_SIGN_IPAPI "ipVersion,network,continent,country_code,country,"\
-	"state,city,zip,timezone,latitude,longitude,accuracy"
-
-enum GEO_FILE
-{
-	GEO_FILE_UNKNOWN,
-	GEO_FILE_IPAPI
-};
+#define GEOIP_SIGN_IPAPI "ip_version,start_ip,end_ip,continent,country_code,"\
+	"country,state,city,zip,timezone,latitude,longitude,accuracy"
 
 struct btrie_node
 {
@@ -227,6 +222,22 @@ ctz_128(xe_ip x)
 	return count;
 }
 
+/* __builtin_bswap128 */
+inline xe_ip
+bswap128(xe_ip x)
+{
+	union _128_as_64 {
+		xe_ip v;
+		uint64_t q[2];
+	} u1, u2;
+
+	u1.v = x;
+	u2.q[1] = bswap_64(u1.q[0]);
+	u2.q[0] = bswap_64(u1.q[1]);
+
+	return u2.v;
+}
+
 
 static void
 add_range6(xe_ip *ip1, xe_ip *ip2, struct geoip_info *g, struct as_info *a)
@@ -234,18 +245,18 @@ add_range6(xe_ip *ip1, xe_ip *ip2, struct geoip_info *g, struct as_info *a)
 	xe_ip subnet_first, subnet_last, end;
 
 	/* FIXME: check endianess? */
-	subnet_first = __builtin_bswap128(*ip1);
-	end = __builtin_bswap128(*ip2);
+	subnet_first = bswap128(*ip1);
+	end = bswap128(*ip2);
 
 	for (;;) {
 		if (subnet_first > end) {
 			break;
 		} else if (subnet_first == end) {
 			if (g) {
-				geodb_add6(__builtin_bswap128(subnet_first),
+				geodb_add6(bswap128(subnet_first),
 					128, g);
 			} else {
-				asdb_add6(__builtin_bswap128(subnet_first),
+				asdb_add6(bswap128(subnet_first),
 					128, a);
 			}
 			break;
@@ -256,10 +267,10 @@ add_range6(xe_ip *ip1, xe_ip *ip2, struct geoip_info *g, struct as_info *a)
 
 		if (subnet_last == end) {
 			if (g) {
-				geodb_add6(__builtin_bswap128(subnet_first),
+				geodb_add6(bswap128(subnet_first),
 					128 - mask_bits, g);
 			} else {
-				asdb_add6(__builtin_bswap128(subnet_first),
+				asdb_add6(bswap128(subnet_first),
 					128 - mask_bits, a);
 			}
 			break;
@@ -269,20 +280,20 @@ add_range6(xe_ip *ip1, xe_ip *ip2, struct geoip_info *g, struct as_info *a)
 			xe_ip ndiff = (xe_ip)1 << p;
 
 			if (g) {
-				geodb_add6(__builtin_bswap128(subnet_first),
+				geodb_add6(bswap128(subnet_first),
 					128 - p, g);
 			} else {
-				asdb_add6(__builtin_bswap128(subnet_first),
+				asdb_add6(bswap128(subnet_first),
 					128 - p, a);
 			}
 
 			subnet_first += ndiff;
 		} else {
 			if (g) {
-				geodb_add6(__builtin_bswap128(subnet_first),
+				geodb_add6(bswap128(subnet_first),
 					128 - mask_bits, g);
 			} else {
-				asdb_add6(__builtin_bswap128(subnet_first),
+				asdb_add6(bswap128(subnet_first),
 					128 - mask_bits, a);
 			}
 
@@ -299,19 +310,19 @@ process_line_ipapi(char *line, char *err)
 
 	struct geoip_info g;
 	char ip_ver[5];
-	char addr[100], addr1[100], addr2[100];
+	char addr1[100], addr2[100];
 	char tz[100];
-	char *maskpos;
-	int mask;
 	struct in_addr ip, ip2;
 	size_t i;
 
 	memset(&g, 0, sizeof(g));
+
 	csv_next(&lptr, ip_ver);
-	csv_next(&lptr, addr);
+	csv_next(&lptr, addr1);
+	csv_next(&lptr, addr2);
 	csv_next(&lptr, g.CONTINENT);
+	csv_next(&lptr, g.COUNTRY_CODE);
 	csv_next(&lptr, g.COUNTRY);
-	csv_next(&lptr, g.COUNTRY_FULL);
 	csv_next(&lptr, g.STATE);
 	csv_next(&lptr, g.CITY);
 	csv_next(&lptr, g.ZIP);
@@ -322,77 +333,37 @@ process_line_ipapi(char *line, char *err)
 	for (i=0; i<strlen(g.CONTINENT); i++) {
 		g.CONTINENT[i] = tolower(g.CONTINENT[i]);
 	}
-	for (i=0; i<strlen(g.COUNTRY); i++) {
-		g.COUNTRY[i] = tolower(g.COUNTRY[i]);
+	for (i=0; i<strlen(g.COUNTRY_CODE); i++) {
+		g.COUNTRY_CODE[i] = tolower(g.COUNTRY_CODE[i]);
 	}
 
-	if (strcmp(ip_ver, "ipv6") == 0) {
+	if (strcmp(ip_ver, "6") == 0) {
 		xe_ip ipv6_1, ipv6_2;
-		if (strchr(addr, '-')) {
-			/* range */
-			sscanf(addr, "%s - %s", addr1, addr2);
-
-			if (inet_pton(AF_INET6, addr1, &ipv6_1) == 0) {
-				sprintf(err, "can't parse IPv6 address 1'%s'",
-					addr1);
-				return 0;
-			}
-			if (inet_pton(AF_INET6, addr2, &ipv6_2) == 0) {
-				sprintf(err, "can't parse IPv6 address 2'%s'",
-					addr2);
-				return 0;
-			}
-			add_range6(&ipv6_1, &ipv6_2, &g, NULL);
-		} else {
-			/* single network */
-			maskpos = strchr(addr, '/');
-			if (maskpos) {
-				mask = atoi(maskpos + 1);
-				*maskpos = '\0';
-			} else {
-				mask = 128;
-			}
-			if (inet_pton(AF_INET6, addr, &ipv6_1) == 0) {
-				sprintf(err, "can't parse IPv6 address '%s'",
-					addr);
-				return 0;
-			}
-			geodb_add6(ipv6_1, mask, &g);
+		if (inet_pton(AF_INET6, addr1, &ipv6_1) == 0) {
+			sprintf(err, "can't parse IPv6 address 1'%s'",
+				addr1);
+			return 0;
 		}
+		if (inet_pton(AF_INET6, addr2, &ipv6_2) == 0) {
+			sprintf(err, "can't parse IPv6 address 2'%s'",
+				addr2);
+			return 0;
+		}
+		add_range6(&ipv6_1, &ipv6_2, &g, NULL);
 	} else {
 		/* ipv4 */
-		if (strchr(addr, '-')) {
-			/* range */
-			sscanf(addr, "%s - %s", addr1, addr2);
-
-			if (inet_aton(addr1, &ip) == 0) {
-				sprintf(err, "can't parse IPv4 address 1'%s'",
-					addr1);
-				return 0;
-			}
-			if (inet_aton(addr2, &ip2) == 0) {
-				sprintf(err, "can't parse IPv4 address 2'%s'",
-					addr2);
-				return 0;
-			}
-
-			add_range4(ip.s_addr, ip2.s_addr, &g, NULL);
-		} else {
-			/* single network */
-			maskpos = strchr(addr, '/');
-			if (maskpos) {
-				mask = atoi(maskpos + 1);
-				*maskpos = '\0';
-			} else {
-				mask = 32;
-			}
-			if (inet_aton(addr, &ip) == 0) {
-				sprintf(err, "can't parse IPv4 address '%s'",
-					addr);
-				return 0;
-			}
-			geodb_add4(ip.s_addr, mask, &g);
+		if (inet_aton(addr1, &ip) == 0) {
+			sprintf(err, "can't parse IPv4 address 1'%s'",
+				addr1);
+			return 0;
 		}
+		if (inet_aton(addr2, &ip2) == 0) {
+			sprintf(err, "can't parse IPv4 address 2'%s'",
+				addr2);
+			return 0;
+		}
+
+		add_range4(ip.s_addr, ip2.s_addr, &g, NULL);
 	}
 	return 1;
 }
@@ -404,7 +375,6 @@ geoip_add_file(const char *path)
 	char line[4096];
 	char *line_ptr;
 	size_t line_num = 2;
-	enum GEO_FILE type = GEO_FILE_UNKNOWN;
 
 	f = fopen(path, "r");
 	if (!f) {
@@ -419,9 +389,7 @@ geoip_add_file(const char *path)
 		return 0;
 	}
 
-	if (strcmp(string_trim(line), GEOIP_SIGN_IPAPI) == 0) {
-		type = GEO_FILE_IPAPI;
-	} else {
+	if (strcmp(string_trim(line), GEOIP_SIGN_IPAPI) != 0) {
 		LOG("geoip: file '%s': unknown format", path);
 		goto fail_format;
 	}
@@ -436,15 +404,9 @@ geoip_add_file(const char *path)
 		}
 
 		line_ptr = string_trim(line);
-		switch (type) {
-			case GEO_FILE_IPAPI:
-				if (!process_line_ipapi(line_ptr, err)) {
-					LOG("geoip: file '%s', line #%lu: %s",
-						path, line_num, err);
-				}
-				break;
-			default:
-				break;
+		if (!process_line_ipapi(line_ptr, err)) {
+			LOG("geoip: file '%s', line #%lu: %s", path,
+				line_num, err);
 		}
 
 		line_num++;

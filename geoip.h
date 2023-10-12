@@ -7,9 +7,9 @@
  * geolocationDatabaseIPv6.csv */
 
 #define FOR_LIST_OF_GEOIP_FIELDS \
-	DO(COUNTRY, 3)           \
 	DO(CONTINENT, 3)         \
-	DO(COUNTRY_FULL, 35)     \
+	DO(COUNTRY_CODE, 3)      \
+	DO(COUNTRY, 35)          \
 	DO(STATE, 64)            \
 	DO(CITY, 51)             \
 	DO(ZIP, 15)              \
