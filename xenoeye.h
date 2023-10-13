@@ -59,6 +59,9 @@ struct xe_data
 	/* classification thread */
 	pthread_t clsf_tid;
 
+	/* GeoIP/AS databases reload thread */
+	pthread_t geoip_tid;
+
 	/* templates */
 	int allow_templates_in_future;
 	char templates_db[PATH_MAX];

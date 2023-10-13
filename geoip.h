@@ -36,6 +36,7 @@ struct as_info
 	char asd[200];
 };
 
+
 int  geoip_add_file(const char *path);
 
 int geoip_lookup4(uint32_t addr, struct geoip_info **g);
@@ -44,6 +45,8 @@ int geoip_lookup6(xe_ip *addr, struct geoip_info **g);
 int as_add_file(const char *path);
 int as_lookup4(uint32_t addr, struct as_info **a);
 int as_lookup6(xe_ip *addr, struct as_info **a);
+
+void *geoip_thread(void *arg);
 
 static inline
 char *geoip_get_field(struct geoip_info *g, enum GEOIP_FIELD f)

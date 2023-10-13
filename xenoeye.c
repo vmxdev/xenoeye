@@ -466,6 +466,7 @@ main(int argc, char *argv[])
 	int opt;
 	size_t i;
 	struct sigaction sig_int, sig_chld;
+	int thread_err;
 
 
 	while ((opt = getopt(argc, argv, "c:h")) != -1) {
@@ -545,7 +546,7 @@ main(int argc, char *argv[])
 
 #ifdef FLOWS_CNT
 	{
-		int thread_err = pthread_create(&data.fc_tid, NULL,
+		thread_err = pthread_create(&data.fc_tid, NULL,
 			&fc_thread, &data);
 
 		if (thread_err) {
@@ -555,14 +556,23 @@ main(int argc, char *argv[])
 	}
 #endif
 
-	/* geoip */
+	/* geoip/as */
+	thread_err = pthread_create(&data.geoip_tid, NULL,
+		&geoip_thread, &data);
+	if (thread_err) {
+		LOG("Can't start thread: %s", strerror(thread_err));
+		return EXIT_FAILURE;
+	}
+#if 0
 	for (i=0; i<data.ngeoip_files; i++) {
 		geoip_add_file(&data.geoip_files[i * PATH_MAX]);
 	}
+
 	/* as */
 	for (i=0; i<data.nas_files; i++) {
 		as_add_file(&data.as_files[i * PATH_MAX]);
 	}
+#endif
 
 	if (!monit_objects_init(&data)) {
 		LOG("Can't init monitoring objects");

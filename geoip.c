@@ -504,3 +504,9 @@ as_add_file(const char *path)
 	return 1;
 }
 
+void *
+geoip_thread(void *arg)
+{
+	return NULL;
+}
+
