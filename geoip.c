@@ -16,9 +16,6 @@
 #include "geoip.h"
 #include "ip-btrie.h"
 
-#define GEOIP_SIGN_IPAPI "ip_version,start_ip,end_ip,continent,country_code,"\
-	"country,state,city,zip,timezone,latitude,longitude,accuracy"
-
 /* geo */
 static struct btrie_node_geo * _Atomic _geodb4 = NULL;
 static size_t _geo4size = 0;
