@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2018-2022, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2018-2023, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -429,6 +429,14 @@ on_ctrl_c(int s)
 	exit(0);
 }
 
+static void
+on_hup(int s)
+{
+	(void)s;
+	/* notify geoip thread */
+	atomic_store_explicit(&globl->reload_geoip, 1, memory_order_relaxed);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -436,7 +444,7 @@ main(int argc, char *argv[])
 	struct xe_data data;
 	int opt;
 	size_t i;
-	struct sigaction sig_int, sig_chld;
+	struct sigaction sig_int, sig_chld, sig_hup;
 	int thread_err;
 
 
@@ -458,6 +466,7 @@ main(int argc, char *argv[])
 	memset(&data, 0, sizeof(struct xe_data));
 	atomic_init(&data.stop, 0);
 	atomic_init(&data.mavg_db_bank_idx, 0);
+
 	/* reload geoip/as db at start */
 	atomic_init(&data.reload_geoip, 1);
 
@@ -574,6 +583,12 @@ main(int argc, char *argv[])
 	sigemptyset(&sig_int.sa_mask);
 	sig_int.sa_flags = 0;
 	sigaction(SIGINT, &sig_int, NULL);
+
+	/* HUP */
+	sig_hup.sa_handler = &on_hup;
+	sigemptyset(&sig_hup.sa_mask);
+	sig_hup.sa_flags = 0;
+	sigaction(SIGHUP, &sig_hup, NULL);
 
 	/* childs */
 	sig_chld.sa_handler = SIG_DFL;
