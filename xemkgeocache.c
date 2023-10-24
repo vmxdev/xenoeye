@@ -30,6 +30,8 @@
 #define GEOIP_SIGN_IPAPI "ip_version,start_ip,end_ip,continent,country_code,"\
 	"country,state,city,zip,timezone,latitude,longitude,accuracy"
 
+static int verbose = 0;
+
 static int
 geodb_add4(struct btrie_node_geo *db, size_t *db_size,
 	uint32_t addr, int mask, struct geoip_info *g)
@@ -396,6 +398,12 @@ geoip_add_file(struct btrie_node_geo *geodb4, size_t *geodb_size4,
 		}
 
 		line_num++;
+		if (verbose) {
+			if ((line_num % 100000) == 0) {
+				LOG("geoip: file '%s', %lu lines loaded",
+					path, line_num);
+			}
+		}
 	}
 
 	LOG("geoip: file '%s' added, %lu lines", path, line_num);
@@ -488,6 +496,12 @@ as_add_file(struct btrie_node_as *asdb4, size_t *asdb_size4,
 		}
 
 		line_num++;
+		if (verbose) {
+			if ((line_num % 100000) == 0) {
+				LOG("as: file '%s', %lu lines loaded",
+					path, line_num);
+			}
+		}
 	}
 
 	LOG("as: file '%s' added, %lu lines", path, line_num);
@@ -503,12 +517,13 @@ static void
 print_usage(const char *progname)
 {
 	fprintf(stderr,
-		"Usage: %s [-o out_dir] [-s max_file_size] -t type "
+		"Usage: %s [-o out_dir] [-s max_file_size] [-v] -t type "
 		"dbfile1.csv [dbfile2.csv ...]\n",
 		progname);
 	fprintf(stderr, "\t-o /path/to/dir: where output files will be placed\n");
 	fprintf(stderr, "\t-s max_file_size: max size (in megabytes)"
 		" of a single result file\n");
+	fprintf(stderr, "\t-v show message on each 100000 lines loaded\n");
 	fprintf(stderr, "\t-t geo: data files of GeoIP\n");
 	fprintf(stderr, "\t-t as: data files of AS info\n");
 	fprintf(stderr, "\tdbfile1.csv, dbfile2.csv, etc.: data files\n");
@@ -565,7 +580,7 @@ main(int argc, char *argv[])
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
-	while ((opt = getopt(argc, argv, "ho:s:t:")) != -1) {
+	while ((opt = getopt(argc, argv, "ho:s:t:v")) != -1) {
 		switch (opt) {
 			case 'o':
 				strcpy(out_dir, optarg);
@@ -583,6 +598,10 @@ main(int argc, char *argv[])
 
 			case 't':
 				strcpy(type, optarg);
+				break;
+
+			case 'v':
+				verbose = 1;
 				break;
 
 			case 'h':
