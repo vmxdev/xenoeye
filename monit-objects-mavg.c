@@ -364,60 +364,6 @@ mavg_config(struct aajson *a, aajson_val *value,
 	return 1;
 }
 
-#if 0
-static void
-csv_next(char **line, char *token)
-{
-	char *ptr = *line, *end;
-	size_t len;
-
-	/* skip spaces */
-	while (isspace(*ptr)) {
-		ptr++;
-	}
-
-	if (*ptr == '\0') {
-		/* empty token */
-		token[0] = '\0';
-		return;
-	}
-
-	if (*ptr == '\'') {
-		/* string */
-		ptr++;
-		end = strchr(ptr, '\'');
-		if (!end) {
-			/* no closing quote */
-			strcpy(token, ptr);
-			*line = strchr(ptr, '\0');
-			return;
-		}
-		len = end - ptr;
-		memcpy(token, ptr, len);
-		token[len] = '\0';
-
-		end = strchr(end, ',');
-		if (!end) {
-			*line = strchr(ptr, '\0');
-			return;
-		}
-		*line = end + 1;
-	} else {
-		end = strchr(ptr, ',');
-		if (!end) {
-			/* no comma */
-			strcpy(token, ptr);
-			*line = strchr(ptr, '\0');
-			return;
-		}
-		len = end - ptr;
-		memcpy(token, ptr, len);
-		token[len] = '\0';
-		*line = end + 1;
-	}
-}
-#endif
-
 static int
 mavg_limits_parse_line(struct mo_mavg *window, char *line, uint8_t *key,
 	MAVG_TYPE *val)

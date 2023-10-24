@@ -148,40 +148,11 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		strcpy(data->clsf_dir, value->str);
 	}
 
-	/* geoip */
-	if (STRCMP(a, 1, "geoip") == 0) {
-		idx = a->path_stack[2].data.array_idx;
-
-		if (data->ngeoip_files < (idx + 1)) {
-			char *tmp = realloc(data->geoip_files,
-				(idx + 1) * PATH_MAX);
-
-			if (!tmp) {
-				LOG("realloc() failed");
-				return 0;
-			}
-			data->geoip_files = tmp;
-			data->ngeoip_files = idx + 1;
-		}
-		strcpy(&data->geoip_files[idx * PATH_MAX], value->str);
+	/* geoip/as */
+	if (STRCMP(a, 1, "geodb") == 0) {
+		strcpy(data->geodb_dir, value->str);
 	}
-	/* as */
-	if (STRCMP(a, 1, "as") == 0) {
-		idx = a->path_stack[2].data.array_idx;
 
-		if (data->nas_files < (idx + 1)) {
-			char *tmp = realloc(data->as_files,
-				(idx + 1) * PATH_MAX);
-
-			if (!tmp) {
-				LOG("realloc() failed");
-				return 0;
-			}
-			data->as_files = tmp;
-			data->nas_files = idx + 1;
-		}
-		strcpy(&data->as_files[idx * PATH_MAX], value->str);
-	}
 
 	if (a->path_stack_pos < 2) {
 		return 1;
@@ -487,6 +458,8 @@ main(int argc, char *argv[])
 	memset(&data, 0, sizeof(struct xe_data));
 	atomic_init(&data.stop, 0);
 	atomic_init(&data.mavg_db_bank_idx, 0);
+	/* reload geoip/as db at start */
+	atomic_init(&data.reload_geoip, 1);
 
 	if (!config_parse(&data, conffile ? conffile : DEFAULT_CONFIG_FILE)) {
 		return EXIT_FAILURE;
@@ -534,6 +507,12 @@ main(int argc, char *argv[])
 			DEFAULT_CLSF_DIR);
 	}
 
+	if (!*data.geodb_dir) {
+		strcpy(data.geodb_dir, DEFAULT_GEODB_DIR);
+		LOG("GeoIP/AS DB dir is not set, using default '%s'",
+			DEFAULT_GEODB_DIR);
+	}
+
 	/* templates database */
 	if (!*data.templates_db) {
 		strcpy(data.templates_db, DEFAULT_TEMPLATES_FILE);
@@ -563,16 +542,6 @@ main(int argc, char *argv[])
 		LOG("Can't start thread: %s", strerror(thread_err));
 		return EXIT_FAILURE;
 	}
-#if 0
-	for (i=0; i<data.ngeoip_files; i++) {
-		geoip_add_file(&data.geoip_files[i * PATH_MAX]);
-	}
-
-	/* as */
-	for (i=0; i<data.nas_files; i++) {
-		as_add_file(&data.as_files[i * PATH_MAX]);
-	}
-#endif
 
 	if (!monit_objects_init(&data)) {
 		LOG("Can't init monitoring objects");

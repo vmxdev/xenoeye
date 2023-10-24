@@ -87,13 +87,11 @@ struct xe_data
 	/* path to dir with classification */
 	char clsf_dir[PATH_MAX];
 
-	/* geoip */
-	size_t ngeoip_files;
-	char *geoip_files;
+	/* path to dir with GeoIP/AS DBs */
+	char geodb_dir[PATH_MAX];
 
-	/* as */
-	size_t nas_files;
-	char *as_files;
+	/* notify geoip thread about reload */
+	atomic_int reload_geoip;
 
 	/* notify threads about stop */
 	atomic_int stop;

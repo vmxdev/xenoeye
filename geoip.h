@@ -1,7 +1,11 @@
 #ifndef geoip_h_included
 #define geoip_h_included
 
+#include <stdint.h>
 #include "utils.h"
+
+#define DEFAULT_GEODB_DIR "/var/lib/xenoeye/geoip/"
+
 
 /* string sizes taken from files geolocationDatabaseIPv4.csv and
  * geolocationDatabaseIPv6.csv */
@@ -36,13 +40,24 @@ struct as_info
 	char asd[200];
 };
 
+struct btrie_node_geo
+{
+	uint32_t next[2];
+	int  is_leaf;
+	struct geoip_info g;
+};
 
-int  geoip_add_file(const char *path);
+struct btrie_node_as
+{
+	uint32_t next[2];
+	int  is_leaf;
+	struct as_info a;
+};
+
 
 int geoip_lookup4(uint32_t addr, struct geoip_info **g);
 int geoip_lookup6(xe_ip *addr, struct geoip_info **g);
 
-int as_add_file(const char *path);
 int as_lookup4(uint32_t addr, struct as_info **a);
 int as_lookup6(xe_ip *addr, struct as_info **a);
 
