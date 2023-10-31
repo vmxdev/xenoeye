@@ -26,7 +26,7 @@
 В минимальном Debian для сборки нужно доустановить такие пакеты:
 
 ```sh
-$ sudo apt -y install git autoconf gcc make libpcap-dev libtool
+$ sudo apt -y install git autoconf gcc make libpcap-dev
 ```
 
 Склонируйте репозиторий и инициализируйте подмодули
@@ -58,6 +58,8 @@ $ make
 
 ``` sh
 $ sudo make install
+# меняем владельца каталога на пользователя, от которого будем запускать коллектор (user)
+$ sudo chown -R user:user /var/lib/xenoeye/
 ```
 
 `make install` копирует бинарный файл xenoeye в /usr/local/bin, конфигурационные файлы xenoeye.conf и devices.conf в /etc/xenoeye и создает каталоги /var/lib/xenoeye/mo, /var/lib/xenoeye/exp и /var/lib/xenoeye/expfailed.
@@ -65,7 +67,7 @@ $ sudo make install
 Каталог `/var/lib/xenoeye` должен быть доступен для записи процессу xenoeye
 
 
-Это опциональный шаг, коллектор можно запускать из произвольного места
+`make install` - опциональный шаг, коллектор можно запускать из произвольного места
 
 Все пути по умолчанию можно изменить, они задаются в конфигурационном файле `xenoeye.conf`. Конфигурационные файлы в `xenoeye` - это JSON, в которых разрешены комментарии.
 

@@ -1,11 +1,11 @@
 # Дополнительные возможности
 
-  * [GeoIP](#)
-  * [Автономные системы](#)
-  * [Обновление баз без перезапуска коллектора](#)
-  * [Утилита xegeoq](#)
-  * [Визуализация GeoIP-данных и названий AS с помощью Grafana](#)
-  * [Классификация](#)
+  * [GeoIP](#geoip)
+  * [Автономные системы](#автономные-системы)
+  * [Обновление баз без перезапуска коллектора](#обновление-баз-без-перезапуска-коллектора)
+  * [Утилита xegeoq](#утилита-xegeoq)
+  * [Визуализация GeoIP-данных и названий AS с помощью Grafana](#визуализация-geoip-данных-и-названий-as-с-помощью-grafana)
+  * [Классификация](#классификация)
 
 
 ### GeoIP
@@ -17,6 +17,8 @@
 Коллектор рассчитан на использоание GeoIP-баз в формате https://ipapi.is/geolocation.html
 
 Для работы GeoIP нужно скачать эти данные, сконвертировать их во внутренний формат и и поместить в специальный каталог для коллектора.
+
+Как это сделать, по пунктам:
 
 Получаем и распаковываем CSV-файлы с данными:
 
@@ -42,6 +44,10 @@ $ ./xemkgeodb -o geodb -v -t geo geo/geolocationDatabaseIPv4.csv geo/geolocation
 
 ``` json
 "geodb": "/var/lib/xenoeye/geoip"
+```
+
+``` sh
+$ cp geodb/geo* /var/lib/xenoeye/geoip/
 ```
 
 При перезапуске коллектора (или если послать процессу коллектора сигнал `-HUP`) он загрузит эти базы данных и начнут работать функции GeoIP.
@@ -116,7 +122,7 @@ $ ./xemkgeodb -o geodb -v -t geo geo/geolocationDatabaseIPv4.csv geo/geolocation
 ```
 `?` означает что для этих адресов нет записей в базе GeoIP
 
-Объект мониторинга `ingress_ru`, трафик в наши сети только из России. src-адреса преобразовываются в название областей, городов, по каждому элементу суммируются октеты и экспортируются в СУБД.
+Еще один пример. Объект мониторинга `ingress_ru`, трафик в наши сети только из России. src-адреса преобразовываются в название областей, городов, по каждому элементу суммируются октеты и экспортируются в СУБД.
 `ingress_ru/mo.conf`:
 ```
 {
@@ -174,7 +180,7 @@ $ ./xemkgeodb -o geodb -v -t geo geo/geolocationDatabaseIPv4.csv geo/geolocation
 
 Это работает приблизительно так же, как и c GeoIP базами.
 
-Cкачиваем csv-файлы с данными:
+Нужно скачать csv-файлы с данными:
 
 ``` sh
 $ cd geo
@@ -183,13 +189,13 @@ $ wget https://raw.githubusercontent.com/sapics/ip-location-db/main/asn/asn-ipv6
 $ cd ..
 ```
 
-Конвертируем во внутренний формат:
+Сконвертировать во внутренний формат:
 
 ``` sh
 $ ./xemkgeodb -o geodb -t as geo/asn-ipv4.csv geo/asn-ipv6.csv
 ```
 
-Если все прошло без ошибок, копируем базы в каталог коллектора:
+Если все прошло без ошибок, скопировать базы в каталог коллектора:
 ``` sh
 $ cp geodb/as* /var/lib/xenoeye/geoip/
 ```
@@ -223,6 +229,21 @@ $ cp geodb/as* /var/lib/xenoeye/geoip/
 }
 ```
 
+```
+=> select * from ingress_as;
+          time          |   octets   |      asd_src_host_       
+------------------------+------------+--------------------------
+ 2023-10-13 11:40:46+03 | 7260510500 | PJSC MegaFon
+ 2023-10-13 11:40:46+03 | 3816886000 | T2 Mobile LLC
+ 2023-10-13 11:40:46+03 | 2124086000 | PJSC Rostelecom
+ 2023-10-13 11:40:46+03 | 1551007000 | Google LLC
+ 2023-10-13 11:40:46+03 | 1361819000 | LLC VK
+ 2023-10-13 11:40:46+03 |  777337000 | CJSC RASCOM
+ 2023-10-13 11:40:46+03 |  761207000 | Global DC Oy
+ 2023-10-13 11:40:46+03 |  753907500 | Hetzner Online GmbH
+ 2023-10-13 11:40:46+03 |  592446000 | MEGASVYAZ LLC
+...
+```
 
 ### Обновление баз без перезапуска коллектора
 
@@ -303,9 +324,9 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
-Функция строит топ-N сущностей (стран, городов, IP-адресов и т.п.) за период и отбирает только их. Те, кто не попал в топ группируются под названием 'Other'.
+Функция строит топ-N сущностей (стран, городов, IP-адресов и т.п.) за период и отбирает только их. Те, кто не попал в топ, группируются под названием 'Other'.
 
-При создании панели в Графане в поле для SQL запроса можно вызвать эту функцию:
+При создании панели в Графане в поле для SQL запроса можно написать вызов этой функции:
 
 ```
 select tm as time, val as city, name from xe_rep('ingress_ru_city', 'city_src_host_', 'octets', '*8/30', $$ $__timeFilter(time) $$, 20);
@@ -317,6 +338,25 @@ select tm as time, val as city, name from xe_rep('ingress_ru_city', 'city_src_ho
   - `*8/30` - коэффициент, в таблицу добавляются данные каждые 30 секунд, чтобы получить биты в секунду, уможаем байты на 8 и делим на 30 секунд.
   - `$$ $__timeFilter(time) $$` - макрос Графаны, фильтрует данные только за нужный период
   - 20 - отбирается топ-20 городов по количеству трафика, остальные будут в отчете как 'Other'
+
+
+Входящий трафик с разбивкой по автономным системам:
+
+![Grafana by as](docs-img/grafana-as.png?raw=true "Grafana netflow by autonomous systems")
+
+Входящий трафик по странам:
+
+![Grafana geoip by countries](docs-img/grafana-geoip-country.png?raw=true "Grafana netflow GeoIP by countries")
+
+
+Входящий трафик только из России по регионам:
+
+![Grafana geoip by state](docs-img/grafana-geoip-state.png?raw=true "Grafana netflow GeoIP by states")
+
+
+Входящий трафик только из России по городам:
+
+![Grafana geoip by city](docs-img/grafana-geoip-city.png?raw=true "Grafana netflow GeoIP by cities")
 
 
 ### Классификация
@@ -427,13 +467,22 @@ select tm as time, val as city, name from xe_rep('ingress_ru_city', 'city_src_ho
 
 Для построения временных рядов с классификацией можно воспользоваться функцией, которая показана выше:
 
+Параметры вызова те же - название таблицы, поле и т.д.
+
+По умолчанию неклассифицированный трафик будет показан с названием `?`. Чтобы это изменить, нужно добавить опциональный параметр:
 ```
-select tm as time, val as class, name from xe_rep('ingress_clsf_port', 'class0', 'octets', '*8/30', $$ $__timeFilter(time) $$, 30);
+select tm as time, val as class, name from xe_rep('ingress_clsf_port', 'class0', 'octets', '*8/30', $$ $__timeFilter(time) $$, 20, 'Unclassified');
 ```
 
-По умолчанию неклассифицированный трафик будет показан с названием `?`. Чтобы изменить, нужно добавить опциональный параметр:
-```
-select tm as time, val as class, name from xe_rep('ingress_clsf_port', 'class0', 'octets', '*8/30', $$ $__timeFilter(time) $$, 30, 'Unclassified');
-```
+Классификация по портам:
 
+![Grafana classification by ports](docs-img/grafana-class-port.png?raw=true "Grafana netflow classification by ports")
+
+По размеру пакетов:
+
+![Grafana classification by size](docs-img/grafana-class-size.png?raw=true "Grafana netflow classification by packet size")
+
+Классификация только HTTPS трафика по протоколам и TCP флагам
+
+![Grafana classification by size](docs-img/grafana-class-http.png?raw=true "Grafana netflow classification by packet size")
 

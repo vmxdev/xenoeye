@@ -26,7 +26,7 @@
 In minimal Debian, you need to install the following packages to build:
 
 ```sh
-$ sudo apt -y install git autoconf gcc make libpcap-dev libtool
+$ sudo apt -y install git autoconf gcc make libpcap-dev
 ```
 
 Clone the repository and initialize the submodules
@@ -58,6 +58,8 @@ After that, you should get a binary file `xenoeye`
 
 ``` sh
 $ sudo make install
+# change the owner of the directory to the user from whom we will run the collector (user)
+$ sudo chown -R user:user /var/lib/xenoeye/
 ```
 
 `make install` copies binary file `xenoeye` to /usr/local/bin, config files `xenoeye.conf` and `devices.conf` to /etc/xenoeye and creates directories /var/lib/xenoeye/mo, /var/lib/xenoeye/exp и /var/lib/xenoeye/expfailed
