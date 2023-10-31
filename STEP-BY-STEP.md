@@ -66,7 +66,7 @@ $ sudo chown -R user:user /var/lib/xenoeye/
 
 The directory `/var/lib/xenoeye` must be writable by the xenoeye process
 
-This is an optional step, the collector can be launched from any location
+`make install` is an optional step, the collector can be launched from any location
 
 All default paths can be changed, they are set in the configuration file `xenoeye.conf`. The config files in `xenoeye` are JSON which allow comments
 
