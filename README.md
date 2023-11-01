@@ -65,7 +65,6 @@ Scaling to multiple cores is described below in the documentation
     * [Configure what data should be exported to the DBMS](STEP-BY-STEP.md#configure-what-data-should-be-exported-to-the-dbms)
     * [Export to DBMS](STEP-BY-STEP.md#export-to-dbms)
     * [Simple Reporting by IP Addresses](STEP-BY-STEP.md#simple-reporting-by-ip-addresses)
-    * [Can we use GeoIP?](STEP-BY-STEP.md#can-we-use-geoip)
     * [Detect spam-bots and ssh-scanners](STEP-BY-STEP.md#detect-spam-bots-and-ssh-scanners)
     * [Plotting with gnuplot](STEP-BY-STEP.md#plotting-with-gnuplot)
     * [Plots with Python Matplotlib](STEP-BY-STEP.md#plots-with-python-matplotlib)
@@ -75,6 +74,14 @@ Scaling to multiple cores is described below in the documentation
     * [Scripts and their options](STEP-BY-STEP.md#scripts-and-their-options)
     * [Extended stats](STEP-BY-STEP.md#extended-stats)
     * [Anomaly alerts using Telegram-bot](STEP-BY-STEP.md#anomaly-alerts-using-telegram-bot)
+
+  * [Additional features](EXTRA.md)
+    * [GeoIP](EXTRA.md#geoip)
+    * [Autonomous systems](EXTRA.md#autonomous-systems)
+    * [Updating databases without restarting the collector](EXTRA.md#updating-databases-without-restarting-the-collector)
+    * [xegeoq utility](EXTRA.md#xegeoq-utility)
+    * [Visualizing GeoIP data and AS names with Grafana](EXTRA.md#visualizing-geoip-data-and-as-names-with-grafana)
+    * [Traffic classification](EXTRA.md#traffic-classification)
 
   * [Full description of configuration files](CONFIG.md)
     * [Main configuration file `xenoeye.conf`](CONFIG.md#main-configuration-file-xenoeyeconf)

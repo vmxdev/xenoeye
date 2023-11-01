@@ -491,19 +491,6 @@ Ingress traffic per individual destination hosts for the previous month:
 Other information from Netflow (AS number, Interface Idx, VLAN, TCP/UPD ports, etc.) can also be stored in the tables. Reports on this data can be built in the same way.
 
 
-### Can we use GeoIP?
-
-The biggest difficulty for open source projects in working with GeoIP is the lack of freely distributed GeoIP databases.
-
-If you know a project that distributes databases without additional conditions, without the requirement to change the license - write in an issue.
-
-The collector does not support GeoIP, but if you have some kind of database (for example, MaxMind), then you can make a geographic monitoring object using IP lists.
-
-Create a file `/var/lib/xenoeye/iplists/REGION` and put all the IP addresses of the desired region there. After that, it will be possible to create monitoring objects that will contain only incoming / outgoing traffic of the region.
-
-Another way to use GeoIP is to load the lists into the DBMS and replace IP addresses with country/region names in reports.
-
-
 ### Detect spam-bots and ssh-scanners
 
 If there are infected hosts in your data center or network that scan the rest via ssh, they can be identified by the following monitoring object:
