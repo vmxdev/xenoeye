@@ -118,19 +118,22 @@ mmap_db(const char *dbdir, const char *dbname, size_t *size)
 
 	fd = open(path, O_RDONLY);
 	if (fd == -1) {
-		LOG("Can't open file '%s': %s", path, strerror(errno));
+		fprintf(stderr, "Can't open file '%s': %s\n", path,
+			strerror(errno));
 		return NULL;
 	}
 
 	if (fstat(fd, &st) != 0) {
-		LOG("fstat() failed on file '%s': %s", path, strerror(errno));
+		fprintf(stderr, "fstat() failed on file '%s': %s\n", path,
+			strerror(errno));
 		goto fail_fstat;
 	}
 
 	*size = st.st_size;
 	addr = mmap(NULL, *size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (addr == (void *) -1) {
-		LOG("mmap() failed on file '%s': %s", path, strerror(errno));
+		fprintf(stderr, "mmap() failed on file '%s': %s\n", path,
+			strerror(errno));
 		addr = NULL;
 		goto fail_mmap;
 	}
@@ -149,18 +152,18 @@ print_info4(const char *addr, uint32_t ip4)
 	struct as_info *a;
 
 	if (!geoip_lookup4(ip4, &g)) {
-		LOG("%s geo: ?", addr);
+		printf("%s geo: ?\n", addr);
 	} else {
-		LOG("%s geo: %s, %s, %s, %s, %s, %s, %s, %s", addr,
+		printf("%s geo: %s, %s, %s, %s, %s, %s, %s, %s\n", addr,
 			g->CONTINENT, g->COUNTRY_CODE,
 			g->COUNTRY, g->STATE, g->CITY, g->ZIP,
 			g->LAT, g->LONG);
 	}
 
 	if (!as_lookup4(ip4, &a)) {
-		LOG("%s as: ?", addr);
+		printf("%s as: ?\n", addr);
 	} else {
-		LOG("%s as: %u, %s", addr, htobe32(a->asn), a->asd);
+		printf("%s as: %u, %s\n", addr, htobe32(a->asn), a->asd);
 	}
 }
 
@@ -171,18 +174,18 @@ print_info6(const char *addr, xe_ip *ip6)
 	struct as_info *a;
 
 	if (!geoip_lookup6(ip6, &g)) {
-		LOG("%s geo: ?", addr);
+		printf("%s geo: ?\n", addr);
 	} else {
-		LOG("%s geo: %s, %s, %s, %s, %s, %s, %s, %s", addr,
+		printf("%s geo: %s, %s, %s, %s, %s, %s, %s, %s\n", addr,
 			g->CONTINENT, g->COUNTRY_CODE,
 			g->COUNTRY, g->STATE, g->CITY, g->ZIP,
 			g->LAT, g->LONG);
 	}
 
 	if (!as_lookup6(ip6, &a)) {
-		LOG("%s as: ?", addr);
+		printf("%s as: ?\n", addr);
 	} else {
-		LOG("%s as: %u, %s", addr, htobe32(a->asn), a->asd);
+		printf("%s as: %u, %s\n", addr, htobe32(a->asn), a->asd);
 	}
 }
 
@@ -204,8 +207,6 @@ main(int argc, char *argv[])
 	int opt, i;
 	char in_dir[PATH_MAX] = "./"; /* current dir by default */
 
-	openlog(NULL, LOG_PERROR, LOG_USER);
-
 	while ((opt = getopt(argc, argv, "hi:")) != -1) {
 		switch (opt) {
 			case 'i':
@@ -220,7 +221,7 @@ main(int argc, char *argv[])
 	}
 
 	if (optind == argc) {
-		LOG("No input files");
+		fprintf(stderr, "No input files\n");
 		print_usage(argv[0]);
 		return EXIT_FAILURE;
 	}
@@ -240,7 +241,8 @@ main(int argc, char *argv[])
 		if (inet_pton(AF_INET6, addr, &ip6) == 0) {
 			/* can't parse as IPv6, so it's probably IPv4 */
 			if (inet_aton(addr, &ip4) == 0) {
-				LOG("Can't parse address '%s'", addr);
+				fprintf(stderr, "Can't parse address '%s'\n",
+					addr);
 				continue;
 			}
 			print_info4(addr, ip4.s_addr);
@@ -255,7 +257,8 @@ main(int argc, char *argv[])
 do {                                                                           \
 	if (X) {                                                               \
 		if (munmap(X, S) != 0) {                                       \
-			LOG("munmap() failed: %s", strerror(errno));           \
+			fprintf(stderr, "munmap() failed: %s\n",               \
+				strerror(errno));                              \
 		}                                                              \
 	}                                                                      \
 } while (0)

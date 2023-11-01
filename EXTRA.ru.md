@@ -268,10 +268,10 @@ GeoIP базы и базы AS обновляются достаточно час
 
 ``` sh
 ./xegeoq -i /var/lib/xenoeye/geoip 1.1.1.1 2A03:2880:10FF:0008:0000:0000:FACE:B00C
-xegeoq: 1.1.1.1 geo: oc, au, Australia, Victoria, Research, 3095, -37.7, 145.18333 [xegeoq.c, line 154, function print_info4()]
-xegeoq: 1.1.1.1 as: 13335, Cloudflare, Inc. [xegeoq.c, line 163, function print_info4()]
-xegeoq: 2A03:2880:10FF:0008:0000:0000:FACE:B00C geo: ? [xegeoq.c, line 174, function print_info6()]
-xegeoq: 2A03:2880:10FF:0008:0000:0000:FACE:B00C as: 32934, Facebook, Inc. [xegeoq.c, line 185, function print_info6()]
+1.1.1.1 geo: oc, au, Australia, Victoria, Research, 3095, -37.7, 145.18333
+1.1.1.1 as: 13335, Cloudflare, Inc.
+2A03:2880:10FF:0008:0000:0000:FACE:B00C geo: ?
+2A03:2880:10FF:0008:0000:0000:FACE:B00C as: 32934, Facebook, Inc.
 ```
 
 ### Визуализация GeoIP-данных и названий AS с помощью Grafana
