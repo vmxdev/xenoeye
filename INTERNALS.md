@@ -8,6 +8,7 @@
   * [Fixed time windows](#fixed-time-windows)
   * [Moving averages](#moving-averages)
   * [IP lists](#ip-lists)
+  * [GeoIP and AS databases](#)
 
 
 ### General remarks
@@ -165,4 +166,17 @@ But if you use very large windows and high traffic, then you can lose precision.
 
 ### IP lists
 
-Network lists are stored as a bitwise trie. It may not be the fastest storage method, but it is quite simple and efficient. The lists can store many networks, both IPv4 and IPv6. For example, hundreds of thousands of networks of large network operators or GeoIP networks of different regions
+Network lists are stored as a bitwise trie. It may not be the fastest storage method, but it is quite simple and efficient. The lists can store many networks, both IPv4 and IPv6.
+
+
+### GeoIP and AS databases
+
+The correspondence between IP networks and GeoIP/AS data is also stored as a bitwise trie. Different trees are created for IPv4 and IPv6.
+
+There is a separate utility `xemkgeodb` for parsing CSV files and generating these trees (in the form of files). This two-step loading was done mainly for two reasons:
+  - GeoIP database owners can change the format of their CSV files (and they have already done so). It’s better to know about this before loading data into the collector.
+  - GeoIP databases can be quite large. On systems (or virtual machines) with a small amount of memory they are difficult to process. You can generate files on a computer with enough memory and place them on a server with a collector
+
+The collector uses mmap() to map data files into memory and then processes requests. In this case, physical memory is used quite efficiently; only the necessary pages with data are read from the disk.
+
+The `xemkgeodb` utility also builds a tree by mapping a file into memory. The algorithm is as follows: a large file is created (4G by default) and mapped into memory. A tree is built in this memory area; after the process is completed, the empty tail of the file is cut off.
