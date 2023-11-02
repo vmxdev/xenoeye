@@ -99,6 +99,7 @@ Scaling to multiple cores is described below in the documentation
     * [Fixed time windows](INTERNALS.md#fixed-time-windows)
     * [Moving averages](INTERNALS.md#moving-averages)
     * [IP lists](INTERNALS.md#ip-lists)
+    * [GeoIP and AS databases](#geoip-and-as-databases)
 
 
 ## Plans for the future
