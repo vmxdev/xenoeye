@@ -26,7 +26,9 @@ xegeoq_SOURCES = xegeoq.c geoip.h ip-btrie.h
 # checks
 check_PROGRAMS = test_filters
 test_filters_SOURCES = tests/test_filters.c \
-	filter.c filter-lexer.c filter-parser.c iplist.c filter-parser-funcs.c
+	filter.c filter-lexer.c filter-parser.c \
+	iplist.c filter-parser-funcs.c \
+	geoip.c
 TESTS = $(check_PROGRAMS)
 
 # config file
