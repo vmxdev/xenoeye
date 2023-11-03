@@ -1,7 +1,5 @@
 # xenoeye
-Легкий коллектор Netflow
-
-[![Build Status](https://app.travis-ci.com/vmxdev/xenoeye.svg?branch=master)](https://app.travis-ci.com/vmxdev/xenoeye)
+Легкий коллектор Netflow/IPFIX
 
 С помощью этого коллектора и [Netflow](https://ru.wikipedia.org/wiki/Netflow) вы сможете
 

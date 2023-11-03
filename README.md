@@ -1,7 +1,5 @@
 # xenoeye
-Lightweight Netflow collector
-
-[![Build Status](https://app.travis-ci.com/vmxdev/xenoeye.svg?branch=master)](https://app.travis-ci.com/vmxdev/xenoeye)
+Lightweight Netflow/IPFIX collector
 
 [`README.ru.md`](README.ru.md) - документация на русском
 

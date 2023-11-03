@@ -82,6 +82,11 @@ When printing to a file, buffering is used, the data does not appear in the file
 Point to a file with a sampling frequency and a directory with monitoring objects (see below)
 
 
+#### `geodb` key
+
+Path to GeoIP/AS databases, "`/var/lib/xenoeye/geoip/`" by default
+
+
 ### Setting the sampling rates `devices.conf`
 
 The collector (at least for now) does not read the sample rate data from the option template. To set the frequency, you need to write it to the `devices.conf` file.
@@ -118,6 +123,23 @@ File example:
 	"debug": {
 		"dump-flows": "none"
 	},
+
+	"classification": [
+		{
+			"fields": ["proto", "mfreq(src port,dst port)", "tcp-flags"],
+			"top-percents": 90,
+			"time": 30,
+			"val": "octets desc"
+		}
+		,
+		{
+			"id": 3,
+			"fields": ["div_r(octets,packets,100)"],
+			"top-percents": 90,
+			"time": 30,
+			"val": "packets desc"
+		}
+	],
 
 	"mavg": [
 		{
@@ -161,7 +183,7 @@ File example:
 
 #### `filter` key
 
-A rule in a BPF-like language that describes this monitoring object. Any netflow fields that are known to the system can be used in the rule.
+A rule in a BPF-like language that describes this monitoring object. Any netflow fields and functions that are known to the system can be used in the rule.
 
 An empty filter is allowed, in this case all flows will be included in the monitoring object.
 
@@ -207,6 +229,28 @@ Current list of available netflow fields: [`filter.def`](filter.def)
 See also [How to add a new Netflow field to the collector](INTERNALS.md#)"
 
 
+Current list of available functions:
+
+
+  * `continent(ip)` - lowercase two-letter continent code (`eu`, `as`, ...)
+  * `country_code(ip)` - lowercase two-letter country code (`es`, `ru`, `cn`, ...)
+  * `country(ip)` - full country name
+  * `state(ip)`
+  * `city(ip)`
+  * `zip(ip)`
+  * `lat(ip)` - latitude
+  * `long(ip)` - longitude
+
+  * `asn(ip)` - autonomous system number
+  * `asd(ip)` - text description of the autonomous system
+
+  * `min(port1, port2)` - selects the minimum value of port1 and port2
+  * `mfreq(port1, port2)` - selects the more frequently used port
+  * `div(aggr1, aggr2)` - division, used to determine the average packet size
+  * `divr(aggr1, aggr2, N)` - division with rounding
+  * `divl(aggr1, aggr2, N)` - division with rounding down to the nearest power of N
+
+
 #### Section `debug`
 
 The allowed values are the same as in the `debug` section of the main configuration file.
@@ -222,7 +266,7 @@ Description of keys:
 
 `name`: window name. From this name, the name of the table in PostgreSQL is formed, into which the data will be exported. Table name = monitoring object directory + `_` + window name.
 
-`fields`: array of netflow fields to be exported. The same fields are used as in the filter. When exporting, the records will be sorted by fields, from lowest value to highest value. To change the order, add `desc` after the field name.
+`fields`: array of netflow fields and functions to be exported. The same fields are used as in the filter. When exporting, the records will be sorted by fields, from lowest value to highest value. To change the order, add `desc` after the field name.
 
 For example, if you write the fields like this:
 `fields = ["src host", "octets"]`
@@ -256,7 +300,7 @@ Description of keys:
 
 `dump`: time (in seconds) between dumps of moving average values. Default is 0 (dump disabled). If you want to see the current values of the moving averages, set this option
 
-`fields`: array of netflow fields over which the collector will monitor the moving average. The fields are the same as in the `fwm` section
+`fields`: array of netflow fields and functions over which the collector will monitor the moving average. The fields are the same as in the `fwm` section
 
 `mem-m`: memory size (in megabytes) for . Default 256M
 
@@ -278,6 +322,30 @@ Description of `overlimit` element keys
 `back2norm-script`: path to a script that will run when traffic returns to normal
 
 `ext`: array of extended statistics elements. After breaking through the threshold, these elements are activated, the tables begin to fill with data. It is allowed to activate elements from other monitoring objects, for example, when the ingress traffic threshold is broken, you can enable extended statistics on egress traffic as well.
+
+
+#### Section `classification`
+
+An array describing the traffic classification for this monitoring object
+
+Description of keys:
+
+`fields`: list of netflow fields or functions by which traffic will be classified
+
+`time`: time in seconds over which statistics for classification are accumulated. Classification occurs continuously, every `time` seconds
+
+`top-percents`: percentage of traffic from the sample that will be classified
+
+`val`: the value by which the sample will be sorted before classification. `"octets desc"` or `"packets desc"` - by bytes or packets
+
+`id`: class number. After classification, a virtual field with the class name will be added to each flow. These fields with names are called `class0`, `class1`, ..., they are different for each section. If you need to change the number in the name, this can be done by changing this key. For example, if you set `"id": 3`, class names will be written in the `class3` field. In total, up to 5 classifiers are allowed per monitoring object
+
+These virtual fields with class names can be used in the `fwm` and `mavg` sections, just like other netflow fields.
+
+The database with classification results is stored in the file system, in the form of files and directories.
+To rename a class, you need to edit the file `/var/lib/xenoeye/clsf/<name of monitoring object>/<classifier number>/<class>/name`
+You can name several classes with one name.
+Files with class names are reread every `time` seconds.
 
 
 ### Files with thresholds
