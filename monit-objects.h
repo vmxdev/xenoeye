@@ -21,7 +21,6 @@
 #define MAVG_TYPE double
 
 #define CLSF_DEFAULT_TIMEOUT 30
-#define CLASS_NAME_MAX 32
 #define CLASSES_MAX 5
 
 /* helper for classes processing */
@@ -33,7 +32,7 @@
 	DO(4, class4)
 
 struct xe_data;
-struct nf_flow_info;
+struct flow_info;
 
 struct two_banks_db
 {
@@ -245,9 +244,9 @@ struct monit_object
 int monit_objects_init(struct xe_data *data);
 int monit_objects_free(struct xe_data *data);
 
-int monit_object_match(struct monit_object *mo, struct nf_flow_info *fi);
+int monit_object_match(struct monit_object *mo, struct flow_info *fi);
 int monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
-	size_t thread_id, uint64_t time_ns, struct nf_flow_info *flow);
+	size_t thread_id, uint64_t time_ns, struct flow_info *flow);
 
 void monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 	int print_spaces);
@@ -255,7 +254,7 @@ void monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 	int print_spaces);
 
 void monit_object_key_add_fld(struct field *fld, uint8_t *key,
-	struct nf_flow_info *flow);
+	struct flow_info *flow);
 
 /* fixed windows in memory */
 int fwm_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
@@ -269,7 +268,7 @@ int mavg_limits_init(struct mo_mavg *window);
 void monit_objects_mavg_link_ext_stat(struct xe_data *globl);
 int monit_object_mavg_process_nf(struct xe_data *globl,
 	struct monit_object *mo, size_t thread_id,
-	uint64_t time_ns, struct nf_flow_info *flow);
+	uint64_t time_ns, struct flow_info *flow);
 
 /* classification */
 void *classification_bg_thread(void *);
@@ -278,7 +277,7 @@ int classification_config(struct aajson *a, aajson_val *value,
 int classification_fields_init(size_t nthreads,
 	struct mo_classification *clsf);
 int classification_process_nf(struct monit_object *mo, size_t thread_id,
-	struct nf_flow_info *flow);
+	struct flow_info *flow);
 
 void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);

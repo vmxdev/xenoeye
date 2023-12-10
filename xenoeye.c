@@ -45,6 +45,28 @@
 #define DEFAULT_NOTIF_DIR "/var/lib/xenoeye/notifications/"
 #define DEFAULT_CLSF_DIR "/var/lib/xenoeye/clsf/"
 
+static struct xe_data *globl;
+
+static void
+on_ctrl_c(int s)
+{
+	if (s != SIGINT) {
+		return;
+	}
+
+	/* TODO: correct shutdown */
+	exit(0);
+}
+
+static void
+on_hup(int s)
+{
+	(void)s;
+	/* notify geoip thread */
+	atomic_store_explicit(&globl->reload_geoip, 1, memory_order_relaxed);
+}
+
+
 static void
 print_usage(const char *progname)
 {
@@ -75,28 +97,132 @@ fc_thread(void *arg)
 }
 #endif
 
-static int
-config_adjust_cap_size(struct xe_data *data, size_t idx)
-{
-	struct capture *tmp;
+#define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
-	if (data->ncap >= (idx + 1)) {
+static size_t
+config_adjust_cap_size(struct xe_data *data, size_t idx, enum FLOW_TYPE type)
+{
+	struct capture *tmp, *cap;
+	size_t n;
+
+	if (type == FLOW_TYPE_NETFLOW) {
+		n = data->nnfcap;
+		cap = data->nfcap;
+	} else {
+		n = data->nsfcap;
+		cap = data->sfcap;
+	}
+
+	if (n >= (idx + 1)) {
 		return 1;
 	}
 
-	tmp = realloc(data->cap, (idx + 1) * sizeof(struct capture));
+	tmp = realloc(cap, (idx + 1) * sizeof(struct capture));
 	if (!tmp) {
 		LOG("realloc() failed");
 		return 0;
 	}
 
-	data->cap = tmp;
-	data->ncap = idx + 1;
+	if (type == FLOW_TYPE_NETFLOW) {
+		data->nfcap = tmp;
+		data->nnfcap = idx + 1;
+	} else {
+		data->sfcap = tmp;
+		data->nsfcap = idx + 1;
+	}
 
 	return 1;
 }
 
-#define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
+static int
+config_capture(struct aajson *a, aajson_val *value, struct xe_data *data,
+	enum FLOW_TYPE type)
+{
+	size_t idx;
+
+	if (a->path_stack_pos != 4) {
+		return 1;
+	}
+
+	if (a->path_stack[2].type != AAJSON_PATH_ITEM_ARRAY) {
+		return 1;
+	}
+	idx = a->path_stack[2].data.array_idx;
+
+	if (STRCMP(a, 3, "pcap") == 0) {
+		struct capture *cap;
+
+		if (!config_adjust_cap_size(data, idx, type)) {
+			return 0;
+		}
+
+		cap = type == FLOW_TYPE_NETFLOW ? 
+			&data->nfcap[data->nnfcap - 1]
+			:
+			&data->sfcap[data->nsfcap - 1];
+
+		cap->type = XENOEYE_CAPTURE_TYPE_PCAP;
+
+		if (STRCMP(a, 4, "interface") == 0) {
+			cap->iface = strdup(value->str);
+		}
+
+		if (STRCMP(a, 4, "filter") == 0) {
+			cap->filter = strdup(value->str);
+		}
+	}
+
+	if (STRCMP(a, 3, "socket") == 0) {
+		struct capture *cap;
+
+		if (!config_adjust_cap_size(data, idx, type)) {
+			return 0;
+		}
+
+		cap = type == FLOW_TYPE_NETFLOW ? 
+			&data->nfcap[data->nnfcap - 1]
+			:
+			&data->sfcap[data->nsfcap - 1];
+
+		cap->type = XENOEYE_CAPTURE_TYPE_SOCKET;
+
+		if (STRCMP(a, 4, "listen-on") == 0) {
+			cap->addr = strdup(value->str);
+		}
+
+		if (STRCMP(a, 4, "port") == 0) {
+			struct servent *se;
+			long int port;
+			char *endptr;
+
+			/* check if port is given by number */
+			/* allow hex and octal forms */
+			port = strtol(value->str, &endptr, 0);
+			if (*endptr == '\0') {
+				if ((port < 0) || (port > UINT16_MAX)) {
+					LOG("Incorrect port number %s",
+						value->str);
+					return 0;
+				}
+
+				cap->port = port;
+				return 1;
+			}
+
+			/* search in services database */
+			se = getservbyname(value->str, NULL);
+			if (!se) {
+				LOG("Can't convert '%s' to port number",
+					value->str);
+				return 0;
+			}
+
+			cap->port = se->s_port;
+		}
+	}
+
+	return 1;
+}
 
 static int
 config_templates(struct aajson *a, aajson_val *value, struct xe_data *data)
@@ -122,7 +248,6 @@ static int
 config_callback(struct aajson *a, aajson_val *value, void *user)
 {
 	struct xe_data *data = user;
-	size_t idx;
 
 	if (STRCMP(a, 1, "devices") == 0) {
 		strcpy(data->devices, value->str);
@@ -166,75 +291,13 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		return flow_debug_config(a, value, &data->debug);
 	}
 
-	if (STRCMP(a, 1, "capture") != 0) {
-		return 1;
+	/* capture section */
+	if (STRCMP(a, 1, "capture") == 0) {
+		return config_capture(a, value, data, FLOW_TYPE_NETFLOW);
 	}
 
-	if (a->path_stack_pos != 4) {
-		return 1;
-	}
-
-	if (a->path_stack[2].type != AAJSON_PATH_ITEM_ARRAY) {
-		return 1;
-	}
-	idx = a->path_stack[2].data.array_idx;
-
-	if (STRCMP(a, 3, "pcap") == 0) {
-		if (!config_adjust_cap_size(data, idx)) {
-			return 0;
-		}
-
-		data->cap[data->ncap - 1].type = XENOEYE_CAPTURE_TYPE_PCAP;
-
-		if (STRCMP(a, 4, "interface") == 0) {
-			data->cap[data->ncap - 1].iface = strdup(value->str);
-		}
-
-		if (STRCMP(a, 4, "filter") == 0) {
-			data->cap[data->ncap - 1].filter = strdup(value->str);
-		}
-	}
-
-	if (STRCMP(a, 3, "socket") == 0) {
-		if (!config_adjust_cap_size(data, idx)) {
-			return 0;
-		}
-
-		data->cap[data->ncap - 1].type = XENOEYE_CAPTURE_TYPE_SOCKET;
-
-		if (STRCMP(a, 4, "listen-on") == 0) {
-			data->cap[data->ncap - 1].addr = strdup(value->str);
-		}
-
-		if (STRCMP(a, 4, "port") == 0) {
-			struct servent *se;
-			long int port;
-			char *endptr;
-
-			/* check if port is given by number */
-			/* allow hex and octal forms */
-			port = strtol(value->str, &endptr, 0);
-			if (*endptr == '\0') {
-				if ((port < 0) || (port > UINT16_MAX)) {
-					LOG("Incorrect port number %s",
-						value->str);
-					return 0;
-				}
-
-				data->cap[data->ncap - 1].port = port;
-				return 1;
-			}
-
-			/* search in services database */
-			se = getservbyname(value->str, NULL);
-			if (!se) {
-				LOG("Can't convert '%s' to port number",
-					value->str);
-				return 0;
-			}
-
-			data->cap[data->ncap - 1].port = se->s_port;
-		}
+	if (STRCMP(a, 1, "sflow-capture") == 0) {
+		return config_capture(a, value, data, FLOW_TYPE_SFLOW);
 	}
 
 	return 1;
@@ -281,7 +344,7 @@ config_parse(struct xe_data *data, const char *conffile)
 		goto fail_parse;
 	}
 
-	data->nthreads = data->ncap;
+	data->nthreads = data->nnfcap + data->nsfcap;
 
 	ret = 1;
 
@@ -294,149 +357,6 @@ fail_open:
 	return ret;
 }
 
-static void *
-scapture_thread(void *arg)
-{
-	struct capture_thread_params params, *params_ptr;
-
-	struct capture *cap;
-
-	socklen_t clientlen;
-
-	params_ptr = (struct capture_thread_params *)arg;
-	params = *params_ptr;
-	free(params_ptr);
-
-	cap = &params.data->cap[params.idx];
-
-	clientlen = sizeof(struct sockaddr);
-
-	LOG("Starting collector thread on port %d", cap->port);
-
-	for (;;) {
-		ssize_t len;
-		struct nf_packet_info nfpkt;
-
-		len = recvfrom(cap->sockfd, nfpkt.rawpacket,
-			MAX_NF_PACKET_SIZE, 0,
-			&(nfpkt.src_addr), &clientlen);
-
-		if (len < 0) {
-			LOG("recvfrom() failed: %s", strerror(errno));
-
-			continue;
-		}
-
-		if (nfpkt.src_addr.sa_family == AF_INET) {
-			struct sockaddr_in *addr;
-
-			addr = (struct sockaddr_in *)&nfpkt.src_addr;
-			/* we're supporting only IPv4 */
-
-			nfpkt.src_addr_ipv4 =
-				 *((uint32_t *)&(addr->sin_addr));
-		} else {
-			nfpkt.src_addr_ipv4 = 0;
-		}
-
-		if (netflow_process(params.data, params.idx, &nfpkt, len)) {
-			/* ok */
-		}
-	}
-
-	close(cap->sockfd);
-
-	return NULL;
-}
-
-static int
-scapture_start(struct xe_data *data, size_t idx)
-{
-	int one = 1;
-	struct capture_thread_params *params;
-	struct sockaddr_in serveraddr;
-
-	struct capture *cap = &data->cap[idx];
-
-	int thread_err;
-
-	params = malloc(sizeof(struct capture_thread_params));
-	if (!params) {
-		LOG("malloc() failed");
-		goto fail_alloc;
-	}
-
-	params->data = data;
-	params->idx = idx;
-
-	cap->sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (cap->sockfd < 0) {
-		LOG("socket() failed: %s", strerror(errno));
-		goto fail_socket;
-	}
-
-	if (setsockopt(cap->sockfd, SOL_SOCKET, SO_REUSEADDR,
-		(const void *)&one, sizeof(int)) == -1) {
-
-		LOG("setsockopt() failed: %s", strerror(errno));
-		goto fail_setsockopt;
-	}
-
-	bzero((char *)&serveraddr, sizeof(serveraddr));
-	serveraddr.sin_family = AF_INET;
-
-	/* FIXME: take address from user */
-	serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serveraddr.sin_port = htons(cap->port);
-
-	if (bind(cap->sockfd, (struct sockaddr *)&serveraddr,
-		sizeof(serveraddr)) < 0) {
-
-		LOG("bind() failed: %s", strerror(errno));
-		goto fail_bind;
-	}
-
-	thread_err = pthread_create(&cap->tid, NULL, &scapture_thread, params);
-
-	if (thread_err) {
-		LOG("Can't start thread: %s", strerror(thread_err));
-		goto fail_thread;
-	}
-
-	return 1;
-
-/* errors */
-fail_thread:
-fail_bind:
-fail_setsockopt:
-	close(cap->sockfd);
-fail_socket:
-	free(params);
-fail_alloc:
-	return 0;
-}
-
-static struct xe_data *globl;
-
-static void
-on_ctrl_c(int s)
-{
-	if (s != SIGINT) {
-		return;
-	}
-
-	/* TODO: correct shutdown */
-	exit(0);
-}
-
-static void
-on_hup(int s)
-{
-	(void)s;
-	/* notify geoip thread */
-	atomic_store_explicit(&globl->reload_geoip, 1, memory_order_relaxed);
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -446,6 +366,7 @@ main(int argc, char *argv[])
 	size_t i;
 	struct sigaction sig_int, sig_chld, sig_hup;
 	int thread_err;
+	size_t thread_idx;
 
 
 	while ((opt = getopt(argc, argv, "c:h")) != -1) {
@@ -532,6 +453,8 @@ main(int argc, char *argv[])
 	LOG("Allow templates in future: %s",
 		data.allow_templates_in_future ? "yes": "no");
 
+	globl = &data;
+
 #ifdef FLOWS_CNT
 	{
 		thread_err = pthread_create(&data.fc_tid, NULL,
@@ -564,20 +487,6 @@ main(int argc, char *argv[])
 	netflow_process_init();
 	flow_debug_init();
 
-	for (i=0; i<data.ncap; i++) {
-		if (data.cap[i].type == XENOEYE_CAPTURE_TYPE_PCAP) {
-			if (!pcapture_start(&data, i)) {
-				return EXIT_FAILURE;
-			}
-		} else if (data.cap[i].type == XENOEYE_CAPTURE_TYPE_SOCKET) {
-			if (!scapture_start(&data, i)) {
-				return EXIT_FAILURE;
-			}
-		}
-	}
-
-
-	globl = &data;
 
 	sig_int.sa_handler = &on_ctrl_c;
 	sigemptyset(&sig_int.sa_mask);
@@ -592,12 +501,59 @@ main(int argc, char *argv[])
 
 	/* childs */
 	sig_chld.sa_handler = SIG_DFL;
+	sigemptyset(&sig_chld.sa_mask);
 	sig_chld.sa_flags = SA_NOCLDWAIT;
 	sigaction(SIGCHLD, &sig_chld, NULL);
 
+	/* netflow threads */
+	thread_idx = 0;
+	for (i=0; i<data.nnfcap; i++) {
+		struct capture *cap = &data.nfcap[i];
+
+		if (cap->type == XENOEYE_CAPTURE_TYPE_PCAP) {
+			if (!pcapture_start(&data, cap, thread_idx,
+				FLOW_TYPE_NETFLOW)) {
+
+				return EXIT_FAILURE;
+			}
+		} else if (cap->type == XENOEYE_CAPTURE_TYPE_SOCKET) {
+			if (!scapture_start(&data, cap, thread_idx,
+				FLOW_TYPE_NETFLOW)) {
+
+				return EXIT_FAILURE;
+			}
+		}
+
+		thread_idx++;
+	}
+
+	/* sflow threads */
+	for (i=0; i<data.nsfcap; i++) {
+		struct capture *cap = &data.sfcap[i];
+
+		if (cap->type == XENOEYE_CAPTURE_TYPE_PCAP) {
+			if (!pcapture_start(&data, cap, thread_idx,
+				FLOW_TYPE_SFLOW)) {
+
+				return EXIT_FAILURE;
+			}
+		} else if (cap->type == XENOEYE_CAPTURE_TYPE_SOCKET) {
+			if (!scapture_start(&data, cap, thread_idx,
+				FLOW_TYPE_SFLOW)) {
+
+				return EXIT_FAILURE;
+			}
+		}
+
+		thread_idx++;
+	}
+
 	/* FIXME: correct shutdown */
-	for (i=0; i<data.ncap; i++) {
-		pthread_join(data.cap[i].tid, NULL);
+	for (i=0; i<data.nnfcap; i++) {
+		pthread_join(data.nfcap[i].tid, NULL);
+	}
+	for (i=0; i<data.nsfcap; i++) {
+		pthread_join(data.sfcap[i].tid, NULL);
 	}
 
 	netflow_templates_shutdown();

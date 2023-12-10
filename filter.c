@@ -7,6 +7,7 @@
 #include "filter.h"
 #include "netflow.h"
 #include "utils.h"
+#include "flow-info.h"
 #include "geoip.h"
 
 void
@@ -273,7 +274,7 @@ filter_basic_match_single_addr4(int direction, struct filter_basic_data *fbd,
 }
 
 static int
-filter_basic_match_addr4(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_basic_match_addr4(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	uint32_t *addr4 = NULL;
@@ -382,7 +383,7 @@ filter_basic_match_single_addr6(int direction, struct filter_basic_data *fbd,
 
 
 static int
-filter_basic_match_addr6(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_basic_match_addr6(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	xe_ip *addr6 = NULL;
@@ -433,7 +434,7 @@ filter_basic_match_addr6(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
-filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_basic_match_range(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	int r1, r2;
@@ -509,7 +510,7 @@ filter_basic_match_range(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
-filter_basic_match_string(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_basic_match_string(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	size_t len1, len2;
@@ -560,7 +561,7 @@ filter_basic_match_string(struct filter_basic *fb, struct nf_flow_info *flow)
 
 /* functions */
 static int
-filter_function_div(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_function_div(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	struct function_div *div = fb->func_data.div;
@@ -586,7 +587,7 @@ filter_function_div(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
-filter_function_min(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_function_min(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	struct function_min *min = fb->func_data.min;
@@ -612,7 +613,7 @@ filter_function_min(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
-filter_function_mfreq(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_function_mfreq(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	struct function_mfreq *mfreq = fb->func_data.mfreq;
@@ -654,7 +655,7 @@ filter_function_mfreq(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
-filter_function_geoip(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_function_geoip(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	struct function_geoip *geoip = fb->func_data.geoip;
@@ -690,7 +691,7 @@ filter_function_geoip(struct filter_basic *fb, struct nf_flow_info *flow)
 }
 
 static int
-filter_function_as(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_function_as(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	struct function_as *as = fb->func_data.as;
@@ -738,7 +739,7 @@ filter_function_as(struct filter_basic *fb, struct nf_flow_info *flow)
 
 
 static int
-filter_basic_match(struct filter_basic *fb, struct nf_flow_info *flow)
+filter_basic_match(struct filter_basic *fb, struct flow_info *flow)
 {
 	int ret = 0;
 
@@ -783,7 +784,7 @@ FOR_LIST_OF_GEOIP_FIELDS
 }
 
 int
-filter_match(struct filter_expr *expr, struct nf_flow_info *flow)
+filter_match(struct filter_expr *expr, struct flow_info *flow)
 {
 	size_t i;
 	int ret;

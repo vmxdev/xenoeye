@@ -28,6 +28,7 @@
 #include "monit-objects.h"
 #include "monit-objects-common.h"
 #include "netflow.h"
+#include "flow-info.h"
 
 #define TMP_STR_LEN 1024
 
@@ -832,7 +833,7 @@ classification_bg_thread(void *arg)
 
 static int
 classification_process_nf_class(struct monit_object *mo, size_t thread_id,
-	struct nf_flow_info *flow, uint8_t *flow_class, int class_id)
+	struct flow_info *flow, uint8_t *flow_class, int class_id)
 {
 	size_t i;
 	struct mo_classification *clsf = &mo->classifications[class_id];
@@ -920,7 +921,7 @@ classification_process_nf_class(struct monit_object *mo, size_t thread_id,
 
 int
 classification_process_nf(struct monit_object *mo, size_t thread_id,
-	struct nf_flow_info *flow)
+	struct flow_info *flow)
 {
 	int i;
 

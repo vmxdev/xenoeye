@@ -9,7 +9,7 @@
 
 #define ERR_MSG_LEN     1024
 
-struct nf_flow_info;
+struct flow_info;
 
 
 struct ip_addr_and_mask_4
@@ -142,7 +142,7 @@ FOR_LIST_OF_GEOIP_FIELDS
 
 struct function_div
 {
-	/* offsets and sizes in struct nf_flow_info */
+	/* offsets and sizes in struct flow_info */
 	unsigned int dividend_off;
 	unsigned int dividend_size;
 
@@ -155,7 +155,7 @@ struct function_div
 
 struct function_min
 {
-	/* offsets and sizes in struct nf_flow_info */
+	/* offsets and sizes in struct flow_info */
 	unsigned int arg1_off;
 	unsigned int arg1_size;
 
@@ -165,7 +165,7 @@ struct function_min
 
 struct function_mfreq
 {
-	/* offsets and sizes in struct nf_flow_info */
+	/* offsets and sizes in struct flow_info */
 	unsigned int arg1_off;
 	unsigned int arg1_size;
 
@@ -177,7 +177,7 @@ struct function_mfreq
 
 struct function_geoip
 {
-	/* offset and size in struct nf_flow_info */
+	/* offset and size in struct flow_info */
 	unsigned int ip_off;
 	unsigned int ip_size;
 	int *has_ip;
@@ -187,7 +187,7 @@ struct function_geoip
 
 struct function_as
 {
-	/* offset and size in struct nf_flow_info */
+	/* offset and size in struct flow_info */
 	unsigned int ip_off;
 	unsigned int ip_size;
 	int *has_ip;
@@ -286,7 +286,7 @@ int filter_add_to_basic_filter(struct filter_input *f,
 
 int filter_add_op(struct filter_expr *e, enum FILTER_OP op);
 
-int filter_match(struct filter_expr *expr, struct nf_flow_info *flow);
+int filter_match(struct filter_expr *expr, struct flow_info *flow);
 
 void filter_dump(struct filter_expr *e, FILE *f);
 void filter_free(struct filter_expr *e);

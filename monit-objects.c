@@ -35,6 +35,7 @@
 
 #include "monit-objects.h"
 #include "monit-objects-common.h"
+#include "flow-info.h"
 #include "geoip.h"
 
 #define STR_MAX_LEN 512
@@ -453,7 +454,7 @@ monit_object_field_print(struct field *fld, FILE *f, uint8_t *data,
 
 
 static void
-monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
+monit_object_func_div(struct field *fld, struct flow_info *flow,
 	uint8_t *key)
 {
 	uint64_t quotient, dividend, divisor;
@@ -477,7 +478,7 @@ monit_object_func_div(struct field *fld, struct nf_flow_info *flow,
 }
 
 static void
-monit_object_func_min(struct field *fld, struct nf_flow_info *flow,
+monit_object_func_min(struct field *fld, struct flow_info *flow,
 	uint8_t *key)
 {
 	uint64_t arg1, arg2, res;
@@ -493,7 +494,7 @@ monit_object_func_min(struct field *fld, struct nf_flow_info *flow,
 }
 
 static void
-monit_object_func_mfreq(struct field *fld, struct nf_flow_info *flow,
+monit_object_func_mfreq(struct field *fld, struct flow_info *flow,
 	uint8_t *key)
 {
 	uint16_t arg1, arg2;
@@ -524,7 +525,7 @@ monit_object_func_mfreq(struct field *fld, struct nf_flow_info *flow,
 }
 
 static void
-monit_object_func_geoip(struct field *fld, struct nf_flow_info *flow,
+monit_object_func_geoip(struct field *fld, struct flow_info *flow,
 	uint8_t *key)
 {
 	struct function_geoip *geoip = &fld->func_data.geoip;
@@ -557,7 +558,7 @@ monit_object_func_geoip(struct field *fld, struct nf_flow_info *flow,
 }
 
 static void
-monit_object_func_as(struct field *fld, struct nf_flow_info *flow,
+monit_object_func_as(struct field *fld, struct flow_info *flow,
 	uint8_t *key)
 {
 	struct function_as *as = &fld->func_data.as;
@@ -604,7 +605,7 @@ monit_object_func_as(struct field *fld, struct nf_flow_info *flow,
 
 void
 monit_object_key_add_fld(struct field *fld, uint8_t *key,
-	struct nf_flow_info *flow)
+	struct flow_info *flow)
 {
 	if (fld->is_func) {
 		switch (fld->id) {
@@ -640,7 +641,7 @@ FOR_LIST_OF_GEOIP_FIELDS
 
 int
 monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
-	size_t thread_id, uint64_t time_ns, struct nf_flow_info *flow)
+	size_t thread_id, uint64_t time_ns, struct flow_info *flow)
 {
 	size_t i, j, f;
 

@@ -7,8 +7,6 @@
 
 #include "xenoeye.h"
 
-#define MAX_NF_PACKET_SIZE (64*1024)
-
 #define MAX_FLOWS_PER_PACKET 100
 
 #define MAX_FIELDS_PER_FLOW 100
@@ -150,42 +148,11 @@ struct ipfix_flowset_header
 	uint16_t length;
 } __attribute__ ((__packed__));
 
-
-struct nf_flow_info
-{
-#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX) \
-	uint8_t NAME[SIZEMAX];                              \
-	int NAME##_size;                                    \
-	int has_##NAME;
-#include "netflow.def"
-	/* virtual fields for export devices */
-	uint8_t dev_ip[4];
-	int dev_ip_size;
-	int has_dev_ip;
-
-	uint8_t dev_id[4];
-	int dev_id_size;
-	int has_dev_id;
-
-	uint32_t sampling_rate;
-};
-
-struct nf_packet_info
-{
-	struct sockaddr src_addr;
-	uint32_t src_addr_ipv4;
-
-	uint32_t source_id;
-	uint32_t epoch;
-	uint64_t time_ns; /* nanoseconds */
-	uint8_t rawpacket[MAX_NF_PACKET_SIZE];
-
-	int sampling_rate;
-};
+struct flow_packet_info;
 
 void netflow_process_init(void);
 int netflow_process(struct xe_data *data, size_t thread_id,
-	struct nf_packet_info *npi, int len);
+	struct flow_packet_info *npi, int len);
 
 
 #endif

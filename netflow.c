@@ -38,16 +38,17 @@
 #include "filter.h"
 #include "flow-debug.h"
 #include "devices.h"
+#include "flow-info.h"
 
 
-typedef void (*flow_parse_func_t)(struct nf_flow_info *, int, uint8_t *);
+typedef void (*flow_parse_func_t)(struct flow_info *, int, uint8_t *);
 
 static flow_parse_func_t flow_parse_functions[UINT16_MAX];
 
 /* construct template key, used as key in persistent k-v templates storage */
 static void
 make_template_key(struct template_key *tkey, uint16_t template_id,
-	struct nf_packet_info *npi, uint8_t version)
+	struct flow_packet_info *npi, uint8_t version)
 {
 	xe_ip addr;
 	/* currently we support only IPv4 */
@@ -67,7 +68,7 @@ make_template_key(struct template_key *tkey, uint16_t template_id,
 /* make a separate function for each known field */
 #define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
 static void                                                                   \
-flow_parse_##FLDID(struct nf_flow_info *flow, int flength, uint8_t *fptr)     \
+flow_parse_##FLDID(struct flow_info *flow, int flength, uint8_t *fptr)        \
 {                                                                             \
 	if ((flength < SIZEMIN) || (flength > SIZEMAX)) {                     \
 		LOG("Incorrect '" #NAME                                       \
@@ -88,7 +89,7 @@ flow_parse_##FLDID(struct nf_flow_info *flow, int flength, uint8_t *fptr)     \
 
 /* function for unknown field */
 static void
-flow_parse_unknown(struct nf_flow_info *flow, int flength, uint8_t *fptr)
+flow_parse_unknown(struct flow_info *flow, int flength, uint8_t *fptr)
 {
 	(void)flow;
 	(void)flength;
@@ -99,7 +100,7 @@ flow_parse_unknown(struct nf_flow_info *flow, int flength, uint8_t *fptr)
 
 
 static void
-virtual_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
+virtual_fields_init(struct flow_info *flow, struct flow_packet_info *npi)
 {
 	memcpy(&flow->dev_ip[0], &npi->src_addr_ipv4, sizeof(uint32_t));
 	flow->dev_ip_size = sizeof(uint32_t);
@@ -113,7 +114,7 @@ virtual_fields_init(struct nf_flow_info *flow, struct nf_packet_info *npi)
 }
 
 static void
-sampling_rate_init(struct nf_packet_info *npi)
+sampling_rate_init(struct flow_packet_info *npi)
 {
 	struct device dev;
 
@@ -133,7 +134,7 @@ sampling_rate_init(struct nf_packet_info *npi)
 }
 
 static int
-parse_netflow_v9_template(struct xe_data *data, struct nf_packet_info *npi,
+parse_netflow_v9_template(struct xe_data *data, struct flow_packet_info *npi,
 	uint8_t **ptr, int length)
 {
 	struct nf9_template_item *tmplitem, *ptmpl;
@@ -200,7 +201,7 @@ print_netflow_v9_flowset(struct nf9_template_item *tmpl,
 
 static int
 parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id, 
-	struct nf_packet_info *npi, uint8_t **ptr,
+	struct flow_packet_info *npi, uint8_t **ptr,
 	int flowset_id, int length, int count)
 {
 	uint8_t *fptr;
@@ -222,10 +223,10 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 
 	fptr = (*ptr);
 	for (cnt=0; cnt<count; cnt++) {
-		struct nf_flow_info flow;
+		struct flow_info flow;
 		uint8_t *tmpfptr;
 
-		memset(&flow, 0, sizeof(struct nf_flow_info));
+		memset(&flow, 0, sizeof(struct flow_info));
 		tmpfptr = fptr;
 
 		for (i=0; i<template_field_count; i++) {
@@ -287,7 +288,7 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 
 static int
 parse_netflow_v9(struct xe_data *data, size_t thread_id,
-	struct nf_packet_info *npi, int len)
+	struct flow_packet_info *npi, int len)
 {
 	struct nf9_header *header;
 	int flowset_id, flowset_id_host, length, count;
@@ -370,7 +371,7 @@ ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 }
 
 static int
-parse_ipfix_template(struct xe_data *data, struct nf_packet_info *npi,
+parse_ipfix_template(struct xe_data *data, struct flow_packet_info *npi,
 	uint8_t **ptr, int length)
 {
 	struct ipfix_template_header *tmpl_header;
@@ -439,7 +440,7 @@ print_ipfix_flowset(struct ipfix_stored_template *tmpl,
 
 static int
 parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
-	struct nf_packet_info *npi, uint8_t **ptr, int flowset_id, int length)
+	struct flow_packet_info *npi, uint8_t **ptr, int flowset_id, int length)
 {
 	uint8_t *fptr;
 	int i;
@@ -461,14 +462,14 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 
 	fptr = (*ptr);
 	while (!stop) {
-		struct nf_flow_info flow;
+		struct flow_info flow;
 		uint8_t *tmpfptr;
 
 		if ((length - (fptr - (*ptr))) < template_field_count) {
 			break;
 		}
 
-		memset(&flow, 0, sizeof(struct nf_flow_info));
+		memset(&flow, 0, sizeof(struct flow_info));
 		tmpfptr = fptr;
 
 		for (i=0; i<template_field_count; i++) {
@@ -532,7 +533,7 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 
 static int
 parse_ipfix(struct xe_data *data, size_t thread_id,
-	struct nf_packet_info *npi, int len)
+	struct flow_packet_info *npi, int len)
 {
 	struct ipfix_header *header;
 	int flowset_id, flowset_id_host, length;
@@ -583,7 +584,7 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 }
 
 static void
-print_netflow_v5_flowset(struct nf_flow_info *flow, char *debug_flow_str)
+print_netflow_v5_flowset(struct flow_info *flow, char *debug_flow_str)
 {
 	debug_flow_str[0] = '\0';
 
@@ -600,7 +601,7 @@ NF5_FIELDS
 
 static int
 parse_netflow_v5(struct xe_data *data, size_t thread_id,
-	struct nf_packet_info *npi, int length)
+	struct flow_packet_info *npi, int length)
 {
 	int i;
 	struct nf5_packet *pkt = (struct nf5_packet *)npi->rawpacket;
@@ -619,10 +620,10 @@ parse_netflow_v5(struct xe_data *data, size_t thread_id,
 	sampling_rate_init(npi);
 
 	for (i=0; i<nflows; i++) {
-		struct nf_flow_info flow;
+		struct flow_info flow;
 		size_t t_id;
 
-		memset(&flow, 0, sizeof(struct nf_flow_info));
+		memset(&flow, 0, sizeof(struct flow_info));
 
 		/* parse flow */
 #define FIELD(USE, TYPE, V5, V9, ID)                                      \
@@ -675,7 +676,7 @@ NF5_FIELDS
 
 int
 netflow_process(struct xe_data *data, size_t thread_id,
-	struct nf_packet_info *npi, int len)
+	struct flow_packet_info *npi, int len)
 {
 	uint16_t *version_ptr;
 	int version;

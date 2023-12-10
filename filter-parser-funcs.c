@@ -19,6 +19,7 @@
 
 #include "filter.h"
 #include "netflow.h"
+#include "flow-info.h"
 
 static int
 nf_field_to_off(const char *name, unsigned int *off, unsigned int *size)
@@ -26,7 +27,7 @@ nf_field_to_off(const char *name, unsigned int *off, unsigned int *size)
 	if (0) {
 #define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)           \
 	} else if (strcmp(#NAME, name) == 0) {                        \
-		*off = offsetof(struct nf_flow_info, NAME);           \
+		*off = offsetof(struct flow_info, NAME);              \
 		*size = SIZEMAX;                                      \
 		return 1;
 #include "netflow.def"

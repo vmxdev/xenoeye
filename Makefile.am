@@ -1,14 +1,16 @@
 AM_CPPFLAGS = -I$(srcdir)/tkvdb
 
-bin_PROGRAMS = xenoeye xemkgeodb xegeoq
+bin_PROGRAMS = xenoeye xemkgeodb xegeoq xesflow
 xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	utils.h netflow.h netflow.c \
 	netflow-templates.c netflow-templates.h \
+	sflow.c sflow.h \
 	tkvdb/tkvdb.c tkvdb/tkvdb.h \
 	aajson/aajson.h \
 	filter.c filter.h filter-lexer.c filter-parser.c \
 	filter-parser-funcs.c \
-	pcapture.c monit-objects.c monit-objects.h \
+	pcapture.c scapture.c \
+	monit-objects.c monit-objects.h \
 	monit-objects-fwm.c monit-objects-mavg.c \
 	monit-objects-mavg-act.c monit-objects-mavg-dump.c \
 	classification.c \
@@ -21,6 +23,8 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 xemkgeodb_SOURCES = xemkgeodb.c geoip.h ip-btrie.h
 
 xegeoq_SOURCES = xegeoq.c geoip.h ip-btrie.h
+
+xesflow_SOURCES = xesflow.c rawparse.h sflow.h sflow-impl.h
 
 
 # checks

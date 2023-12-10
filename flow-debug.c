@@ -21,6 +21,7 @@
 #include "utils.h"
 
 #include "flow-debug.h"
+#include "flow-info.h"
 
 typedef void (*flow_fldprnt_func_t)(char *str, int flength, uint8_t *fptr);
 static flow_fldprnt_func_t flow_fldprnt_functions[UINT16_MAX];
@@ -99,7 +100,7 @@ flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 }
 
 void
-flow_print_str(struct xe_debug *debug, struct nf_flow_info *fi, char *flow_str)
+flow_print_str(struct xe_debug *debug, struct flow_info *fi, char *flow_str)
 {
 	char devinfo[128];
 	char classinfo[16 + CLASS_NAME_MAX];
@@ -129,6 +130,57 @@ FOR_LIST_OF_CLASSES
 	} else {
 		fprintf(debug->fout, "%s\n", flow_str);
 	}
+}
+
+void
+sflow_debug_print(struct flow_info *flow, char *resstr)
+{
+	char str[128];
+	uint8_t *fptr;
+	resstr[0] = '\0';
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+	fptr = flow->NAME;                                                    \
+	if (flow->has_##NAME) {                                               \
+		if (flow->NAME##_size == 1) {                                 \
+			sprintf(str, "%s: %u", DESC, *fptr);                  \
+		} else if (flow->NAME##_size == 2) {                          \
+			sprintf(str, "%s: %u", DESC,                          \
+				be16toh(*((uint16_t *)fptr)));                \
+		} else if (flow->NAME##_size == 4) {                          \
+			if (FLDTYPE == NF_FIELD_IP_ADDR) {                    \
+				sprintf(str, "%s: %u.%u.%u.%u", DESC,         \
+					*(fptr + 0), *(fptr + 1),             \
+					*(fptr + 2), *(fptr + 3));            \
+			} else {                                              \
+				sprintf(str, "%s: %u", DESC,                  \
+					be32toh(*((uint32_t *)fptr)));        \
+			}                                                     \
+		} else if ((flow->NAME##_size == 8)                           \
+			&& (FLDTYPE == NF_FIELD_INT)) {                       \
+			sprintf(str, "%s: %lu", DESC,                         \
+				be64toh(*((uint64_t *)fptr)));                \
+		} else if ((flow->NAME##_size == 16)                          \
+			&& (FLDTYPE == NF_FIELD_IP_ADDR)) {                   \
+			/* FIXME: hmm */                                      \
+			sprintf(str,                                          \
+				"%s: %02x%02x:%02x%02x:%02x%02x:%02x%02x:"    \
+				"%02x%02x:%02x%02x:%02x%02x:%02x%02x", DESC,  \
+				*(fptr + 0), *(fptr + 1),                     \
+				*(fptr + 2), *(fptr + 3),                     \
+				*(fptr + 4), *(fptr + 5),                     \
+				*(fptr + 6), *(fptr + 7),                     \
+				*(fptr + 8), *(fptr + 9),                     \
+				*(fptr + 10), *(fptr + 11),                   \
+				*(fptr + 12), *(fptr + 13),                   \
+				*(fptr + 14), *(fptr + 15));                  \
+		} else {                                                      \
+			flow_field_print_bytes(str, flow->NAME##_size,        \
+				DESC, fptr);                                  \
+		}                                                             \
+		if (resstr[0]) strcat(resstr, "; ");                          \
+		strcat(resstr, str);                                          \
+	}
+#include "netflow.def"
 }
 
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)

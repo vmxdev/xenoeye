@@ -12,13 +12,19 @@
 
 /*#define FLOWS_CNT*/
 
-struct nf_flow_info;
+struct flow_info;
 struct filter_expr;
 
 enum XENOEYE_CAPTURE_TYPE
 {
 	XENOEYE_CAPTURE_TYPE_SOCKET,
 	XENOEYE_CAPTURE_TYPE_PCAP
+};
+
+enum FLOW_TYPE
+{
+	FLOW_TYPE_NETFLOW,
+	FLOW_TYPE_SFLOW
 };
 
 struct capture
@@ -43,8 +49,11 @@ struct xe_data
 	size_t nmonit_objects;
 	struct monit_object *monit_objects;
 
-	struct capture *cap;
-	size_t ncap;
+	struct capture *nfcap;
+	size_t nnfcap;
+
+	struct capture *sfcap;
+	size_t nsfcap;
 
 	/* numer of threads, nthreads == ncap */
 	size_t nthreads;
@@ -103,14 +112,20 @@ struct xe_data
 #endif
 };
 
+
 /* helper struct for passing data to capture threads */
 struct capture_thread_params
 {
 	struct xe_data *data;
-	size_t idx; /* thread index */
+	struct capture *cap;
+	size_t thread_idx;     /* thread index */
+	enum FLOW_TYPE type;
 };
 
-int pcapture_start(struct xe_data *data, size_t idx);
+int scapture_start(struct xe_data *data, struct capture *cap,
+	size_t thread_idx, enum FLOW_TYPE type);
+int pcapture_start(struct xe_data *data, struct capture *cap,
+	size_t thread_idx, enum FLOW_TYPE type);
 
 #endif
 

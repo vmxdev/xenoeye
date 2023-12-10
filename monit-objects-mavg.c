@@ -28,6 +28,7 @@
 #include "netflow.h"
 #include "monit-objects.h"
 #include "monit-objects-common.h"
+#include "flow-info.h"
 
 #define MAVG_VAL(DATUM, I, SIZE) ((struct mavg_val *)&DATUM[SIZE * I])
 
@@ -621,7 +622,7 @@ mavg_recalc(_Atomic MAVG_TYPE *oldval_p, _Atomic uint64_t *old_time_ns_p,
 
 
 static void
-mavg_val_init(struct mo_mavg *mavg, struct nf_flow_info *flow,
+mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 	uint64_t time_ns, struct mavg_data *data, MAVG_TYPE *vals)
 {
 	size_t i, j;
@@ -780,7 +781,7 @@ newdb_fail:
 
 int
 monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
-	size_t thread_id, uint64_t time_ns, struct nf_flow_info *flow)
+	size_t thread_id, uint64_t time_ns, struct flow_info *flow)
 {
 	size_t i, f, t;
 

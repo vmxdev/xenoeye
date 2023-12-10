@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2023, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,6 +33,8 @@
 #include "utils.h"
 #include "xenoeye.h"
 #include "netflow.h"
+#include "sflow.h"
+#include "flow-info.h"
 
 
 #define SIZE_UDP        8               /* length of UDP header */
@@ -109,7 +111,7 @@ struct sniff_udp
 
 
 static void
-pcap_packet(struct xe_data* data, size_t thread_id,
+pcap_packet(struct capture_thread_params *params,
 	struct pcap_pkthdr *header, const unsigned char *packet)
 {
 	/*const struct sniff_ethernet *ethernet;*/  /* The ethernet header [1] */
@@ -117,7 +119,7 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 	const struct sniff_udp *udp;            /* The UDP header */
 	const unsigned char *payload;           /* Packet payload */
 
-	struct nf_packet_info nfpkt;            /* netflow packet */
+	struct flow_packet_info pkt;          /* flow packet */
 
 	int size_ip;
 	int size_payload;
@@ -133,7 +135,7 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 	}
 	size_ip = IP_HL(ip)*4;
 	if (size_ip < 20) {
-		LOG("Invalid IP header length: %u bytes", size_ip);
+		/*LOG("Invalid IP header length: %u bytes", size_ip);*/
 		return;
 	}
 
@@ -149,7 +151,7 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 	/* define/compute udp header offset */
 	udp = (struct sniff_udp*)(packet + SIZE_ETHERNET + size_ip);
 
-	nfpkt.src_addr_ipv4 = ip->ip_src.s_addr;
+	pkt.src_addr_ipv4 = ip->ip_src.s_addr;
 
 	/* define/compute udp payload (segment) offset */
 	payload = (u_char *)(packet + SIZE_ETHERNET + size_ip + SIZE_UDP);
@@ -160,10 +162,17 @@ pcap_packet(struct xe_data* data, size_t thread_id,
 		size_payload = ntohs(udp->uh_ulen);
 	}
 
-	memcpy(nfpkt.rawpacket, payload, size_payload);
-	if (netflow_process(data, thread_id, &nfpkt, size_payload)) {
-		/* ok */
-		/*data->packets_processed++;*/
+	memcpy(pkt.rawpacket, payload, size_payload);
+	if (params->type == FLOW_TYPE_NETFLOW) {
+		if (netflow_process(params->data, params->thread_idx, &pkt,
+			size_payload)) {
+			/* ok */
+			/*data->packets_processed++;*/
+		}
+	} else {
+		/* sflow */
+		sflow_process(params->data, params->thread_idx, &pkt,
+			size_payload);
 	}
 }
 
@@ -172,7 +181,6 @@ pcapture_thread(void *arg)
 {
 	struct capture_thread_params params, *params_ptr;
 
-	struct capture *cap;
 	struct pcap_pkthdr *header;
 	const unsigned char *packet;
 	int rc;
@@ -181,18 +189,16 @@ pcapture_thread(void *arg)
 	params = *params_ptr;
 	free(params_ptr);
 
-	cap = &params.data->cap[params.idx];
-
 	LOG("Starting collector thread on interface '%s', filter '%s'",
-		cap->iface, cap->filter);
+		params.cap->iface, params.cap->filter);
 
 	for (;;) {
-		rc = pcap_next_ex(cap->pcap_handle, &header, &packet);
+		rc = pcap_next_ex(params.cap->pcap_handle, &header, &packet);
 		if (rc >= 0) {
-			pcap_packet(params.data, params.idx, header, packet);
+			pcap_packet(&params, header, packet);
 		} else {
 			LOG("Error reading the packets: %s",
-				pcap_geterr(cap->pcap_handle));
+				pcap_geterr(params.cap->pcap_handle));
 		}
 	}
 
@@ -200,13 +206,12 @@ pcapture_thread(void *arg)
 }
 
 int
-pcapture_start(struct xe_data *data, size_t idx)
+pcapture_start(struct xe_data *data, struct capture *cap, size_t thread_idx,
+	enum FLOW_TYPE type)
 {
 	struct capture_thread_params *params;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct bpf_program fp;
-	struct capture *cap = &data->cap[idx];
-
 	int thread_err;
 
 	params = malloc(sizeof(struct capture_thread_params));
@@ -215,7 +220,9 @@ pcapture_start(struct xe_data *data, size_t idx)
 		goto fail_alloc;
 	}
 	params->data = data;
-	params->idx = idx;
+	params->thread_idx = thread_idx;
+	params->cap = cap;
+	params->type = type;
 
 	cap->pcap_handle = pcap_open_live(cap->iface, BUFSIZ, 1, 1000, errbuf);
 	if (cap->pcap_handle == NULL) {

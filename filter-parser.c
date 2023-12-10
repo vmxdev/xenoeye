@@ -6,6 +6,7 @@
 
 #include "filter.h"
 #include "netflow.h"
+#include "flow-info.h"
 
 
 #define READ_TOKEN_CHECK(I)      \
@@ -240,13 +241,13 @@ parse_filter(struct filter_input *f)
 }
 
 static int
-field_map_nf_flow_info(struct field *fld, const char *name)
+field_map_flow_info(struct field *fld, const char *name)
 {
 	if (0) {
 
 #define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
 	} else if (strcmp(#NAME, name) == 0) {                                \
-		fld->nf_offset = offsetof(struct nf_flow_info, NAME);         \
+		fld->nf_offset = offsetof(struct flow_info, NAME);            \
 		fld->size = SIZEMAX;                                          \
 		return 1;
 #include "netflow.def"
@@ -271,11 +272,11 @@ field_without_direction(struct filter_input *in, struct field *fld, char *err,
 				sprintf(err, "This field requires direction");\
 				return 0;                                     \
 			}                                                     \
-			return field_map_nf_flow_info(fld, #SRC);             \
+			return field_map_flow_info(fld, #SRC);                \
 		} else if (dir == FILTER_BASIC_DIR_SRC) {                     \
-			return field_map_nf_flow_info(fld, #SRC);             \
+			return field_map_flow_info(fld, #SRC);                \
 		} else {                                                      \
-			return field_map_nf_flow_info(fld, #DST);             \
+			return field_map_flow_info(fld, #DST);                \
 		}                                                             \
 		return 1;
 #include "filter.def"
@@ -340,7 +341,7 @@ do {                                                                          \
 		FLD->id = NAME;                                               \
 		FLD->type = FILTER_BASIC_RANGE;                               \
 		FLD->size = sizeof(uint64_t);                                 \
-		FLD->nf_offset = offsetof(struct nf_flow_info, NF_FIELD);     \
+		FLD->nf_offset = offsetof(struct flow_info, NF_FIELD);        \
 		FLD->aggr = 1;                                                \
 		FLD->scale = SCALE;                                           \
 		return 1;                                                     \
