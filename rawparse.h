@@ -9,41 +9,6 @@
 #include <netinet/tcp.h>
 #include <netinet/ip_icmp.h>
 
-#ifndef USER_TYPE
-#define USER_TYPE void *
-#endif
-
-#ifndef ON_VLAN1
-#define ON_VLAN1(D, V)
-#endif
-
-#ifndef ON_VLAN2
-#define ON_VLAN2(D, V)
-#endif
-
-#ifndef ON_IP
-#define ON_IP(D, I)
-#endif
-
-#ifndef ON_IP6
-#define ON_IP6(D, I)
-#endif
-
-#ifndef ON_UDP
-#define ON_UDP(D, U)
-#endif
-
-#ifndef ON_TCP
-#define ON_TCP(D, T)
-#endif
-
-#ifndef ON_ICMP
-#define ON_ICMP(D, I)
-#endif
-
-#define	IP_MF 0x2000
-#define IP_OFFSET       0x1FFF
-
 struct vlan_hdr
 {
 	__be16  h_vlan_TCI;
@@ -60,10 +25,63 @@ enum RP_PARSER_STATE
 	RP_PARSER_STATE_OK
 };
 
+#define	IP_MF 0x2000
+#define IP_OFFSET       0x1FFF
+
+/* no global include guards */
+#endif
+
+#ifndef USER_TYPE
+#define USER_TYPE void *
+#endif
+
+#ifndef ON_ETH
+#define ON_ETH(D, E)
+#endif
+
+#ifndef ON_VLAN1
+#define ON_VLAN1(D, V)
+#endif
+
+#ifndef ON_VLAN2
+#define ON_VLAN2(D, V)
+#endif
+
+#ifndef ON_HPROTO
+#define ON_HPROTO(D, P)
+#endif
+
+#ifndef ON_IP
+#define ON_IP(D, I)
+#endif
+
+#ifndef ON_FRAG
+#define ON_FRAG(D)
+#endif
+
+#ifndef ON_IP6
+#define ON_IP6(D, I)
+#endif
+
+#ifndef ON_UDP
+#define ON_UDP(D, U) (void)U
+#endif
+
+#ifndef ON_TCP
+#define ON_TCP(D, T) (void)T
+#endif
+
+#ifndef ON_ICMP
+#define ON_ICMP(D, I) (void)I
+#endif
+
+#ifndef ON_PAYLOAD
+#define ON_PAYLOAD(D, P)
+#endif
+
 static inline enum RP_PARSER_STATE
-rawpacket_parse(uint8_t *ptr, uint32_t len, USER_TYPE data)
+rawpacket_parse(uint8_t *ptr, uint8_t *end, USER_TYPE data)
 {
-	uint8_t *end = ptr + len;
 	uint16_t h_proto;
 	struct ethhdr *eth;
 	struct udphdr *udp;
@@ -75,6 +93,8 @@ rawpacket_parse(uint8_t *ptr, uint32_t len, USER_TYPE data)
 	}
 	eth = (struct ethhdr *)ptr;
 	ptr += sizeof(struct ethhdr);
+
+	ON_ETH(data, eth);
 
 	h_proto = eth->h_proto;
 
@@ -105,6 +125,8 @@ rawpacket_parse(uint8_t *ptr, uint32_t len, USER_TYPE data)
 		h_proto = vhdr->h_vlan_encapsulated_proto;
 	}
 
+	ON_HPROTO(data, h_proto);
+
 	if (h_proto == htons(ETH_P_IP)) {
 		uint64_t ihl_len;
 		struct iphdr *iph;
@@ -117,6 +139,7 @@ rawpacket_parse(uint8_t *ptr, uint32_t len, USER_TYPE data)
 		/* is fragment? */
 		if ((iph->frag_off & htons(IP_MF | IP_OFFSET)) != 0) {
 			ON_IP(data, iph);
+			ON_FRAG(data);
 			return RP_PARSER_STATE_NO_IP_PROTO;
 		}
 
@@ -179,6 +202,8 @@ rawpacket_parse(uint8_t *ptr, uint32_t len, USER_TYPE data)
 			ihl_len += sizeof(struct ip6_hdr);
 			//nexthdr = ip6h->nexthdr;
 			nexthdr = ip6h->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+
+			ON_IP6(data, ip6h);
 		}
 
 		//pm->ip_proto = nexthdr;
@@ -229,8 +254,8 @@ icmp:
 	goto payload;
 
 payload:
+	ON_PAYLOAD(data, ptr);
 
 	return RP_PARSER_STATE_OK;
 }
 
-#endif

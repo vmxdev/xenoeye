@@ -23,11 +23,17 @@ do {                              \
 #define ON_IP(D, V)                                     \
 	COPY_TO_FLOW(D, ip4_src_addr, &V->saddr, 4);    \
 	COPY_TO_FLOW(D, ip4_dst_addr, &V->daddr, 4);    \
+	COPY_TO_FLOW(D, src_tos, &V->tos, 1);           \
+	COPY_TO_FLOW(D, dst_tos, &V->tos, 1);           \
+	COPY_TO_FLOW(D, min_ttl, &V->ttl, 1);           \
+	COPY_TO_FLOW(D, max_ttl, &V->ttl, 1);           \
 	COPY_TO_FLOW(D, protocol, &V->protocol, 1);
+/* TODO: fragmented packets? */
 
 #define ON_TCP(D, V)                                    \
 	COPY_TO_FLOW(D, l4_src_port, &V->source, 2);    \
-	COPY_TO_FLOW(D, l4_dst_port, &V->dest, 2);
+	COPY_TO_FLOW(D, l4_dst_port, &V->dest, 2);      \
+	COPY_TO_FLOW(D, tcp_flags, &V->th_flags, 1);
 
 #define ON_UDP(D, V)                                    \
 	COPY_TO_FLOW(D, l4_src_port, &V->source, 2);    \
@@ -35,6 +41,7 @@ do {                              \
 
 #define ON_ICMP(D, V)                                   \
 	COPY_TO_FLOW(D, icmp_type, &V->type, 1);
+/* TODO: ICMP code? */
 
 #include "rawparse.h"
 
@@ -48,7 +55,9 @@ sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, uint32_t header_len)
 		return 0;
 	}
 
-	if (rawpacket_parse(p, header_len, s->flow) < RP_PARSER_STATE_NO_IP) {
+	if (rawpacket_parse(p, p + header_len, s->flow)
+		< RP_PARSER_STATE_NO_IP) {
+
 		/* Skip non-IP samples */
 		return 0;
 	}
@@ -75,6 +84,10 @@ sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, uint32_t header_len)
 #endif
 	return 1;
 }
+
+/* disable logging */
+#undef LOG
+#define LOG(...)
 
 #include "sflow-impl.h"
 

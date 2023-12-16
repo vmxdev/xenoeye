@@ -46,76 +46,100 @@ do {                                                 \
 
 
 static inline int
-sf5_flow(struct sfdata *s, uint8_t *p, uint8_t *end)
+sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end)
 {
 	uint32_t l, seq, src, nel;
-	uint32_t inp, outp;
 	uint32_t v;
 	uint32_t j;
+	uint32_t ifidx, ifidx_be;
 
 	/* sample length */
-	READ32_H(l, p, end);
-	LOG(">SFLOW len:  %u", l);
+	READ32_H(l, *p, end);
+	LOG("\tlength:  %u", l);
 
-	READ32_H(seq, p, end);
-	LOG(">SFLOW: seq %u", seq);
+	READ32_H(seq, *p, end);
+	LOG("\tsequence: %u", seq);
 
-	/* (TODO: expanded) */
+	READ32_H(src, *p, end);
+	LOG("\tsrc id: %u", src);
 
-	READ32_H(src, p, end);
-	LOG(">SFLOW: src %u", src);
+	READ32_H(v, *p, end);
+	LOG("\tsampling rate: %u", v);
+	s->flow->sampling_rate = v;
 
-	READ32_H(v, p, end);
-	LOG(">SFLOW: skip %u", v);
-	READ32_H(v, p, end);
-	LOG(">SFLOW: sample pool %u", v);
-	READ32_H(v, p, end);
-	LOG(">SFLOW: drop events %u", v);
+	READ32_H(v, *p, end);
+	LOG("\tsample pool: %u", v);
+	READ32_H(v, *p, end);
+	LOG("\tdrop events: %u", v);
 
-	READ32_H(inp, p, end);
-	READ32_H(outp, p, end);
+	READ32_H(ifidx, *p, end);
+	ifidx &= 0x3fffffff;
+	LOG("\tinput interface: %u", ifidx);
+	ifidx_be = htobe32(ifidx);
+	memcpy(s->flow->input_snmp, &ifidx_be, sizeof(uint32_t));
+	s->flow->has_input_snmp = 1;
+	s->flow->input_snmp_size = sizeof(uint32_t);
 
-	LOG(">SFLOW: inp: %u/%u", inp, inp & 0x3fffffff);
-	LOG(">SFLOW: outp: %u/%u", outp, outp & 0x3fffffff);
+	READ32_H(ifidx, *p, end);
+	ifidx &= 0x3fffffff;
+	LOG("\toutput interface: %u", ifidx);
+	ifidx_be = htobe32(ifidx);
+	memcpy(s->flow->output_snmp, &ifidx_be, sizeof(uint32_t));
+	s->flow->has_output_snmp = 1;
+	s->flow->output_snmp_size = sizeof(uint32_t);
 
-	READ32_H(nel, p, end);
-	LOG(">SFLOW: nel %u", nel);
+	READ32_H(nel, *p, end);
+	LOG("\tnumber of elements: %u", nel);
 
 	for (j=0; j<nel; j++) {
 		uint32_t tag, ell;
 
-		READ32_H(tag, p, end);
-		LOG(">>[%u]SFLOW: tag %u", j, tag);
+		LOG("\t\telement #%u", j);
+		READ32_H(tag, *p, end);
+		LOG("\t\ttag: %u", tag);
 
-		READ32_H(ell, p, end);
-		LOG(">>[%u]SFLOW: ell %u", j, ell);
+		READ32_H(ell, *p, end);
+		LOG("\t\telement length: %u bytes", ell);
 
 		if (tag == SF5_FLOW_HEADER) {
-			uint32_t header_proto, sampled_size;
+			uint32_t header_proto;
 			uint32_t stripped, header_len;
 
-			READ32_H(header_proto, p, end);
-			READ32_H(sampled_size, p, end);
-			READ32_H(stripped, p, end);
+			READ32_H(header_proto, *p, end);
 
-			READ32_H(header_len, p, end);
+			READ_SF_BYTES(&s->flow->in_bytes[4], sizeof(uint32_t),
+				*p, end);
+			s->flow->has_in_bytes = 1;
+			s->flow->in_bytes_size = sizeof(uint64_t);
 
-			LOG(">>[%u]SFLOW: header_proto %u", j, header_proto);
-			LOG(">>[%u]SFLOW: header_len %u(%u)", j, header_len, ALIGN_4(header_len));
-			LOG(">>[%u]SFLOW: sampled_size %u", j, sampled_size);
+			s->flow->in_pkts[7] = 1;
+			s->flow->has_in_pkts = 1;
+			s->flow->in_pkts_size = sizeof(uint64_t);
+
+			READ32_H(stripped, *p, end);
+
+			READ32_H(header_len, *p, end);
+
+			LOG("\t\theader protocol: %u", header_proto);
+			LOG("\t\theader len: %u", header_len);
+
+			LOG("\t\tsampled size: %u",
+				be32toh(*((uint32_t *)s->flow->in_bytes)));
 
 			if (header_proto == SF5_HEADER_ETHERNET_ISO8023) {
-				if (!sf5_eth(s, p, end, header_len)) {
+				if (!sf5_eth(s, *p, end, header_len)) {
 					return 0;
 				}
 			} else {
-				LOG("Unknown header_proto '%u'", header_proto);
+				LOG("\t\tUnknown header_proto %u",
+					header_proto);
 				return 0;
 			}
-			p += ALIGN_4(header_len); /* ??? */
+			*p += ALIGN_4(header_len);
 		} else {
 			/* unknown tag */
-			p += ell;
+			LOG("\t\tUnknown tag %u", tag);
+			*p += ell;
 		}
 	}
 	return 1;
@@ -125,7 +149,7 @@ int
 sflow_process(struct xe_data *global, size_t thread_id,
 	struct flow_packet_info *fpi, int len)
 {
-	uint32_t i, nrecs;
+	uint32_t i, nsmpl;
 	uint32_t v;
 	uint8_t *p = fpi->rawpacket;
 	uint8_t *end = p + len;
@@ -140,59 +164,73 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	memset(&flow, 0, sizeof(struct flow_info));
 
 	READ32_H(v, p, end);
-	LOG("SFLOW: ver %u", v);
+	LOG("version: %u", v);
 	if (v != 5) {
 		LOG("Unknown sFlow version %u", v);
 		return 0;
 	}
 
 	READ32_H(v, p, end);
-	LOG("SFLOW: addr_type %u", v);
+	LOG("agent address type: %u", v);
 	if (v == SF5_ADDR_IP_V4) {
+		char s[INET_ADDRSTRLEN + 1];
+
 		READ_SF_BYTES(flow.dev_ip, sizeof(uint32_t), p, end);
 		flow.has_dev_ip = 1;
 		flow.dev_ip_size = sizeof(uint32_t);
-		LOG("SFLOW: addr %u.%u.%u.%u", flow.dev_ip[0], flow.dev_ip[1],
-			flow.dev_ip[2], flow.dev_ip[3]);
+
+		inet_ntop(AF_INET, &flow.dev_ip, s, INET_ADDRSTRLEN);
+		LOG("agent address (IPv4): %s", s);
 	} else if (v == SF5_ADDR_IP_V6) {
+		char s[INET6_ADDRSTRLEN + 1];
+
 		READ_SF_BYTES(flow.dev_ip6, sizeof(xe_ip), p, end);
 		flow.has_dev_ip6 = 1;
 		flow.dev_ip6_size = sizeof(xe_ip);
-	} else if (v == SF5_ADDR_UNKNOWN) {
+
+		inet_ntop(AF_INET6, &flow.dev_ip6, s, INET6_ADDRSTRLEN);
+		LOG("agent address (IPv6): %s", s);
 	} else {
-		LOG("Unknown address type %u", v);
+		LOG("Unknown agent address type %u", v);
 		return 0;
 	}
 
-	//LOG("SFLOW: subagent %u", v);
 	READ_SF_BYTES(flow.dev_id, sizeof(uint32_t), p, end);
 	flow.has_dev_id = 1;
 	flow.dev_id_size = sizeof(uint32_t);
+	LOG("agent id: %u", be32toh(*((uint32_t *)flow.dev_id)));
 
 	READ32_H(v, p, end);
-	LOG("SFLOW: seq %u", v);
+	LOG("sequence: %u", v);
 
 	READ32_H(v, p, end);
-	LOG("SFLOW: uptime %u", v);
+	LOG("uptime: %u", v);
 
-	READ32_H(nrecs, p, end);
-	LOG("SFLOW: records %u", nrecs);
+	READ32_H(nsmpl, p, end);
+	LOG("samples: %u", nsmpl);
 
-	for (i=0; i<nrecs; i++) {
+	for (i=0; i<nsmpl; i++) {
 		/* sample type */
+		LOG("\tsample #%u", i);
 		READ32_H(v, p, end);
-		LOG("SFLOW: type %u", v);
 
 		if (v == SF5_SAMPLE_FLOW) {
-			if (!sf5_flow(&sfd, p, end)) {
+			LOG("\tsample type: %u (SF5_SAMPLE_FLOW)", v);
+			if (!sf5_flow(&sfd, &p, end)) {
 				return 0;
 			}
 		} else if (v == SF5_SAMPLE_COUNTERS) {
 			uint32_t l;
+			LOG("\tsample type: %u (SF5_SAMPLE_COUNTERS)", v);
 			READ32_H(l, p, end);
-			LOG(">SFLOW COUNTER SKIP:  %u", l);
+			LOG("\tskipping this sample type (%u bytes)", l);
 			p += l;
 		} else {
+			uint32_t l;
+			LOG("\tUnknown sample type %u", v);
+			READ32_H(l, p, end);
+			LOG("\tskipping %u bytes", l);
+			p += l;
 		}
 	}
 
