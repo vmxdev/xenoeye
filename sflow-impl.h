@@ -23,7 +23,9 @@ enum SF5_FLOW_TAG
 
 enum SF5_HEADER_TYPE
 {
-	SF5_HEADER_ETHERNET_ISO8023 = 1
+	SF5_HEADER_ETHERNET_ISO8023 = 1,
+	SF5_HEADER_IPv4 = 11,
+	SF5_HEADER_IPv6 = 12
 };
 
 #define ALIGN_4(X) (((X % 4) == 0)? X : X + (4 - (X % 4)))
@@ -123,15 +125,29 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end)
 			LOG("\t\theader protocol: %u", header_proto);
 			LOG("\t\theader len: %u", header_len);
 
-			LOG("\t\tsampled size: %u",
-				be32toh(*((uint32_t *)s->flow->in_bytes)));
+			LOG("\t\tsampled size: %lu",
+				be64toh(*((uint64_t *)s->flow->in_bytes)));
 
 			if (header_proto == SF5_HEADER_ETHERNET_ISO8023) {
-				if (!sf5_eth(s, *p, end, header_len)) {
+				if (!sf5_eth(s, *p, end, RP_TYPE_ETHER,
+					header_len)) {
+
+					return 0;
+				}
+			} else if (header_proto == SF5_HEADER_IPv4) {
+				if (!sf5_eth(s, *p, end, RP_TYPE_IPv4,
+					header_len)) {
+
+					return 0;
+				}
+			} else if (header_proto == SF5_HEADER_IPv6) {
+				if (!sf5_eth(s, *p, end, RP_TYPE_IPv6,
+					header_len)) {
+
 					return 0;
 				}
 			} else {
-				LOG("\t\tUnknown header_proto %u",
+				LOG("\t\tUnknown header protocol %u",
 					header_proto);
 				return 0;
 			}

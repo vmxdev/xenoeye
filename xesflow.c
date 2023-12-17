@@ -55,6 +55,17 @@ do {                                                              \
 	LOG("\t\t\tIP protocol: %d", V->protocol);                \
 } while (0)
 
+#define ON_IP6(D, V)                                              \
+do {                                                              \
+	char s[INET6_ADDRSTRLEN + 1];                             \
+	inet_ntop(AF_INET6, &V->ip6_src, s, INET6_ADDRSTRLEN);    \
+	LOG("\t\t\tIPv6 src: %s", s);                             \
+	inet_ntop(AF_INET6, &V->ip6_dst, s, INET6_ADDRSTRLEN);    \
+	LOG("\t\t\tIPv6 dst: %s", s);                             \
+	LOG("\t\t\tTTL: %d", V->ip6_ctlun.ip6_un1.ip6_un1_hlim);  \
+	LOG("\t\t\tIP protocol: %d", (int)nexthdr);               \
+} while (0)
+
 #define ON_UDP(D, V)                                              \
 do {                                                              \
 	LOG("\t\t\tUDP src port: %d", be16toh(V->source));        \
@@ -83,13 +94,14 @@ do {                                                              \
 #undef ON_ETH
 
 static inline int
-sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, uint32_t header_len)
+sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
+	uint32_t header_len)
 {
 	if (p + header_len > end) {
 		return 0;
 	}
 
-	if (rawpacket_parse(p, p + header_len, s->flow)
+	if (rawpacket_parse(p, p + header_len, t, s->flow)
 		< RP_PARSER_STATE_NO_IP) {
 
 		/* Skip non-IP samples */
@@ -188,8 +200,8 @@ main(int argc, char *argv[])
 			uint8_t *ptr = (uint8_t *)packet;
 			int len;
 
-			ps = rawpacket_parse_sflow(ptr,
-				ptr + header->caplen, &sflow_data);
+			ps = rawpacket_parse_sflow(ptr, ptr + header->caplen,
+				RP_TYPE_ETHER, &sflow_data);
 			if (ps != RP_PARSER_STATE_OK) {
 				continue;
 			}

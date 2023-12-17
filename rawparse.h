@@ -25,6 +25,13 @@ enum RP_PARSER_STATE
 	RP_PARSER_STATE_OK
 };
 
+enum RP_TYPE
+{
+	RP_TYPE_ETHER,
+	RP_TYPE_IPv4,
+	RP_TYPE_IPv6
+};
+
 #define	IP_MF 0x2000
 #define IP_OFFSET       0x1FFF
 
@@ -80,7 +87,7 @@ enum RP_PARSER_STATE
 #endif
 
 static inline enum RP_PARSER_STATE
-rawpacket_parse(uint8_t *ptr, uint8_t *end, USER_TYPE data)
+rawpacket_parse(uint8_t *ptr, uint8_t *end, enum RP_TYPE t, USER_TYPE data)
 {
 	uint16_t h_proto;
 	struct ethhdr *eth;
@@ -91,6 +98,18 @@ rawpacket_parse(uint8_t *ptr, uint8_t *end, USER_TYPE data)
 	if ((ptr + sizeof(struct ethhdr)) >= end) {
 		return RP_PARSER_STATE_NO_ETHER;
 	}
+
+	if (t != RP_TYPE_ETHER) {
+		if (t == RP_TYPE_IPv4) {
+			h_proto = htons(ETH_P_IP);
+			goto ip;
+		} else if (t == RP_TYPE_IPv6) {
+			h_proto = htons(ETH_P_IPV6);
+			goto ip;
+		}
+		return RP_PARSER_STATE_NO_ETHER;
+	}
+
 	eth = (struct ethhdr *)ptr;
 	ptr += sizeof(struct ethhdr);
 
@@ -127,6 +146,7 @@ rawpacket_parse(uint8_t *ptr, uint8_t *end, USER_TYPE data)
 
 	ON_HPROTO(data, h_proto);
 
+ip:
 	if (h_proto == htons(ETH_P_IP)) {
 		uint64_t ihl_len;
 		struct iphdr *iph;
@@ -204,9 +224,9 @@ rawpacket_parse(uint8_t *ptr, uint8_t *end, USER_TYPE data)
 			nexthdr = ip6h->ip6_ctlun.ip6_un1.ip6_un1_nxt;
 
 			ON_IP6(data, ip6h);
+		} else {
+			ON_IP6(data, ip6h);
 		}
-
-		//pm->ip_proto = nexthdr;
 
 		if (nexthdr == IPPROTO_TCP) {
 			goto tcp;
@@ -217,7 +237,6 @@ rawpacket_parse(uint8_t *ptr, uint8_t *end, USER_TYPE data)
 		} else {
 			return RP_PARSER_STATE_NO_IP_PROTO;
 		}
-		//pm.ip_version = 6;
 	} else {
 		/* non-ip */
 		return RP_PARSER_STATE_NO_IP;

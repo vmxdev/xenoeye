@@ -30,6 +30,13 @@ do {                              \
 	COPY_TO_FLOW(D, protocol, &V->protocol, 1);
 /* TODO: fragmented packets? */
 
+#define ON_IP6(D, V)                                    \
+	COPY_TO_FLOW(D, ip6_src_addr, &V->ip6_src, 16); \
+	COPY_TO_FLOW(D, ip6_dst_addr, &V->ip6_src, 16); \
+	COPY_TO_FLOW(D, min_ttl, &V->ip6_ctlun.ip6_un1.ip6_un1_hlim, 1); \
+	COPY_TO_FLOW(D, max_ttl, &V->ip6_ctlun.ip6_un1.ip6_un1_hlim, 1); \
+	COPY_TO_FLOW(D, protocol, &nexthdr, 1);
+
 #define ON_TCP(D, V)                                    \
 	COPY_TO_FLOW(D, l4_src_port, &V->source, 2);    \
 	COPY_TO_FLOW(D, l4_dst_port, &V->dest, 2);      \
@@ -47,7 +54,8 @@ do {                              \
 
 
 static inline int
-sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, uint32_t header_len)
+sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
+	uint32_t header_len)
 {
 	size_t t_id;
 
@@ -55,7 +63,7 @@ sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, uint32_t header_len)
 		return 0;
 	}
 
-	if (rawpacket_parse(p, p + header_len, s->flow)
+	if (rawpacket_parse(p, p + header_len, t, s->flow)
 		< RP_PARSER_STATE_NO_IP) {
 
 		/* Skip non-IP samples */
