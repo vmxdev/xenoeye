@@ -5,6 +5,20 @@
 #include "xenoeye.h"
 #include "sflow.h"
 
+#undef LOG
+#define LOG(...)                                               \
+do {                                                           \
+	char _buf[4096];                                       \
+	int _ret = snprintf(_buf, sizeof(_buf), __VA_ARGS__);  \
+	if (_ret >= (int)(sizeof(_buf))) {                     \
+		fprintf(stderr,                                \
+		"Next line truncated to %d symbols",           \
+		_ret);                                         \
+	}                                                      \
+	printf("%s [%s, line %d, function %s()]\n",            \
+		_buf, __FILE__, __LINE__, __func__);           \
+} while (0)
+
 #define USER_TYPE void *
 
 #define ON_ETH(D, V)                                              \
@@ -134,8 +148,6 @@ main(int argc, char *argv[])
 				return EXIT_FAILURE;
 		}
 	}
-
-	openlog(NULL, LOG_PERROR, LOG_USER);
 
 	if (!ifname) {
 		LOG("Interface name is required");
