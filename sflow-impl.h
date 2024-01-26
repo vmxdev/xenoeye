@@ -18,7 +18,8 @@ enum SF5_SAMPLE_TAG
 
 enum SF5_FLOW_TAG
 {
-	SF5_FLOW_HEADER = 1
+	SF5_FLOW_HEADER = 1,
+	SF5_FLOW_EX_SWITCH = 1001
 };
 
 enum SF5_HEADER_TYPE
@@ -32,7 +33,7 @@ enum SF5_HEADER_TYPE
 
 #define READ_SF_BYTES(R, RLEN, P, END)               \
 do {                                                 \
-	if ((P + RLEN) >= END) {                     \
+	if ((P + RLEN) > END) {                      \
 		LOG("Malformed sFlow packet");       \
 		return 0;                            \
 	}                                            \
@@ -152,6 +153,20 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end)
 				return 0;
 			}
 			*p += ALIGN_4(header_len);
+		} else if (tag == SF5_FLOW_EX_SWITCH) {
+			uint32_t in_vlan, in_priority, out_vlan, out_priority;
+
+			READ32_H(in_vlan, *p, end);
+			LOG("\t\t\t(ignored)In VLAN: %u", in_vlan);
+
+			READ32_H(in_priority, *p, end);
+			LOG("\t\t\t(ignored)In priority: %u", in_priority);
+
+			READ32_H(out_vlan, *p, end);
+			LOG("\t\t\t(ignored)Out VLAN: %u", out_vlan);
+
+			READ32_H(out_priority, *p, end);
+			LOG("\t\t\t(ignored)Out priority: %u", out_priority);
 		} else {
 			/* unknown tag */
 			LOG("\t\tUnknown tag %u", tag);
