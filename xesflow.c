@@ -5,6 +5,8 @@
 #include "xenoeye.h"
 #include "sflow.h"
 
+static void sflow_parse_payload(uint8_t *end, uint8_t *p);
+
 #undef LOG
 #define LOG(...)                                               \
 do {                                                           \
@@ -19,7 +21,7 @@ do {                                                           \
 		_buf, __FILE__, __LINE__, __func__);           \
 } while (0)
 
-#define USER_TYPE void *
+#define USER_TYPE uint8_t *
 
 #define ON_ETH(D, V)                                              \
 do {                                                              \
@@ -85,6 +87,8 @@ do {                                                              \
 	LOG("\t\t\tICMP code: %d", V->code);                      \
 } while (0)
 
+#define ON_PAYLOAD(D, P) sflow_parse_payload(D, P);
+
 #include "rawparse.h"
 
 #undef ON_ICMP
@@ -92,6 +96,16 @@ do {                                                              \
 #undef ON_UDP
 #undef ON_IP
 #undef ON_ETH
+
+static void
+sflow_parse_payload(uint8_t *end, uint8_t *p)
+{
+#define PREFIX "\t\t\t\t"
+	(void)end;
+	(void)p;
+
+#undef PREFIX
+}
 
 static inline int
 sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
@@ -101,7 +115,7 @@ sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
 		return 0;
 	}
 
-	if (rawpacket_parse(p, p + header_len, t, s->flow)
+	if (rawpacket_parse(p, p + header_len, t, end)
 		< RP_PARSER_STATE_NO_IP) {
 
 		/* Skip non-IP samples */

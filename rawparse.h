@@ -234,6 +234,8 @@ ip:
 			goto udp;
 		} else if (nexthdr == IPPROTO_ICMP) {
 			goto icmp;
+		} else if (nexthdr == IPPROTO_ICMPV6) {
+			goto icmp;
 		} else {
 			return RP_PARSER_STATE_NO_IP_PROTO;
 		}
