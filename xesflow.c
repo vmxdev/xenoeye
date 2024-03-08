@@ -5,6 +5,9 @@
 #include "xenoeye.h"
 #include "sflow.h"
 
+#include "xe-dns.h"
+#include "xe-sni.h"
+
 static void sflow_parse_payload(uint8_t *end, uint8_t *p);
 
 #undef LOG
@@ -100,17 +103,19 @@ do {                                                              \
 static void
 sflow_parse_payload(uint8_t *end, uint8_t *p)
 {
-#define PREFIX "\t\t\t\t"
-	(void)end;
-	(void)p;
-
-#undef PREFIX
+	if (xe_sni(p, end, NULL)) {
+		return;
+	}
+	if (xe_dns(p, end, NULL, NULL)) {
+		return;
+	}
 }
 
 static inline int
 sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
 	uint32_t header_len)
 {
+	(void)s;
 	if (p + header_len > end) {
 		return 0;
 	}
