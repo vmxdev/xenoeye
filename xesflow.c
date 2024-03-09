@@ -5,9 +5,6 @@
 #include "xenoeye.h"
 #include "sflow.h"
 
-#include "xe-dns.h"
-#include "xe-sni.h"
-
 static void sflow_parse_payload(uint8_t *end, uint8_t *p);
 
 #undef LOG
@@ -23,6 +20,9 @@ do {                                                           \
 	printf("%s [%s, line %d, function %s()]\n",            \
 		_buf, __FILE__, __LINE__, __func__);           \
 } while (0)
+
+#include "xe-dns.h"
+#include "xe-sni.h"
 
 #define USER_TYPE uint8_t *
 

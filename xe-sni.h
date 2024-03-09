@@ -107,6 +107,7 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 		}
 		p += sizeof(struct tls_ext) + be16toh(e->len);
 		if (p >= end) {
+			LOG(PREFIX"No SNI in packet");
 			return 0;
 		}
 	}
