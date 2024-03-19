@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020-2023, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2024, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -216,7 +216,9 @@ monit_objects_init(struct xe_data *data)
 
 		mo = &data->monit_objects[data->nmonit_objects - 1];
 		for (i=0; i<mo->nfwm; i++) {
+			size_t j;
 			struct mo_fwm *fwm = &mo->fwms[i];
+
 			if (!fwm_fields_init(data->nthreads, fwm)) {
 				return 0;
 			}
@@ -226,6 +228,26 @@ monit_objects_init(struct xe_data *data)
 					mo->name, fwm->name,
 					FWM_DEFAULT_TIMEOUT);
 				fwm->time = FWM_DEFAULT_TIMEOUT;
+			}
+
+			/* check whether we have fields that force packet
+			 * payload parsing */
+			for (j=0; j<fwm->fieldset.n_naggr; j++) {
+				if (fwm->fieldset.naggr[j].id == DNS_NAME) {
+					mo->payload_parse_dns = 1;
+					fwm->has_dns_field = 1;
+					break;
+				}
+				if (fwm->fieldset.naggr[j].id == DNS_IPS) {
+					mo->payload_parse_dns = 1;
+					fwm->has_dns_field = 1;
+					break;
+				}
+				if (fwm->fieldset.naggr[j].id == SNI) {
+					mo->payload_parse_sni = 1;
+					fwm->has_sni_field = 1;
+					break;
+				}
 			}
 		}
 
@@ -669,6 +691,20 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 				continue;
 			}
 		}
+
+		/* check the sFlow fields with DNS/SNI */
+		if (fwm->has_dns_field
+			&& !(flow->has_dns_name || flow->has_dns_ips)) {
+			/* skip flow without DNS info for window that
+			 * require it */
+			continue;
+		}
+
+		if (fwm->has_sni_field && !flow->has_sni) {
+			/* same for SNI */
+			continue;
+		}
+
 
 		fdata = &fwm->thread_data[thread_id];
 		key = fdata->key;

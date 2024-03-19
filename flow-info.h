@@ -14,10 +14,7 @@ struct flow_info
 	int NAME##_size;                                    \
 	int has_##NAME;
 #include "netflow.def"
-	/* pointer to packet payload in sFlow */
-	uint8_t payload[8];
-	int payload_size;
-	int has_payload;
+	void *payload_ptr;
 
 	/* virtual fields for export devices */
 	uint8_t dev_ip[4];

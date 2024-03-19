@@ -141,13 +141,15 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 		if (ad->type == be16toh(0x0001)) {
 			/* type A */
 			char addr[INET6_ADDRSTRLEN + 1];
-			if (l_ad == 4) {
+			if (ad->data_len == htobe16(4)) {
 				inet_ntop(AF_INET, ad->data, addr,
 					INET_ADDRSTRLEN);
 				LOG(PREFIX"ip: %s", addr);
 				if (ips) {
 					if (first_addr) {
 						first_addr = 0;
+						ips[0] = '{';
+						ips[1] = '\0';
 					} else {
 						strcat(ips, ",");
 					}
@@ -165,6 +167,9 @@ end:
 	if (first_addr) {
 		/* no ips */
 		return 0;
+	}
+	if (ips) {
+		strcat(ips, "}");
 	}
 	return 1;
 }

@@ -26,4 +26,7 @@ FIELD(CLASS1,	"class1",	STRING,	class1,		class1)
 FIELD(CLASS2,	"class2",	STRING,	class2,		class2)
 FIELD(CLASS3,	"class3",	STRING,	class3,		class3)
 FIELD(CLASS4,	"class4",	STRING,	class4,		class4)
+FIELD(DNS_NAME,	"dns-name",	STRING,	dns_name,	dns_name)
+FIELD(DNS_IPS,	"dns-ips",	STRING,	dns_ips,	dns_ips)
+FIELD(SNI,	"sni",		STRING,	sni,		sni)
 #undef FIELD

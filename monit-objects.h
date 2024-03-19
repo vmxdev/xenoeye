@@ -86,6 +86,10 @@ struct mo_fwm
 
 	int dont_create_index;
 
+	/* window has DNS/SNI, processed in a special way */
+	int has_dns_field;
+	int has_sni_field;
+
 	/* each thread has it's own data */
 	struct fwm_thread_data *thread_data;
 };
@@ -238,6 +242,10 @@ struct monit_object
 	/* classifications */
 	size_t nclassifications;
 	struct mo_classification *classifications;
+
+	/* sFlow packet payload parsing */
+	int payload_parse_dns;
+	int payload_parse_sni;
 };
 
 

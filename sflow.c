@@ -50,8 +50,12 @@ do {                              \
 	COPY_TO_FLOW(D, icmp_type, &V->type, 1);
 /* TODO: ICMP code? */
 
+#define ON_PAYLOAD(D, V) D->payload_ptr = V;
+
 #include "rawparse.h"
 
+static int xe_sni(uint8_t *p, uint8_t *end, char *domain);
+static int xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips);
 
 static inline int
 sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
@@ -77,6 +81,26 @@ sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
 			continue;
 		}
 
+		if (mo->payload_parse_dns && s->flow->payload_ptr) {
+			if (xe_dns(s->flow->payload_ptr, end,
+				(char *)s->flow->dns_name,
+				(char *)s->flow->dns_ips)) {
+
+				fprintf(stderr, "DNS: %s, %s\n", (char *)s->flow->dns_name, (char *)s->flow->dns_ips);
+				s->flow->has_dns_name = 1;
+				s->flow->has_dns_ips = 1;
+			}
+		}
+
+		if (mo->payload_parse_sni && s->flow->payload_ptr) {
+			if (xe_sni(s->flow->payload_ptr,
+				end, (char *)s->flow->sni)) {
+
+				s->flow->has_sni = 1;
+				fprintf(stderr, "SNI: %s\n", (char *)s->flow->sni);
+			}
+		}
+
 		monit_object_process_nf(s->global, mo, s->thread_id,
 			s->fpi->time_ns, s->flow);
 
@@ -96,6 +120,9 @@ sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
 /* disable logging */
 #undef LOG
 #define LOG(...)
+
+#include "xe-sni.h"
+#include "xe-dns.h"
 
 #include "sflow-impl.h"
 
