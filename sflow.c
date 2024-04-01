@@ -58,16 +58,12 @@ static int xe_sni(uint8_t *p, uint8_t *end, char *domain);
 static int xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips);
 
 static inline int
-sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
-	uint32_t header_len)
+sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 {
 	size_t t_id;
+	uint8_t *end = p + header_len;
 
-	if (p + header_len > end) {
-		return 0;
-	}
-
-	if (rawpacket_parse(p, p + header_len, t, s->flow)
+	if (rawpacket_parse(p, end, t, s->flow)
 		< RP_PARSER_STATE_NO_IP) {
 
 		/* Skip non-IP samples */

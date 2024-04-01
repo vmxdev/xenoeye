@@ -130,19 +130,19 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end)
 				be64toh(*((uint64_t *)s->flow->in_bytes)));
 
 			if (header_proto == SF5_HEADER_ETHERNET_ISO8023) {
-				if (!sf5_eth(s, *p, end, RP_TYPE_ETHER,
+				if (!sf5_eth(s, *p, RP_TYPE_ETHER,
 					header_len)) {
 
 					return 0;
 				}
 			} else if (header_proto == SF5_HEADER_IPv4) {
-				if (!sf5_eth(s, *p, end, RP_TYPE_IPv4,
+				if (!sf5_eth(s, *p, RP_TYPE_IPv4,
 					header_len)) {
 
 					return 0;
 				}
 			} else if (header_proto == SF5_HEADER_IPv6) {
-				if (!sf5_eth(s, *p, end, RP_TYPE_IPv6,
+				if (!sf5_eth(s, *p, RP_TYPE_IPv6,
 					header_len)) {
 
 					return 0;

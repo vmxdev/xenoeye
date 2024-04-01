@@ -52,7 +52,7 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 		return 0;
 	}
 
-	LOG(PREFIX"Probably TLS Handshake (ver 0x%0x)", be16toh(rec->version));
+	LOG(PREFIX"Probably TLS Handshake (ver 0x%04x)", be16toh(rec->version));
 
 	p += sizeof(struct tls_rec);
 	if (p >= end) {
@@ -100,15 +100,18 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 			return 0;
 		}
 		struct tls_ext *e = (struct tls_ext *)p;
+
+		LOG(PREFIX"TLS ext type: %04x, len: %d ", e->type, be16toh(e->len));
+
 		if (e->type == 0x0000) {
 			char server_name[256];
 			/* sni */
-			if ((p + sizeof(struct tls_ext)) >= end) {
+			p += sizeof(struct tls_ext);
+			if ((p + sizeof(struct tls_sni)) >= end) {
 				LOG(PREFIX"TLS Packet too short");
 				return 0;
 			}
-			struct tls_sni *sni = (struct tls_sni *)
-				(p + sizeof(struct tls_ext));
+			struct tls_sni *sni = (struct tls_sni *)p;
 			if (sni->type == 0x00) {
 				uint16_t name_len = be16toh(sni->name_len);
 				if ((p + sizeof(struct tls_sni) + name_len - 1) >= end) {

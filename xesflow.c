@@ -112,15 +112,12 @@ sflow_parse_payload(uint8_t *end, uint8_t *p)
 }
 
 static inline int
-sf5_eth(struct sfdata *s, uint8_t *p, uint8_t *end, enum RP_TYPE t,
-	uint32_t header_len)
+sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 {
 	(void)s;
-	if (p + header_len > end) {
-		return 0;
-	}
+	uint8_t *end = p + header_len;
 
-	if (rawpacket_parse(p, p + header_len, t, end)
+	if (rawpacket_parse(p, end, t, end)
 		< RP_PARSER_STATE_NO_IP) {
 
 		/* Skip non-IP samples */
