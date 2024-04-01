@@ -55,7 +55,7 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 
 			p++;
 			if ((p + len) >= end) {
-				LOG(PREFIX"Packet too short");
+				LOG(PREFIX"DNS packet too short");
 				return 0;
 			}
 			for (j=0; j<len; j++) {
@@ -68,11 +68,11 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 		}
 		p += 1 + 4;
 		if (p >= end) {
-			LOG(PREFIX"Packet too short");
+			LOG(PREFIX"DNS packet too short");
 			return 0;
 		}
 	}
-	LOG(PREFIX"domain: %s", qname);
+	LOG(PREFIX"DNS domain: %s", qname);
 	if (domain) {
 		strcpy(domain, qname);
 	}
@@ -102,19 +102,19 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 				}
 				p = base + offset;
 				if (p >= end) {
-					LOG(PREFIX"Packet too short");
+					LOG(PREFIX"DNS packet too short");
 					goto end;
 				}
 				c = *p;
 			}
 			if ((aptr + c) >= aend) {
-				LOG(PREFIX"Malformed packet");
+				LOG(PREFIX"Malformed DNS packet");
 				goto end;
 			}
 
 			p++;
 			if ((p + c) >= end) {
-				LOG(PREFIX"Packet too short");
+				LOG(PREFIX"DNS packet too short");
 				goto end;
 			}
 
@@ -129,8 +129,8 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 		if (p_save) {
 			p = p_save + 2;
 		}
-		if ((p + sizeof(struct dns_ans_data)) > end) {
-			LOG(PREFIX"Packet too short");
+		if ((p + sizeof(struct dns_ans_data) + 3) > end) {
+			LOG(PREFIX"DNS packet too short");
 			goto end;
 		}
 
@@ -138,13 +138,35 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 		unsigned int l_ad = sizeof(struct dns_ans_data) - 1
 			+ be16toh(ad->data_len);
 
-		if (ad->type == be16toh(0x0001)) {
+		if (ad->type == htobe16(0x0001)) {
 			/* type A */
 			char addr[INET6_ADDRSTRLEN + 1];
 			if (ad->data_len == htobe16(4)) {
 				inet_ntop(AF_INET, ad->data, addr,
 					INET_ADDRSTRLEN);
-				LOG(PREFIX"ip: %s", addr);
+				LOG(PREFIX"DNS ip: %s", addr);
+				if (ips) {
+					if (first_addr) {
+						first_addr = 0;
+						ips[0] = '{';
+						ips[1] = '\0';
+					} else {
+						strcat(ips, ",");
+					}
+					strcat(ips, addr);
+				}
+			}
+		} else if (ad->type == htobe16(28)) {
+			/* AAAA */
+			if ((p + sizeof(struct dns_ans_data) + 15) > end) {
+				LOG(PREFIX"DNS packet too short");
+				goto end;
+			}
+			char addr[INET6_ADDRSTRLEN + 1];
+			if (ad->data_len == htobe16(16)) {
+				inet_ntop(AF_INET6, ad->data, addr,
+					INET6_ADDRSTRLEN);
+				LOG(PREFIX"DNS ip: %s", addr);
 				if (ips) {
 					if (first_addr) {
 						first_addr = 0;
@@ -158,7 +180,7 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 			}
 		}
 		if ((p + l_ad) > end) {
-			LOG(PREFIX"Packet too short");
+			LOG(PREFIX"DNS packet too short");
 			goto end;
 		}
 		p += l_ad;
