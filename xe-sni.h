@@ -38,6 +38,7 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 {
 	uint16_t *cipher_suites_len;
 	uint8_t *compress_methods_len;
+	uint16_t *ext_len;
 	struct tls_hello *hello;
 	struct tls_rec *rec = (struct tls_rec *)p;
 
@@ -45,22 +46,23 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 		return 0;
 	}
 
-	if ((rec->version != be16toh(0x0301))
-		&& (rec->version != be16toh(0x0303))) {
+	if ((rec->version != htobe16(0x0301))
+		&& (rec->version != htobe16(0x0303))) {
 
 		return 0;
 	}
 
-	LOG(PREFIX"Probably TLS Handshake");
+	LOG(PREFIX"Probably TLS Handshake (ver 0x%0x)", be16toh(rec->version));
 
 	p += sizeof(struct tls_rec);
 	if (p >= end) {
-		LOG(PREFIX"Packet too short");
+		LOG(PREFIX"TLS Packet too short");
 		return 0;
 	}
 
 	hello = (struct tls_hello *)p;
 	if (hello->type != 1) {
+		LOG(PREFIX"TLS Packet type is not Client Hello");
 		return 0;
 	}
 
@@ -68,37 +70,54 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 
 	p += sizeof(struct tls_hello) + hello->session_id_len;
 	if (p >= end) {
-		LOG(PREFIX"Packet too short");
+		LOG(PREFIX"TLS Packet too short");
 		return 0;
 	}
 
 	cipher_suites_len = (uint16_t *)p;
 	p += sizeof(uint16_t) + be16toh(*cipher_suites_len);
 	if (p >= end) {
-		LOG(PREFIX"Packet too short");
+		LOG(PREFIX"TLS Packet too short");
 		return 0;
 	}
 
 	compress_methods_len = (uint8_t *)p;
 	p += sizeof(uint8_t) + *compress_methods_len;
 	if (p >= end) {
-		LOG(PREFIX"Packet too short");
+		LOG(PREFIX"TLS Packet too short");
 		return 0;
 	}
 
-	p += sizeof(uint16_t); // ext len
+	ext_len = (uint16_t *)p;
+	if (*ext_len == 0) {
+		LOG(PREFIX"TLS Client Hello has no extensions");
+		return 0;
+	}
+	p += sizeof(uint16_t); /* skip ext len */
 	for (;;) {
+		if ((p + sizeof(struct tls_ext)) >= end) {
+			LOG(PREFIX"TLS Packet too short");
+			return 0;
+		}
 		struct tls_ext *e = (struct tls_ext *)p;
 		if (e->type == 0x0000) {
-			char server_name[100];
+			char server_name[256];
 			/* sni */
+			if ((p + sizeof(struct tls_ext)) >= end) {
+				LOG(PREFIX"TLS Packet too short");
+				return 0;
+			}
 			struct tls_sni *sni = (struct tls_sni *)
 				(p + sizeof(struct tls_ext));
 			if (sni->type == 0x00) {
 				uint16_t name_len = be16toh(sni->name_len);
+				if ((p + sizeof(struct tls_sni) + name_len - 1) >= end) {
+					LOG(PREFIX"TLS Packet too short");
+					return 0;
+				}
 				memcpy(server_name, sni->name, name_len);
 				server_name[name_len] = '\0';
-				LOG(PREFIX"SNI: %s", server_name);
+				LOG(PREFIX"TLS SNI: %s", server_name);
 				if (domain) {
 					strcpy(domain, server_name);
 				}
@@ -107,7 +126,7 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 		}
 		p += sizeof(struct tls_ext) + be16toh(e->len);
 		if (p >= end) {
-			LOG(PREFIX"No SNI in packet");
+			LOG(PREFIX"No TLS SNI in packet");
 			return 0;
 		}
 	}
