@@ -82,7 +82,6 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 				(char *)s->flow->dns_name,
 				(char *)s->flow->dns_ips)) {
 
-				fprintf(stderr, "DNS: %s, %s\n", (char *)s->flow->dns_name, (char *)s->flow->dns_ips);
 				s->flow->has_dns_name = 1;
 				s->flow->has_dns_ips = 1;
 			}
@@ -93,7 +92,6 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 				end, (char *)s->flow->sni)) {
 
 				s->flow->has_sni = 1;
-				fprintf(stderr, "SNI: %s\n", (char *)s->flow->sni);
 			}
 		}
 
