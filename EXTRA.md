@@ -486,3 +486,106 @@ Classification of HTTP/HTTPS traffic by protocols and TCP flags
 
 ![Grafana classification by size](docs-img/grafana-class-http.png?raw=true "Grafana netflow classification by packet size")
 
+
+### sFlow
+
+The collector collects and processes sFlow if there is a section `"sflow-capture"` in the main configuration file:
+```
+	"sflow-capture": [
+		//{"pcap": {"interface": "eth0", "filter": "udp and port 6343"}},
+		{"socket": {"listen-on": "*", "port": "6343"}}
+	]
+```
+
+Just like for Netflow, you can use regular sockets or collect from the network interface using libpcap.
+
+Once the collector starts collecting sFlow, it can be processed in the same way as Netflow. You can create monitoring objects, describe a filter, tables for data export, and moving averages.
+
+If the collector does not recognize the sFlow packet, it silently discards it. To understand how the collector sees sFlow traffic, the `xesflow` utility is included. It captures traffic using pcap and shows the sFlow fields it knows.
+
+```
+# ./xesflow -i eth1 -f "udp and port 6343"
+version: 5 [sflow-impl.h, line 198, function sflow_process()]
+agent address type: 1 [sflow-impl.h, line 205, function sflow_process()]
+agent address (IPv4): 172.16.2.2 [sflow-impl.h, line 214, function sflow_process()]
+agent id: 16 [sflow-impl.h, line 232, function sflow_process()]
+sequence: 15690 [sflow-impl.h, line 235, function sflow_process()]
+uptime: 2858088699 [sflow-impl.h, line 238, function sflow_process()]
+samples: 7 [sflow-impl.h, line 241, function sflow_process()]
+        sample #0 [sflow-impl.h, line 245, function sflow_process()] 
+        sample type: 1 (SF5_SAMPLE_FLOW) [sflow-impl.h, line 249, function sflow_process()]
+        length:  144 [sflow-impl.h, line 61, function sf5_flow()]
+        sequence: 53379644 [sflow-impl.h, line 64, function sf5_flow()]
+        src id: 518 [sflow-impl.h, line 67, function sf5_flow()]
+        sampling rate: 400 [sflow-impl.h, line 70, function sf5_flow()]
+        sample pool: 1956205512 [sflow-impl.h, line 74, function sf5_flow()]
+        drop events: 0 [sflow-impl.h, line 76, function sf5_flow()]
+        input interface: 0 [sflow-impl.h, line 80, function sf5_flow()]
+        output interface: 518 [sflow-impl.h, line 88, function sf5_flow()]
+        number of elements: 2 [sflow-impl.h, line 95, function sf5_flow()]
+                element #0 [sflow-impl.h, line 100, function sf5_flow()]
+                tag: 1 [sflow-impl.h, line 102, function sf5_flow()]
+                element length: 80 bytes [sflow-impl.h, line 105, function sf5_flow()]
+                header protocol: 1 [sflow-impl.h, line 126, function sf5_flow()]
+                header len: 64 [sflow-impl.h, line 127, function sf5_flow()]
+                sampled size: 68 [sflow-impl.h, line 129, function sf5_flow()]
+                        Ethernet src: 54:4b:8c:ef:23:c0 [rawparse.h, line 116, function rawpacket_parse()]
+                        Ethernet dst: 00:25:90:7c:41:8f [rawparse.h, line 116, function rawpacket_parse()]
+                        Ethernet proto: 0x8100 [rawparse.h, line 116, function rawpacket_parse()]
+                        VLAN 607 [rawparse.h, line 129, function rawpacket_parse()] 
+                        IPv4 src: 91.32.91.80 [rawparse.h, line 179, function rawpacket_parse()]
+                        IPv4 dst: 121.101.245.97 [rawparse.h, line 179, function rawpacket_parse()]
+                        TOS: 0x0 [rawparse.h, line 179, function rawpacket_parse()]
+                        ID: 16183 [rawparse.h, line 179, function rawpacket_parse()]
+                        TTL: 118 [rawparse.h, line 179, function rawpacket_parse()]
+                        IP protocol: 6 [rawparse.h, line 179, function rawpacket_parse()]
+                        TCP src port: 2872 [rawparse.h, line 253, function rawpacket_parse()]
+                        TCP dst port: 443 [rawparse.h, line 253, function rawpacket_parse()]
+                        TCP flags: 0x10 [rawparse.h, line 253, function rawpacket_parse()]
+...
+```
+
+
+### Additional data analysis using sFlow: DNS and SNI
+
+Since the sFlow agent sends chunks of packets to the collector, they can be parsed to get some additional information.
+
+The collector has DNS and TLS (HTTPS) SNI protocol parsers.
+
+For example, if you are a hoster, then these parsers can help you create a “hosting map” to understand which domains are hosted in your data center.
+
+```
+	"fwm": [
+		// ...
+		{
+			"name": "dns",
+			"fields": ["dns-name", "dns-ips"]
+		}
+		,
+		{
+			"name": "sni",
+			"fields": ["src host", "dst host", "sni"]
+		}
+	]
+```
+
+The collector parses A(IPv4) and AAAA(IPv6) DNS records.
+
+`dns-ips` are stored in the form `{ip1, ip2, ...}` - there can be several IP addresses in a packet with a DNS response.
+
+A query to the DBMS to obtain domain names and their addresses may look something like this:
+
+```
+=> select distinct dns_name, unnest(dns_ips::inet[]) as ip from all_dns_sni_d order by ip;
+ ns4-34.azure-dns.info.                      | 13.107.206.34
+ ns3-34.azure-dns.org.                       | 13.107.222.34
+ 144.240.101.34.bc.googleusercontent.com.    | 34.101.240.144
+ connectivity-check.ubuntu.com.              | 91.189.91.49
+ connectivity-check.ubuntu.com.              | 185.125.190.18
+ connectivity-check.ubuntu.com.              | 2001:67c:1562::24
+ ns3-39.azure-dns.org.                       | 2a01:111:4000:10::27
+ mirror.docker.ru.                           | 2a04:8580:ffff:fffe::2
+...
+```
+
+To obtain domain names from SNI, the size of the captured packets must be large enough.

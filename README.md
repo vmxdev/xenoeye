@@ -18,14 +18,15 @@ Please read carefully: some items may not be suitable for you
 
   * The project is in beta state. The collector works for us, but we cannot give any guarantee that it will work for you.
   * This is not a turnkey business solution, but a collector program and several auxiliary scripts. However, with the collector you can generate almost arbitrary reports, build charts, dashboards in Grafana and run scripts when the traffic exceeds the limits.
-  * We use the collector to monitor our networks. We are using Netflow v9 and IPFIX, so the collector supports them. Netflow v5 is also supported.
+  * We use the collector to monitor our networks. We are using Netflow v9 and IPFIX, so the collector supports them.
+  * Netflow v5 and sFlow are also supported.
   * Unlike many modern collectors, we **don't use** Apache Kafka, Elastic stack or anything like that. The main processing take place inside the collector itself
   * The documentation contains examples of building simple reports. To build more complex ones, you need at least basic knowledge of SQL
   * Collector processes data in two ways: aggregates it over periods (for reports and charts), and uses moving averages to quickly respond to bursts
   * Both methods can be used individually or together. For example, if a moving average detects a threshold being exceeded, you can run a custom script and immediately enable extended statistics collection
   * Collector is not very demanding on resources. It can process data and build reports even on Orange Pi (analogous to Raspberry Pi) with 4 GB of memory
   * Collector kernel is written in C
-  * The collector has only been tested under 64-bit Linux (x64 and AArch64)
+  * The collector has only been tested under 64-bit Linux (x64, AArch64 and [Elbrus](https://en.wikipedia.org/wiki/Elbrus_2000))
   * We are using PostgreSQL as a storage for time series. The data aggregated by the selected Netflow fields is exported there. Aggregation occurs within the collector
   * Not a very large set of Netflow fields is supported out of the box, but you can add almost any field. Fields with types "integer" (various sizes) and "address" (IPv4 and IPv6) are currently supported
   * The project has a very liberal ISC license. We have no plans to make commercial or semi-commercial versions. This means that we cannot make any predictions about the future of the project. But on the other hand:
@@ -80,6 +81,8 @@ Scaling to multiple cores is described below in the documentation
     * [xegeoq utility](EXTRA.md#xegeoq-utility)
     * [Visualizing GeoIP data and AS names with Grafana](EXTRA.md#visualizing-geoip-data-and-as-names-with-grafana)
     * [Traffic classification](EXTRA.md#traffic-classification)
+    * [sFlow](EXTRA.md#sflow)
+    * [Additional data analysis using sFlow: DNS and SNI](EXTRA.md#)
 
   * [Full description of configuration files](CONFIG.md)
     * [Main configuration file `xenoeye.conf`](CONFIG.md#main-configuration-file-xenoeyeconf)

@@ -27,6 +27,12 @@ The file consists of the following sections:
 		{"pcap" : {"interface": "eth0", "filter": "udp and port 2055"}}
 	],
 
+	"sflow-capture": [
+		{"pcap": {"interface": "eth0", "filter": "udp and port 6343"}},
+		{"socket": {"listen-on": "*", "port": "6343"}}
+	]
+
+
 	"templates": {
 		"db": "/var/lib/xenoeye/templates.tkvdb"
 	},
@@ -57,6 +63,11 @@ The `interface` parameter is the name of the interface on which to capture netfl
 The BPF filter can be empty, in which case the collector will try to parse all UDP packets on this interface.
 
 The worker thread captures only those packets that are matched by the filter.
+
+
+#### Section `sflow-capture`
+
+Describes sFlow processing threads. The format is the same as in the `capture` section.
 
 
 #### Section `templates`
@@ -227,6 +238,8 @@ Examples:
 Current list of available netflow fields: [`filter.def`](filter.def)
 
 See also [How to add a new Netflow field to the collector](INTERNALS.md#)"
+
+The `dns-name`, `dns-ips` and `sni` fields are used only for sFlow.
 
 
 Current list of available functions:

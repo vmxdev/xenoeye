@@ -489,29 +489,70 @@ select tm as time, val as class, name from xe_rep('ingress_clsf_port', 'class0',
 
 ### sFlow
 
-Чтобы коллектор мог собирать sFlow, нужно добавить секцию в главный конфигурационный файл:
+Коллектор собирает и обрабатывает sFlow, если в главном конфигурационном файле есть секция `"sflow-capture"`:
 ```
 	"sflow-capture": [
+		//{"pcap": {"interface": "eth0", "filter": "udp and port 6343"}},
 		{"socket": {"listen-on": "*", "port": "6343"}}
-		/*,
-		{"pcap": {"interface": "eth1", "filter": "udp and port 6343"}}
-		*/
 	]
 ```
 
 Так же, как и для Netflow, можно использовать обычные сокеты или собирать с интерфейса с помощью libpcap.
 
-После того, как коллектор начнет собирать sFlow, его можно обрабатывать точно так же, как и Netflow. Фильтрами указывать объекты мониторинга, агрегировать статистику по полям и следить за скользящими средними.
+После того, как коллектор начнет собирать sFlow, его можно обрабатывать точно так же, как и Netflow. Можно создавать объекты мониторинга, описывать фильтр, таблицы для экспорта данных и скользящие средние.
 
-Если коллектор не понимает пакет sFlow, то он его молча отбрасывает. Чтобы увидеть, как коллектор видит sFlow-трафик в комплекте есть утилита `xesflow`.
+Если коллектор не понимает пакет sFlow, то он его молча отбрасывает. Чтобы понимать, как коллектор видит sFlow-трафик, в комплекте есть утилита `xesflow`. Она захватывает трафик с помощью pcap и показывает известные ей sFlow-поля.
 
-### Анализ данных DNS и SNI с помощью sFlow
+```
+# ./xesflow -i eth1 -f "udp and port 6343"
+version: 5 [sflow-impl.h, line 198, function sflow_process()]
+agent address type: 1 [sflow-impl.h, line 205, function sflow_process()]
+agent address (IPv4): 172.16.2.2 [sflow-impl.h, line 214, function sflow_process()]
+agent id: 16 [sflow-impl.h, line 232, function sflow_process()]
+sequence: 15690 [sflow-impl.h, line 235, function sflow_process()]
+uptime: 2858088699 [sflow-impl.h, line 238, function sflow_process()]
+samples: 7 [sflow-impl.h, line 241, function sflow_process()]
+        sample #0 [sflow-impl.h, line 245, function sflow_process()] 
+        sample type: 1 (SF5_SAMPLE_FLOW) [sflow-impl.h, line 249, function sflow_process()]
+        length:  144 [sflow-impl.h, line 61, function sf5_flow()]
+        sequence: 53379644 [sflow-impl.h, line 64, function sf5_flow()]
+        src id: 518 [sflow-impl.h, line 67, function sf5_flow()]
+        sampling rate: 400 [sflow-impl.h, line 70, function sf5_flow()]
+        sample pool: 1956205512 [sflow-impl.h, line 74, function sf5_flow()]
+        drop events: 0 [sflow-impl.h, line 76, function sf5_flow()]
+        input interface: 0 [sflow-impl.h, line 80, function sf5_flow()]
+        output interface: 518 [sflow-impl.h, line 88, function sf5_flow()]
+        number of elements: 2 [sflow-impl.h, line 95, function sf5_flow()]
+                element #0 [sflow-impl.h, line 100, function sf5_flow()]
+                tag: 1 [sflow-impl.h, line 102, function sf5_flow()]
+                element length: 80 bytes [sflow-impl.h, line 105, function sf5_flow()]
+                header protocol: 1 [sflow-impl.h, line 126, function sf5_flow()]
+                header len: 64 [sflow-impl.h, line 127, function sf5_flow()]
+                sampled size: 68 [sflow-impl.h, line 129, function sf5_flow()]
+                        Ethernet src: 54:4b:8c:ef:23:c0 [rawparse.h, line 116, function rawpacket_parse()]
+                        Ethernet dst: 00:25:90:7c:41:8f [rawparse.h, line 116, function rawpacket_parse()]
+                        Ethernet proto: 0x8100 [rawparse.h, line 116, function rawpacket_parse()]
+                        VLAN 607 [rawparse.h, line 129, function rawpacket_parse()] 
+                        IPv4 src: 91.32.91.80 [rawparse.h, line 179, function rawpacket_parse()]
+                        IPv4 dst: 121.101.245.97 [rawparse.h, line 179, function rawpacket_parse()]
+                        TOS: 0x0 [rawparse.h, line 179, function rawpacket_parse()]
+                        ID: 16183 [rawparse.h, line 179, function rawpacket_parse()]
+                        TTL: 118 [rawparse.h, line 179, function rawpacket_parse()]
+                        IP protocol: 6 [rawparse.h, line 179, function rawpacket_parse()]
+                        TCP src port: 2872 [rawparse.h, line 253, function rawpacket_parse()]
+                        TCP dst port: 443 [rawparse.h, line 253, function rawpacket_parse()]
+                        TCP flags: 0x10 [rawparse.h, line 253, function rawpacket_parse()]
+...
+```
+
+
+### Дополнительный анализ данных с помощью sFlow: DNS и SNI
 
 Так как sFlow агент посылает в коллектор куски пакетов, их можно парсить и получать некоторую дополнительную информацию.
 
 В коллекторе есть парсеры протоколов DNS и TLS (HTTPS) SNI.
 
-Если вы хостер, то эти парсеры могут помочь для составления "карты хостинга", чтобы понимать какие домены хостятся на вашей площадке.
+Например, если вы хостер, то эти парсеры могут помочь составить "карту хостинга", чтобы понимать какие домены хостятся на вашей площадке.
 
 ```
 	"fwm": [
@@ -528,4 +569,23 @@ select tm as time, val as class, name from xe_rep('ingress_clsf_port', 'class0',
 	]
 ```
 
-`dns-ips` сохраняются в виде `{ip1, ip2, ...}`
+Коллектор парсит A(IPv4) и AAAA(IPv6) DNS-записи.
+
+`dns-ips` сохраняются в виде `{ip1, ip2, ...}` - в пакете с DNS-ответом может быть несколько IP-адресов.
+
+Запрос к СУБД для получения доменных имен и их адресов может выглядеть приблизительно так:
+
+```
+=> select distinct dns_name, unnest(dns_ips::inet[]) as ip from all_dns_sni_d order by ip;
+ ns4-34.azure-dns.info.                      | 13.107.206.34
+ ns3-34.azure-dns.org.                       | 13.107.222.34
+ 144.240.101.34.bc.googleusercontent.com.    | 34.101.240.144
+ connectivity-check.ubuntu.com.              | 91.189.91.49
+ connectivity-check.ubuntu.com.              | 185.125.190.18
+ connectivity-check.ubuntu.com.              | 2001:67c:1562::24
+ ns3-39.azure-dns.org.                       | 2a01:111:4000:10::27
+ mirror.docker.ru.                           | 2a04:8580:ffff:fffe::2
+...
+```
+
+Для получения доменных имен из SNI размер захватываемых пакетов должен быть достаточно большим.

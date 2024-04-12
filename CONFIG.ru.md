@@ -27,6 +27,11 @@
 		{"pcap" : {"interface": "eth0", "filter": "udp and port 2055"}}
 	],
 
+	"sflow-capture": [
+		{"pcap": {"interface": "eth0", "filter": "udp and port 6343"}},
+		{"socket": {"listen-on": "*", "port": "6343"}}
+	]
+
 	"templates": {
 		"db": "/var/lib/xenoeye/templates.tkvdb"
 	},
@@ -57,6 +62,11 @@
 BPF-фильтр может быть пустым, тогда коллектор будет пытаться парсить все UDP-пакеты на этом интерфейсе.
 
 Рабочий поток захватывает только те пакеты, которые матчатся фильтром.
+
+
+#### Секция `sflow-capture`
+
+Описывает потоки обработки sFlow. Формат такой же, как и в секции `capture`
 
 
 #### Секция `templates`
@@ -228,6 +238,8 @@ filter = <expr1> AND (<expr2> OP <expr3>)       /* приоритет AND выш
 Текущий список доступных netflow-полей: [`filter.def`](filter.def)
 
 См. также [Как добавить в коллектор новое Netflow-поле](INTERNALS.ru.md#как-добавить-в-коллектор-новое-netflow-поле)"
+
+Поля `dns-name`, `dns-ips` и `sni` используются только для sFlow.
 
 Текущий список доступных функций:
 
