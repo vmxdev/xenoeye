@@ -49,9 +49,9 @@ do {                                                 \
 
 
 static inline int
-sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end)
+sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end, int exp)
 {
-	uint32_t l, seq, src, nel;
+	uint32_t l, seq, nel;
 	uint32_t v;
 	uint32_t j;
 	uint32_t ifidx, ifidx_be;
@@ -63,8 +63,19 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end)
 	READ32_H(seq, *p, end);
 	LOG("\tsequence: %u", seq);
 
-	READ32_H(src, *p, end);
-	LOG("\tsrc id: %u", src);
+	if (!exp) {
+		uint32_t src;
+
+		READ32_H(src, *p, end);
+		LOG("\tsrc id: %u", src);
+	} else {
+		uint32_t src_class, src_idx;
+
+		READ32_H(src_class, *p, end);
+		LOG("\tsrc id class: %u", src_class);
+		READ32_H(src_idx, *p, end);
+		LOG("\tsrc id index: %u", src_idx);
+	}
 
 	READ32_H(v, *p, end);
 	LOG("\tsampling rate: %u", v);
@@ -75,21 +86,44 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end)
 	READ32_H(v, *p, end);
 	LOG("\tdrop events: %u", v);
 
-	READ32_H(ifidx, *p, end);
-	ifidx &= 0x3fffffff;
-	LOG("\tinput interface: %u", ifidx);
-	ifidx_be = htobe32(ifidx);
-	memcpy(s->flow->input_snmp, &ifidx_be, sizeof(uint32_t));
-	s->flow->has_input_snmp = 1;
-	s->flow->input_snmp_size = sizeof(uint32_t);
+	if (!exp) {
+		READ32_H(ifidx, *p, end);
+		ifidx &= 0x3fffffff;
+		LOG("\tinput interface: %u", ifidx);
+		ifidx_be = htobe32(ifidx);
+		memcpy(s->flow->input_snmp, &ifidx_be, sizeof(uint32_t));
+		s->flow->has_input_snmp = 1;
+		s->flow->input_snmp_size = sizeof(uint32_t);
 
-	READ32_H(ifidx, *p, end);
-	ifidx &= 0x3fffffff;
-	LOG("\toutput interface: %u", ifidx);
-	ifidx_be = htobe32(ifidx);
-	memcpy(s->flow->output_snmp, &ifidx_be, sizeof(uint32_t));
-	s->flow->has_output_snmp = 1;
-	s->flow->output_snmp_size = sizeof(uint32_t);
+		READ32_H(ifidx, *p, end);
+		ifidx &= 0x3fffffff;
+		LOG("\toutput interface: %u", ifidx);
+		ifidx_be = htobe32(ifidx);
+		memcpy(s->flow->output_snmp, &ifidx_be, sizeof(uint32_t));
+		s->flow->has_output_snmp = 1;
+		s->flow->output_snmp_size = sizeof(uint32_t);
+	} else {
+		/* expanded */
+		uint32_t port_format;
+
+		READ32_H(port_format, *p, end);
+		LOG("\tinput interface format: %u", port_format);
+		READ32_H(ifidx, *p, end);
+		LOG("\tinput interface: %u", ifidx);
+		ifidx_be = htobe32(ifidx);
+		memcpy(s->flow->input_snmp, &ifidx_be, sizeof(uint32_t));
+		s->flow->has_input_snmp = 1;
+		s->flow->input_snmp_size = sizeof(uint32_t);
+
+		READ32_H(port_format, *p, end);
+		LOG("\toutput interface format: %u", port_format);
+		READ32_H(ifidx, *p, end);
+		LOG("\toutput interface: %u", ifidx);
+		ifidx_be = htobe32(ifidx);
+		memcpy(s->flow->output_snmp, &ifidx_be, sizeof(uint32_t));
+		s->flow->has_output_snmp = 1;
+		s->flow->output_snmp_size = sizeof(uint32_t);
+	}
 
 	READ32_H(nel, *p, end);
 	LOG("\tnumber of elements: %u", nel);
@@ -247,12 +281,23 @@ sflow_process(struct xe_data *global, size_t thread_id,
 
 		if (v == SF5_SAMPLE_FLOW) {
 			LOG("\tsample type: %u (SF5_SAMPLE_FLOW)", v);
-			if (!sf5_flow(&sfd, &p, end)) {
+			if (!sf5_flow(&sfd, &p, end, 0)) {
 				return 0;
 			}
 		} else if (v == SF5_SAMPLE_COUNTERS) {
 			uint32_t l;
 			LOG("\tsample type: %u (SF5_SAMPLE_COUNTERS)", v);
+			READ32_H(l, p, end);
+			LOG("\tskipping this sample type (%u bytes)", l);
+			p += l;
+		} else if (v == SF5_SAMPLE_FLOW_EXPANDED) {
+			LOG("\tsample type: %u (SF5_SAMPLE_FLOW)", v);
+			if (!sf5_flow(&sfd, &p, end, 1)) {
+				return 0;
+			}
+		} else if (v == SF5_SAMPLE_COUNTERS_EXPANDED) {
+			uint32_t l;
+			LOG("\tsample type: %u (SF5_SAMPLE_COUNTERS_EXPANDED)", v);
 			READ32_H(l, p, end);
 			LOG("\tskipping this sample type (%u bytes)", l);
 			p += l;
