@@ -70,6 +70,14 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 		return 0;
 	}
 
+	/* debug print */
+	if (s->global->debug.print_flows) {
+		char debug_flow_str[1024];
+		sflow_debug_print(s->flow, debug_flow_str);
+
+		flow_print_str(&s->global->debug, s->flow, debug_flow_str);
+	}
+
 	for (t_id=0; t_id<s->global->nmonit_objects; t_id++) {
 		struct monit_object *mo = &s->global->monit_objects[t_id];
 

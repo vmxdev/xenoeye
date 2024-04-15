@@ -82,7 +82,7 @@ Scaling to multiple cores is described below in the documentation
     * [Visualizing GeoIP data and AS names with Grafana](EXTRA.md#visualizing-geoip-data-and-as-names-with-grafana)
     * [Traffic classification](EXTRA.md#traffic-classification)
     * [sFlow](EXTRA.md#sflow)
-    * [Additional data analysis using sFlow: DNS and SNI](EXTRA.md#)
+    * [Additional data analysis using sFlow: DNS and SNI](EXTRA.md#additional-data-analysis-using-sflow-dns-and-sni)
 
   * [Full description of configuration files](CONFIG.md)
     * [Main configuration file `xenoeye.conf`](CONFIG.md#main-configuration-file-xenoeyeconf)
