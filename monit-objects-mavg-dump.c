@@ -84,6 +84,7 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 		}
 
 		fprintf(out, " :: ");
+
 		for (i=0; i<mavg->fieldset.n_aggr; i++) {
 			size_t j;
 			struct mavg_val *val;
@@ -107,7 +108,10 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 			fprintf(out, "(");
 			for (j=0; j<mavg->noverlimit; j++) {
 				/* */
-				fprintf(out, "%lu ", (uint64_t)val->limits_max[j]);
+				MAVG_TYPE limit;
+				limit = atomic_load_explicit(&val->limits_max[j],
+					memory_order_relaxed);
+				fprintf(out, "%lu ", (uint64_t)limit);
 			}
 
 			fprintf(out, ")");

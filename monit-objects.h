@@ -136,7 +136,7 @@ struct mavg_val
 {
 	_Atomic MAVG_TYPE val;
 	_Atomic uint64_t time_prev;
-	MAVG_TYPE limits_max[1]; /* growing array (noverlimit items) */
+	_Atomic MAVG_TYPE limits_max[1]; /* growing array (noverlimit items) */
 };
 
 struct mavg_data

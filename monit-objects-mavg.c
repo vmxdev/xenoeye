@@ -581,12 +581,17 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 		val = vals[i] / (MAVG_TYPE)mavg->size_secs;
 
 		for (j=0; j<mavg->noverlimit; j++) {
-			if (val >= pval->limits_max[j]) {
+			MAVG_TYPE limit;
+			limit = atomic_load_explicit(&pval->limits_max[j],
+				memory_order_relaxed);
+			if (val >= limit) {
 				struct mavg_ovrlm_data od;
 
 				od.time_last = time_ns;
 				od.val = val;
-				od.limit = pval->limits_max[j];
+				//od.limit = pval->limits_max[j];
+				atomic_store_explicit(&od.limit, limit,
+					memory_order_relaxed);
 				od.back2norm_time_ns
 					= mavg->overlimit[j].back2norm_time_ns;
 
@@ -652,10 +657,13 @@ mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 			if (rc == TKVDB_OK) {
 				/* found, using value as limit */
 				MAVG_TYPE *limptr = (MAVG_TYPE *)dtval.data;
-				pval->limits_max[j] = *limptr;
+				atomic_store_explicit(&pval->limits_max[j],
+					*limptr, memory_order_relaxed);
 			} else {
 				/* not found, using default */
-				pval->limits_max[j] = mavg->overlimit[j].def[i];
+				atomic_store_explicit(&pval->limits_max[j],
+					mavg->overlimit[j].def[i],
+					memory_order_relaxed);
 			}
 		}
 
