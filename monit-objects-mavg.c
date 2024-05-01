@@ -62,14 +62,14 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 
 
 	/* per-thread data */
-	window->data = calloc(nthreads, sizeof(struct mavg_data));
-	if (!window->data) {
+	window->thr_data = calloc(nthreads, sizeof(struct mavg_thread_data));
+	if (!window->thr_data) {
 		LOG("calloc() failed");
 		return 0;
 	}
 
 	for (i=0; i<nthreads; i++) {
-		struct mavg_data *data = &window->data[i];
+		struct mavg_thread_data *data = &window->thr_data[i];
 		tkvdb_tr *tmp_db;
 
 		data->keysize = keysize;
@@ -454,11 +454,11 @@ mavg_limits_file_load(struct mo_mavg *window, struct mavg_limit *l)
 		return 0;
 	}
 
-	key = window->data[0].key;
+	key = window->thr_data[0].key;
 	val = alloca(sizeof(MAVG_TYPE) * window->fieldset.n_aggr);
 
 	dtk.data = key;
-	dtk.size = window->data[0].keysize;
+	dtk.size = window->thr_data[0].keysize;
 
 	dtv.data = val;
 	dtv.size = sizeof(MAVG_TYPE) * window->fieldset.n_aggr;
@@ -532,7 +532,7 @@ mavg_limits_init(struct mo_mavg *window)
 
 /* react on overlimit */
 static void
-mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
+mavg_on_overlimit(struct xe_data *globl, struct mavg_thread_data *data,
 	size_t limit_id, struct mavg_ovrlm_data *od)
 {
 	TKVDB_RES rc;
@@ -568,7 +568,7 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_data *data,
 
 static void
 mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
-	struct mavg_data *data,	uint8_t *vptr, MAVG_TYPE *vals,
+	struct mavg_thread_data *data,	uint8_t *vptr, MAVG_TYPE *vals,
 	uint64_t time_ns)
 {
 	size_t i, j;
@@ -628,7 +628,7 @@ mavg_recalc(_Atomic MAVG_TYPE *oldval_p, _Atomic uint64_t *old_time_ns_p,
 
 static void
 mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
-	uint64_t time_ns, struct mavg_data *data, MAVG_TYPE *vals)
+	uint64_t time_ns, struct mavg_thread_data *data, MAVG_TYPE *vals)
 {
 	size_t i, j;
 
@@ -676,9 +676,9 @@ mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 	}
 }
 
-/* try to reset MA database when there is not enough memory in it */
+/* try to reset MA database when there is not enough memory */
 static int
-try_reset_db(struct mo_mavg *mavg, struct mavg_data *thr_data)
+try_reset_db(struct mo_mavg *mavg, struct mavg_thread_data *thr_data)
 {
 	tkvdb_cursor *c;
 	int ret = 0;
@@ -800,7 +800,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 		MAVG_TYPE wndsize;
 
 		struct mo_mavg *mavg = &mo->mavgs[i];
-		struct mavg_data *data = &mavg->data[thread_id];
+		struct mavg_thread_data *data = &mavg->thr_data[thread_id];
 
 		uint8_t *key = data->key;
 
@@ -850,7 +850,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 
 			/* values from another threads */
 			for (t=0; t<mavg->nthreads; t++) {
-				struct mavg_data *ndata;
+				struct mavg_thread_data *ndata;
 				tkvdb_tr *ndb;
 
 				if (t == thread_id) {
@@ -858,7 +858,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 					continue;
 				}
 
-				ndata = &mavg->data[t];
+				ndata = &mavg->thr_data[t];
 				ndb = atomic_load_explicit(&ndata->db,
 					memory_order_relaxed);
 				rc = ndb->get(ndb, &dtkey, &nval);

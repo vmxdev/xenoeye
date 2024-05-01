@@ -139,7 +139,7 @@ struct mavg_val
 	_Atomic MAVG_TYPE limits_max[1]; /* growing array (noverlimit items) */
 };
 
-struct mavg_data
+struct mavg_thread_data
 {
 	/* atomic pointer to database */
 	tkvdb_tr *_Atomic db;
@@ -213,6 +213,9 @@ struct mo_mavg
 	struct mavg_limit *overlimit;
 	size_t noverlimit;
 
+	struct mavg_limit *underlimit;
+	size_t nunderlimit;
+
 	/* global database of overlimited items */
 	tkvdb_tr *glb_ovr_db;
 
@@ -220,7 +223,7 @@ struct mo_mavg
 
 	/* each thread has it's own data */
 	size_t nthreads;
-	struct mavg_data *data;
+	struct mavg_thread_data *thr_data;
 };
 
 struct monit_object

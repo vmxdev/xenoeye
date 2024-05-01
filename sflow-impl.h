@@ -1,3 +1,4 @@
+#include <errno.h>
 #include "flow-info.h"
 
 enum SF5_ADDR_TYPE
@@ -220,6 +221,7 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	uint8_t *end = p + len;
 	struct flow_info flow;
 	struct sfdata sfd;
+	struct timespec tmsp;
 
 	sfd.global = global;
 	sfd.thread_id = thread_id;
@@ -227,6 +229,13 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	sfd.flow = &flow;
 
 	memset(&flow, 0, sizeof(struct flow_info));
+
+	/* get time for moving averages */
+	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
+		LOG("clock_gettime() failed: %s", strerror(errno));
+		return 0;
+	}
+	fpi->time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
 
 	READ32_H(v, p, end);
 	LOG("version: %u", v);

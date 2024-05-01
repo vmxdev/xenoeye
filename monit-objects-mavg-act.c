@@ -512,7 +512,7 @@ mavg_act_thread(void *arg)
 				/* for each thread data */
 				for (tidx=0; tidx<globl->nthreads; tidx++) {
 					tkvdb_tr *db_thr
-						= mw->data[tidx].ovr_db[bank];
+						= mw->thr_data[tidx].ovr_db[bank];
 
 					check_items(db_glb, db_thr);
 
