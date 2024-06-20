@@ -22,9 +22,13 @@
 
 ### Сборка и установка
 
-В минимальном Debian для сборки нужно доустановить такие пакеты:
+В минимальном Debian 12 для сборки нужно доустановить такие пакеты:
+``` sh
+$ sudo apt -y install git autoconf gcc make libpcap-dev libtool
+```
 
-```sh
+Для Debian 13:
+``` sh
 $ sudo apt -y install git autoconf gcc make libpcap-dev
 ```
 
