@@ -136,7 +136,9 @@ struct mavg_val
 {
 	_Atomic MAVG_TYPE val;
 	_Atomic uint64_t time_prev;
-	_Atomic MAVG_TYPE limits_max[1]; /* growing array (noverlimit items) */
+
+	/* growing array (noverlimit + nunderlimit items) */
+	_Atomic MAVG_TYPE limits[1];
 };
 
 struct mavg_thread_data
@@ -215,6 +217,7 @@ struct mo_mavg
 
 	struct mavg_limit *underlimit;
 	size_t nunderlimit;
+	_Atomic uint64_t underlimit_check_at;
 
 	/* global database of overlimited items */
 	tkvdb_tr *glb_ovr_db;
@@ -276,6 +279,7 @@ void *fwm_bg_thread(void *);
 int mavg_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
 int mavg_fields_init(size_t nthreads, struct mo_mavg *window);
 int mavg_limits_init(struct mo_mavg *window);
+int mavg_limits_file_load(struct mo_mavg *window, struct mavg_limit *l);
 void monit_objects_mavg_link_ext_stat(struct xe_data *globl);
 int monit_object_mavg_process_nf(struct xe_data *globl,
 	struct monit_object *mo, size_t thread_id,

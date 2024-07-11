@@ -123,16 +123,32 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 			fprintf(out, "%lu ", (uint64_t)vals[i]);
 
 			/* limits */
-			fprintf(out, "(");
-			for (j=0; j<mavg->noverlimit; j++) {
-				/* */
-				MAVG_TYPE limit;
-				limit = atomic_load_explicit(&val->limits_max[j],
-					memory_order_relaxed);
-				fprintf(out, "%lu ", (uint64_t)limit);
+			if (mavg->noverlimit > 0) {
+				fprintf(out, "(");
+				for (j=0; j<mavg->noverlimit; j++) {
+					/* */
+					MAVG_TYPE limit;
+					limit = atomic_load_explicit(
+						&val->limits[j],
+						memory_order_relaxed);
+					fprintf(out, "%lu ", (uint64_t)limit);
+				}
+				fprintf(out, ")");
 			}
 
-			fprintf(out, ")");
+			if (mavg->nunderlimit > 0) {
+				fprintf(out, "[");
+				for (j=0; j<mavg->nunderlimit; j++) {
+					size_t lidx = j + mavg->noverlimit;
+					MAVG_TYPE limit;
+					limit = atomic_load_explicit(
+						&val->limits[lidx],
+						memory_order_relaxed);
+					fprintf(out, "%lu ", (uint64_t)limit);
+				}
+				fprintf(out, "]");
+			}
+
 		}
 
 		fprintf(out, "\n");
