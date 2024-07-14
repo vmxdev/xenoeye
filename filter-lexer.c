@@ -176,6 +176,12 @@ read_str_token(const char *sample, enum TOKEN_ID *id)
 		*id = MIN;
 	}  else if (MATCH("mfreq")) {
 		*id = MFREQ;
+	}  else if (MATCH("tfstr")) {
+		*id = TFSTR;
+	}  else if (MATCH("portstr")) {
+		*id = PORTSTR;
+	}  else if (MATCH("ppstr")) {
+		*id = PPSTR;
 /* geoip */
 #define DO(FIELD, SIZE)                               \
 	}  else if (MATCH(#FIELD)) {                  \

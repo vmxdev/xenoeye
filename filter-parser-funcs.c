@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2023, Vladimir Misyurov
+ * Copyright (c) 2023-2024, Vladimir Misyurov
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -524,3 +524,184 @@ function_as(struct filter_input *in, struct filter_expr *e)
 	}
 }
 
+int
+function_tfstr_parse(struct filter_input *in, struct function_tfstr *tfstr)
+{
+	unsigned int tfsize;
+	if (!accept_(in, TFSTR)) {
+		return 0;
+	}
+
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after 'tfstr'");
+		return 0;
+	}
+
+	/* arg */
+	if (!parse_nonaggr_field(in, &tfstr->tf_off, &tfsize)) {
+		mkerror(in, "Incorrect field name");
+		return 0;
+	}
+
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+int
+function_tfstr(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_tfstr tfstr;
+	struct filter_basic *fb;
+
+	if (!function_tfstr_parse(in, &tfstr)) {
+		return 0;
+	}
+
+	if (!filter_add_basic_filter(e, FILTER_BASIC_STRING,
+			FILTER_BASIC_NAME_TFSTR,
+			FILTER_BASIC_DIR_NONE)) {
+		return 0;
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->func_data.tfstr = malloc(sizeof(struct function_tfstr));
+	if (!fb->func_data.tfstr) {
+		return 0;
+	}
+
+	*fb->func_data.tfstr = tfstr;
+
+	fb->is_func = 1;
+
+	return id(in, e, FILTER_BASIC_STRING);
+}
+
+int
+function_portstr_parse(struct filter_input *in,
+	struct function_portstr *portstr)
+{
+	if (!accept_(in, PORTSTR)) {
+		return 0;
+	}
+
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after 'portstr'");
+		return 0;
+	}
+
+	/* arg */
+	if (!parse_nonaggr_field(in, &portstr->port_off, &portstr->port_size)) {
+		mkerror(in, "Incorrect field name");
+		return 0;
+	}
+
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+int
+function_portstr(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_portstr portstr;
+	struct filter_basic *fb;
+
+	if (!function_portstr_parse(in, &portstr)) {
+		return 0;
+	}
+
+	if (!filter_add_basic_filter(e, FILTER_BASIC_STRING,
+			FILTER_BASIC_NAME_PORTSTR,
+			FILTER_BASIC_DIR_NONE)) {
+		return 0;
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->func_data.portstr = malloc(sizeof(struct function_portstr));
+	if (!fb->func_data.portstr) {
+		return 0;
+	}
+
+	*fb->func_data.portstr = portstr;
+
+	fb->is_func = 1;
+
+	return id(in, e, FILTER_BASIC_STRING);
+}
+
+int
+function_ppstr_parse(struct filter_input *in, struct function_ppstr *ppstr)
+{
+	if (!accept_(in, PPSTR)) {
+		return 0;
+	}
+
+	if (!accept_(in, LPAREN)) {
+		mkerror(in, "Expected '(' after 'ppstr'");
+		return 0;
+	}
+
+	/* arg1 */
+	if (!parse_nonaggr_field(in, &ppstr->arg1_off, &ppstr->arg1_size)) {
+		mkerror(in, "Incorrect field name");
+		return 0;
+	}
+
+	if (!accept_(in, COMMA)) {
+		mkerror(in, "Expected ',' after field name");
+		return 0;
+	}
+
+	/* arg2 */
+	if (!parse_nonaggr_field(in, &ppstr->arg2_off, &ppstr->arg2_size)) {
+		mkerror(in, "Incorrect field name after comma");
+		return 0;
+	}
+
+	if (!accept_(in, RPAREN)) {
+		mkerror(in, "Expected ')'");
+		return 0;
+	}
+
+	return 1;
+}
+
+
+int
+function_ppstr(struct filter_input *in, struct filter_expr *e)
+{
+	struct function_ppstr ppstr;
+	struct filter_basic *fb;
+
+	if (!function_ppstr_parse(in, &ppstr)) {
+		return 0;
+	}
+
+	if (!filter_add_basic_filter(e, FILTER_BASIC_STRING,
+			FILTER_BASIC_NAME_PPSTR,
+			FILTER_BASIC_DIR_NONE)) {
+
+		return 0;
+	}
+
+	fb = e->filter[e->n - 1].arg;
+	fb->func_data.ppstr = malloc(sizeof(struct function_ppstr));
+	if (!fb->func_data.ppstr) {
+		return 0;
+	}
+
+	*fb->func_data.ppstr = ppstr;
+
+	fb->is_func = 1;
+
+	return id(in, e, FILTER_BASIC_STRING);
+}

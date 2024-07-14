@@ -5,8 +5,13 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <stdint.h>
 
 #define TOKEN_MAX_SIZE 512
+
+#define TCP_FLAGS_STR_MAX_SIZE 32
+#define TCP_UDP_PORT_STR_MAX_SIZE 16
+#define TCP_UDP_PP_STR_MAX_SIZE 64
 
 #define LOG(...)                                               \
 do {                                                           \
@@ -112,6 +117,10 @@ csv_next(char **line, char *val)
 		*line = end + 1;
 	}
 }
+
+char *tcp_flags_to_str(uint8_t tf);
+void port_to_str(char *res, uint16_t port);
+void ports_pair_to_str(char *res, uint16_t port1, uint16_t port2);
 
 typedef __int128_t xe_ip;
 

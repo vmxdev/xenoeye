@@ -625,6 +625,50 @@ monit_object_func_as(struct field *fld, struct flow_info *flow,
 	}
 }
 
+static void
+monit_object_func_tfstr(struct field *fld, struct flow_info *flow,
+	uint8_t *key)
+{
+	char *s;
+	uint8_t flags;
+
+	memset(key, 0, TCP_FLAGS_STR_MAX_SIZE);
+
+	flags = get_nf_val((uintptr_t)flow + fld->func_data.tfstr.tf_off, 1);
+	s = tcp_flags_to_str(flags);
+
+	strcpy((char *)key, s);
+}
+
+static void
+monit_object_func_portstr(struct field *fld, struct flow_info *flow,
+	uint8_t *key)
+{
+	uint16_t port;
+
+	memset(key, 0, TCP_UDP_PORT_STR_MAX_SIZE);
+	port = get_nf_val((uintptr_t)flow + fld->func_data.portstr.port_off,
+		fld->func_data.portstr.port_size);
+
+	port_to_str((char *)key, port);
+}
+
+static void
+monit_object_func_ppstr(struct field *fld, struct flow_info *flow,
+	uint8_t *key)
+{
+	uint16_t port1, port2;
+
+	memset(key, 0, TCP_UDP_PP_STR_MAX_SIZE);
+
+	port1 = get_nf_val((uintptr_t)flow + fld->func_data.ppstr.arg1_off,
+		fld->func_data.ppstr.arg1_size);
+	port2 = get_nf_val((uintptr_t)flow + fld->func_data.ppstr.arg2_off,
+		fld->func_data.ppstr.arg2_size);
+
+	ports_pair_to_str((char *)key, port1, port2);
+}
+
 void
 monit_object_key_add_fld(struct field *fld, uint8_t *key,
 	struct flow_info *flow)
@@ -651,6 +695,15 @@ FOR_LIST_OF_GEOIP_FIELDS
 			case ASN:
 			case ASD:
 				monit_object_func_as(fld, flow, key);
+				break;
+			case TFSTR:
+				monit_object_func_tfstr(fld, flow, key);
+				break;
+			case PORTSTR:
+				monit_object_func_portstr(fld, flow, key);
+				break;
+			case PPSTR:
+				monit_object_func_ppstr(fld, flow, key);
 				break;
 			default:
 				break;

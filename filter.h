@@ -81,6 +81,9 @@ FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
 	ASN,
 	ASD,
+	TFSTR,
+	PORTSTR,
+	PPSTR,
 	COMMA
 };
 
@@ -137,7 +140,10 @@ enum FILTER_BASIC_NAME
 FOR_LIST_OF_GEOIP_FIELDS
 #undef DO
 	FILTER_BASIC_NAME_ASN,
-	FILTER_BASIC_NAME_ASD
+	FILTER_BASIC_NAME_ASD,
+	FILTER_BASIC_NAME_TFSTR,
+	FILTER_BASIC_NAME_PORTSTR,
+	FILTER_BASIC_NAME_PPSTR
 };
 
 struct function_div
@@ -195,6 +201,31 @@ struct function_as
 	int num;
 };
 
+struct function_tfstr
+{
+	/* offset in struct flow_info */
+	unsigned int tf_off;
+};
+
+struct function_portstr
+{
+	/* offset in struct flow_info */
+	unsigned int port_off;
+	unsigned int port_size;
+};
+
+struct function_ppstr
+{
+	/* offsets and sizes in struct flow_info */
+	unsigned int arg1_off;
+	unsigned int arg1_size;
+
+	unsigned int arg2_off;
+	unsigned int arg2_size;
+
+	_Atomic uint64_t *freqmap;
+};
+
 struct filter_basic
 {
 	enum FILTER_BASIC_TYPE type;
@@ -211,6 +242,9 @@ struct filter_basic
 		struct function_mfreq *mfreq;
 		struct function_geoip *geoip;
 		struct function_as *as;
+		struct function_tfstr *tfstr;
+		struct function_portstr *portstr;
+		struct function_ppstr *ppstr;
 	} func_data;
 };
 
@@ -269,6 +303,9 @@ struct field
 		struct function_mfreq mfreq;
 		struct function_geoip geoip;
 		struct function_as as;
+		struct function_tfstr tfstr;
+		struct function_portstr portstr;
+		struct function_ppstr ppstr;
 	} func_data;
 };
 
@@ -315,6 +352,16 @@ int function_as_parse(struct filter_input *in, struct function_as *as,
 	enum TOKEN_ID *tok);
 int function_as(struct filter_input *in, struct filter_expr *e);
 
+int function_tfstr_parse(struct filter_input *in, struct function_tfstr *tfstr);
+int function_tfstr(struct filter_input *in, struct filter_expr *e);
+
+int function_portstr_parse(struct filter_input *in,
+	struct function_portstr *portstr);
+int function_portstr(struct filter_input *in, struct filter_expr *e);
+
+int function_ppstr_parse(struct filter_input *in, struct function_ppstr *ppstr);
+int function_ppstr(struct filter_input *in, struct filter_expr *e);
+
 static inline uint64_t
 get_nf_val(uintptr_t ptr, unsigned int size)
 {
@@ -329,6 +376,9 @@ get_nf_val(uintptr_t ptr, unsigned int size)
 			break;
 		case sizeof(uint16_t):
 			val = be16toh(*(uint16_t *)ptr);
+			break;
+		case sizeof(uint8_t):
+			val = *(uint8_t *)ptr;
 			break;
 		default:
 			val = 0;

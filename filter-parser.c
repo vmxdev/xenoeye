@@ -119,6 +119,18 @@ rule(struct filter_input *q, struct filter_expr *e)
 		return 1;
 	}
 
+	if (function_tfstr(q, e)) {
+		return 1;
+	}
+
+	if (function_portstr(q, e)) {
+		return 1;
+	}
+
+	if (function_ppstr(q, e)) {
+		return 1;
+	}
+
 	if (function_geoip(q, e)) {
 		return 1;
 	}
@@ -411,6 +423,21 @@ parse_field(char *s, struct field *fld, char *err)
 		fld->id = MFREQ;
 		fld->type = FILTER_BASIC_RANGE;
 		fld->size = sizeof(uint64_t);
+	} else if (function_tfstr_parse(&in, &fld->func_data.tfstr)) {
+		fld->is_func = 1;
+		fld->id = TFSTR;
+		fld->type = FILTER_BASIC_STRING;
+		fld->size = TCP_FLAGS_STR_MAX_SIZE;
+	} else if (function_portstr_parse(&in, &fld->func_data.portstr)) {
+		fld->is_func = 1;
+		fld->id = PORTSTR;
+		fld->type = FILTER_BASIC_STRING;
+		fld->size = TCP_UDP_PORT_STR_MAX_SIZE;
+	} else if (function_ppstr_parse(&in, &fld->func_data.ppstr)) {
+		fld->is_func = 1;
+		fld->id = PPSTR;
+		fld->type = FILTER_BASIC_STRING;
+		fld->size = TCP_UDP_PP_STR_MAX_SIZE;
 	} else if (function_geoip_parse(&in, &fld->func_data.geoip,
 			&geoip_tok)) {
 		fld->is_func = 1;

@@ -737,6 +737,70 @@ filter_function_as(struct filter_basic *fb, struct flow_info *flow)
 	return 0;
 }
 
+static int
+filter_function_tfstr(struct filter_basic *fb, struct flow_info *flow)
+{
+	size_t i;
+	struct function_tfstr *tfstr = fb->func_data.tfstr;
+	uint8_t tf = *((uint8_t *)((uintptr_t)flow + tfstr->tf_off));
+
+	for (i=0; i<fb->n; i++) {
+		char *flg = tcp_flags_to_str(tf);
+
+		if (strcasecmp(fb->data[i].data.str, flg) == 0) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int
+filter_function_portstr(struct filter_basic *fb, struct flow_info *flow)
+{
+	size_t i;
+	struct function_portstr *portstr = fb->func_data.portstr;
+	uint16_t port;
+
+	port = get_nf_val((uintptr_t)flow + portstr->port_off,
+		portstr->port_size);
+
+	for (i=0; i<fb->n; i++) {
+		char p[32];
+		port_to_str(p, port);
+
+		if (strcasecmp(fb->data[i].data.str, p) == 0) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int
+filter_function_ppstr(struct filter_basic *fb, struct flow_info *flow)
+{
+	size_t i;
+	struct function_ppstr *ppstr = fb->func_data.ppstr;
+	uint16_t port1, port2;
+
+	port1 = get_nf_val((uintptr_t)flow + ppstr->arg1_off,
+		ppstr->arg1_size);
+	port2 = get_nf_val((uintptr_t)flow + ppstr->arg2_off,
+		ppstr->arg2_size);
+
+	for (i=0; i<fb->n; i++) {
+		char pp[64];
+		ports_pair_to_str(pp, port1, port2);
+
+		if (strcasecmp(fb->data[i].data.str, pp) == 0) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 
 static int
 filter_basic_match(struct filter_basic *fb, struct flow_info *flow)
@@ -762,6 +826,12 @@ FOR_LIST_OF_GEOIP_FIELDS
 			case FILTER_BASIC_NAME_ASN:
 			case FILTER_BASIC_NAME_ASD:
 				return filter_function_as(fb, flow);
+			case FILTER_BASIC_NAME_TFSTR:
+				return filter_function_tfstr(fb, flow);
+			case FILTER_BASIC_NAME_PORTSTR:
+				return filter_function_portstr(fb, flow);
+			case FILTER_BASIC_NAME_PPSTR:
+				return filter_function_ppstr(fb, flow);
 
 			default:
 				break;
