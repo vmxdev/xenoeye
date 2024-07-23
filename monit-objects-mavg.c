@@ -747,16 +747,17 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 		/* search for key */
 		rc = db->get(db, &dtkey, &dtval);
 		if (rc == TKVDB_OK) {
+			size_t j;
 			/* update existing values */
-			for (i=0; i<mavg->fieldset.n_aggr; i++) {
-				struct field *fld = &mavg->fieldset.aggr[i];
+			for (j=0; j<mavg->fieldset.n_aggr; j++) {
+				struct field *fld = &mavg->fieldset.aggr[j];
 				MAVG_TYPE val;
 				struct mavg_val *pval;
 
 				val = monit_object_nf_val(flow, fld)
 					* fld->scale * flow->sampling_rate;
 
-				pval = MAVG_VAL(((uint8_t *)dtval.data), i,
+				pval = MAVG_VAL(((uint8_t *)dtval.data), j,
 					data->valsize);
 				mavg_recalc(&pval->val, &pval->time_prev, val,
 					time_ns, wndsize, &pval->val);
