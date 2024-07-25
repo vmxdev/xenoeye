@@ -240,7 +240,8 @@ iplist_try_load(const char *filename, const char *listname)
 	tmp[n_iplists].n6 = 0;
 
 	for (;;) {
-		char line[INET6_ADDRSTRLEN + 1];
+		/* lines with comments can be pretty long */
+		char line[1024];
 		char *str_addr;
 		uint32_t addr;
 		xe_ip addr6;
