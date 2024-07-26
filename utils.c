@@ -30,7 +30,7 @@ port_to_str(char *res, uint16_t port)
 {
 	char *s = ports_db[port];
 	if (s[0]) {
-		strcpy(res, s);
+		sprintf(res, "%s (%d)", s, port);
 		return;
 	}
 	sprintf(res, "%d", port);
