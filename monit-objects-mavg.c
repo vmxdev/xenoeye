@@ -750,6 +750,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 			size_t j;
 			/* update existing values */
 			for (j=0; j<mavg->fieldset.n_aggr; j++) {
+				/* all aggregable fields */
 				struct field *fld = &mavg->fieldset.aggr[j];
 				MAVG_TYPE val;
 				struct mavg_val *pval;
@@ -766,7 +767,7 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 				atomic_store_explicit(&pval->time_prev, time_ns,
 					memory_order_relaxed);
 
-				mvals[i] = pval->val;
+				mvals[j] = pval->val;
 			}
 
 			/* values from another threads */
@@ -784,23 +785,19 @@ monit_object_mavg_process_nf(struct xe_data *globl, struct monit_object *mo,
 					memory_order_relaxed);
 				rc = ndb->get(ndb, &dtkey, &nval);
 				if (rc == TKVDB_OK) {
-					for (i=0; i<mavg->fieldset.n_aggr; i++) {
+					for (j=0; j<mavg->fieldset.n_aggr; j++) {
+						_Atomic MAVG_TYPE tmp_thr_val;
 						struct mavg_val *pval;
 						pval =
 						MAVG_VAL(((uint8_t *)nval.data),
-							i, data->valsize);
+							j, data->valsize);
 
 						mavg_recalc(&pval->val,
 							&pval->time_prev,
-							mvals[i], time_ns,
+							0, time_ns,
 							wndsize,
-							(_Atomic MAVG_TYPE *)&mvals[i]);
-
-						/* update time */
-						atomic_store_explicit(
-							&pval->time_prev,
-							time_ns,
-							memory_order_relaxed);
+							&tmp_thr_val);
+						mvals[j] += tmp_thr_val;
 					}
 				}
 			}
