@@ -18,6 +18,7 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 
+#include "filter.h"
 #include "devices.h"
 #include "aajson/aajson.h"
 
@@ -102,6 +103,35 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 	if (STRCMP(a, 2, "sampling-rate") == 0) {
 		devs->devices[devs->n_devices - 1].sampling_rate
 			= atoi(value->str);
+	}
+
+	if (STRCMP(a, 2, "mark") == 0) {
+		struct filter_input input;
+		struct device *d = &devs->devices[devs->n_devices - 1];
+		struct filter_expr **tmp = realloc(d->exprs, sizeof(struct filter_expr *) * (d->n_exprs + 1));
+		if (!tmp) {
+			LOG("realloc() failed");
+			return 0;
+		}
+		d->exprs = tmp;
+
+		memset(&input, 0, sizeof(input));
+		input.s = value->str;
+
+		d->exprs[d->n_exprs] = parse_filter(&input);
+		if (input.error) {
+			LOG("Can't parse filter '%s'. Parse error: %s",
+				value->str, input.errmsg);
+			return 0;
+		}
+
+		d->n_exprs++;
+	}
+
+	if (STRCMP(a, 2, "skip-unmarked") == 0) {
+		if (value->type == AAJSON_VALUE_TRUE) {
+			devs->devices[devs->n_devices - 1].skip_unmarked = 1;
+		}
 	}
 
 	return 1;
@@ -201,5 +231,53 @@ device_get_sampling_rate(struct device *d)
 	}
 
 	return found;
+}
+
+int
+device_get_mark(struct device *d, struct flow_info *fi)
+{
+	size_t i;
+	int found = 0;
+	struct device *db;
+
+	for (i=0; i<devices.n_devices; i++) {
+		db = &devices.devices[i];
+
+		if (db->use_ip && db->use_id) {
+			/* check all fields */
+			if ((d->ip_ver == db->ip_ver)
+				&& (d->ip == db->ip) && (d->id == db->id)) {
+
+				found = 1;
+				break;
+			}
+		} else  if (db->use_ip) {
+			/* only IP */
+			if ((d->ip_ver == db->ip_ver) && (d->ip == db->ip)) {
+				found = 1;
+				break;
+			}
+		} if (db->use_id) {
+			/* only ID */
+			if (d->id == db->id) {
+				found = 1;
+				break;
+			}
+		}
+	}
+
+	if (!found) {
+		return 0;
+	}
+
+	d->skip_unmarked = db->skip_unmarked;
+	d->mark = 0;
+	for (i=0; i<db->n_exprs; i++) {
+		if (filter_match(db->exprs[i], fi)) {
+			d->mark++;
+		}
+	}
+
+	return 1;
 }
 

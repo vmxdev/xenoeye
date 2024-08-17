@@ -29,6 +29,10 @@ struct flow_info
 	int dev_id_size;
 	int has_dev_id;
 
+	uint8_t dev_mark[4];
+	int dev_mark_size;
+	int has_dev_mark;
+
 	uint32_t sampling_rate;
 };
 

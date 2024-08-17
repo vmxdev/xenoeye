@@ -3,6 +3,7 @@
 #include "sflow.h"
 #include "filter.h"
 #include "flow-debug.h"
+#include "devices.h"
 
 #define COPY_TO_FLOW(D, F, R, N)  \
 do {                              \
@@ -57,6 +58,37 @@ do {                              \
 static int xe_sni(uint8_t *p, uint8_t *end, char *domain);
 static int xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips);
 
+static int
+device_rules_check(struct flow_info *flow, struct flow_packet_info *fpi)
+{
+	struct device dev;
+	uint32_t mark;
+
+	/* FIXME: add IPv6 */
+	dev.ip_ver = 4;
+	dev.ip = 0;
+	memcpy(&dev.ip, &fpi->src_addr_ipv4, 4);
+
+	dev.id = fpi->source_id;
+
+	if (!device_get_mark(&dev, flow)) {
+		/* device not found */
+		return 1;
+	}
+
+	if (dev.skip_unmarked && (dev.mark == 0)) {
+		return 0;
+	}
+
+	mark = htobe32(dev.mark);
+	memcpy(&flow->dev_mark[0], &mark, sizeof(uint32_t));
+	flow->dev_mark_size = sizeof(uint32_t);
+	flow->has_dev_mark = 1;
+
+	return 1;
+}
+
+
 static inline int
 sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 {
@@ -67,6 +99,10 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 		< RP_PARSER_STATE_NO_IP) {
 
 		/* Skip non-IP samples */
+		return 0;
+	}
+	/* check interfaces */
+	if (!device_rules_check(s->flow, s->fpi)) {
 		return 0;
 	}
 
