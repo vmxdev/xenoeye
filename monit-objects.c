@@ -568,10 +568,9 @@ monit_object_func_geoip(struct field *fld, struct flow_info *flow,
 		}
 		memcpy(key, geoip_get_field(g, geoip->field), size - 1);
 	} else if (geoip->ip_size == sizeof(xe_ip)) {
-		xe_ip addr = *((xe_ip *)
-			((uintptr_t)flow + geoip->ip_off));
+		xe_ip *addr = (xe_ip *)((uintptr_t)flow + geoip->ip_off);
 
-		if (!geoip_lookup6(&addr, &g)) {
+		if (!geoip_lookup6(addr, &g)) {
 			key[0] = '?';
 			return;
 		}
@@ -604,10 +603,9 @@ monit_object_func_as(struct field *fld, struct flow_info *flow,
 			not_found = 1;
 		}
 	} else if (as->ip_size == sizeof(xe_ip)) {
-		xe_ip addr = *((xe_ip *)
-			((uintptr_t)flow + as->ip_off));
+		xe_ip *addr = (xe_ip *)((uintptr_t)flow + as->ip_off);
 
-		if (!as_lookup6(&addr, &a)) {
+		if (!as_lookup6(addr, &a)) {
 			not_found = 1;
 		}
 	}
