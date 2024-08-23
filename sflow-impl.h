@@ -211,6 +211,25 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end, int exp)
 	return 1;
 }
 
+static inline void
+sflow_reset(struct flow_info *flow, uint32_t dev_id, int dev_ip_ver, uint32_t dev_ip4, xe_ip dev_ip6)
+{
+	memset(flow,  0, sizeof(struct flow_info));
+	memcpy(flow->dev_id, &dev_id, sizeof(uint32_t));
+	flow->has_dev_id = 1;
+	flow->dev_id_size = sizeof(uint32_t);
+
+	if (dev_ip_ver == 4) {
+		memcpy(flow->dev_ip, &dev_ip4, sizeof(uint32_t));
+		flow->has_dev_ip = 1;
+		flow->dev_ip_size = sizeof(uint32_t);
+	} else {
+		memcpy(flow->dev_ip6, &dev_ip6, sizeof(xe_ip));
+		flow->has_dev_ip6 = 1;
+		flow->dev_ip6_size = sizeof(xe_ip);
+	}
+}
+
 int
 sflow_process(struct xe_data *global, size_t thread_id,
 	struct flow_packet_info *fpi, int len)
@@ -223,12 +242,15 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	struct sfdata sfd;
 	struct timespec tmsp;
 
+	/* srore this fields */
+	uint32_t dev_ip4, dev_id;
+	xe_ip dev_ip6;
+	int dev_ip_ver = 4;
+
 	sfd.global = global;
 	sfd.thread_id = thread_id;
 	sfd.fpi = fpi;
 	sfd.flow = &flow;
-
-	memset(&flow, 0, sizeof(struct flow_info));
 
 	/* get time for moving averages */
 	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
@@ -249,30 +271,24 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	if (v == SF5_ADDR_IP_V4) {
 		char s[INET_ADDRSTRLEN + 1];
 
-		READ_SF_BYTES(flow.dev_ip, sizeof(uint32_t), p, end);
-		flow.has_dev_ip = 1;
-		flow.dev_ip_size = sizeof(uint32_t);
+		READ_SF_BYTES(&dev_ip4, sizeof(uint32_t), p, end);
 
-		inet_ntop(AF_INET, &flow.dev_ip, s, INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &dev_ip4, s, INET_ADDRSTRLEN);
 		LOG("agent address (IPv4): %s", s);
 	} else if (v == SF5_ADDR_IP_V6) {
 		char s[INET6_ADDRSTRLEN + 1];
+		dev_ip_ver = 6;
+		READ_SF_BYTES(&dev_ip6, sizeof(xe_ip), p, end);
 
-		READ_SF_BYTES(flow.dev_ip6, sizeof(xe_ip), p, end);
-		flow.has_dev_ip6 = 1;
-		flow.dev_ip6_size = sizeof(xe_ip);
-
-		inet_ntop(AF_INET6, &flow.dev_ip6, s, INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &dev_ip6, s, INET6_ADDRSTRLEN);
 		LOG("agent address (IPv6): %s", s);
 	} else {
 		LOG("Unknown agent address type %u", v);
 		return 0;
 	}
 
-	READ_SF_BYTES(flow.dev_id, sizeof(uint32_t), p, end);
-	flow.has_dev_id = 1;
-	flow.dev_id_size = sizeof(uint32_t);
-	LOG("agent id: %u", be32toh(*((uint32_t *)flow.dev_id)));
+	READ_SF_BYTES(&dev_id, sizeof(uint32_t), p, end);
+	LOG("agent id: %u", be32toh(dev_id));
 
 	READ32_H(v, p, end);
 	LOG("sequence: %u", v);
@@ -290,6 +306,9 @@ sflow_process(struct xe_data *global, size_t thread_id,
 
 		if (v == SF5_SAMPLE_FLOW) {
 			LOG("\tsample type: %u (SF5_SAMPLE_FLOW)", v);
+
+			sflow_reset(&flow, dev_id, dev_ip_ver, dev_ip4, dev_ip6);
+
 			if (!sf5_flow(&sfd, &p, end, 0)) {
 				return 0;
 			}
@@ -301,6 +320,9 @@ sflow_process(struct xe_data *global, size_t thread_id,
 			p += l;
 		} else if (v == SF5_SAMPLE_FLOW_EXPANDED) {
 			LOG("\tsample type: %u (SF5_SAMPLE_FLOW)", v);
+
+			sflow_reset(&flow, dev_id, dev_ip_ver, dev_ip4, dev_ip6);
+
 			if (!sf5_flow(&sfd, &p, end, 1)) {
 				return 0;
 			}
