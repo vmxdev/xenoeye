@@ -240,6 +240,8 @@ device_get_mark(struct device *d, struct flow_info *fi)
 	int found = 0;
 	struct device *db;
 
+	d->mark = 0;
+
 	for (i=0; i<devices.n_devices; i++) {
 		db = &devices.devices[i];
 
@@ -271,7 +273,6 @@ device_get_mark(struct device *d, struct flow_info *fi)
 	}
 
 	d->skip_unmarked = db->skip_unmarked;
-	d->mark = 0;
 	for (i=0; i<db->n_exprs; i++) {
 		if (filter_match(db->exprs[i], fi)) {
 			d->mark++;

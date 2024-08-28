@@ -214,7 +214,7 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end, int exp)
 static inline void
 sflow_reset(struct flow_info *flow, uint32_t dev_id, int dev_ip_ver, uint32_t dev_ip4, xe_ip dev_ip6)
 {
-	memset(flow,  0, sizeof(struct flow_info));
+	memset(flow, 0, sizeof(struct flow_info));
 	memcpy(flow->dev_id, &dev_id, sizeof(uint32_t));
 	flow->has_dev_id = 1;
 	flow->dev_id_size = sizeof(uint32_t);
