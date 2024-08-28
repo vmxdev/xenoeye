@@ -99,11 +99,12 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 		< RP_PARSER_STATE_NO_IP) {
 
 		/* Skip non-IP samples */
-		return 0;
+		return 1;
 	}
 	/* check interfaces */
 	if (!device_rules_check(s->flow, s->fpi)) {
-		return 0;
+		/* no error */
+		return 1;
 	}
 
 	/* debug print */
