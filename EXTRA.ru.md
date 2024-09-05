@@ -308,11 +308,11 @@ BEGIN
                 WITH topval AS (' || select_top || ')
             SELECT time, ' || aggr_fld || ',  COALESCE (' || fld_t || ', ''Other'') AS name
                 FROM ' || src || ' WHERE ' || cond || ' AND ' || fld_t || ' IN (SELECT name from topval)
-            UNION
+            UNION ALL
             SELECT time, ' || aggr_fld || ', ''Other'' AS name
                 FROM ' || src || '
                 WHERE ' || cond || ' AND ' || fld_t || ' NOT IN (SELECT name from topval)
-            UNION
+            UNION ALL
             SELECT time, ' || aggr_fld || ', ''Other'' AS name
                 FROM ' || src || '
                 WHERE ' || cond || ' AND ' || fld_t || ' IS NULL
