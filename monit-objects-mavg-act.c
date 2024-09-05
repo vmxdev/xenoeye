@@ -496,7 +496,7 @@ mavg_act_thread(void *arg)
 		bank = atomic_fetch_add_explicit(&globl->mavg_db_bank_idx, 1,
 			memory_order_relaxed) % 2;
 
-		usleep(10000);
+		usleep(100000);
 
 		/* for each monitoring object */
 		for (moidx=0; moidx<globl->nmonit_objects; moidx++) {
