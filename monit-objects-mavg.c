@@ -869,20 +869,21 @@ monit_objects_mavg_link(struct monit_object *mo, struct mavg_limit_ext_stat *e)
 	}
 }
 
-
 static void
-monit_objects_mavg_link_d(struct xe_data *globl, struct mavg_limit_ext_stat *e)
+monit_objects_mavg_link_rec(struct mavg_limit_ext_stat *e,
+	struct monit_object *mos, size_t n_mo)
 {
 	size_t i;
-
-	/* for each monitoring object */
-	for (i=0; i<globl->nmonit_objects; i++) {
-		struct monit_object *mo = &globl->monit_objects[i];
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
 
 		if (strcmp(e->mo_name, mo->name) == 0) {
 			/* found */
 			monit_objects_mavg_link(mo, e);
 			break;
+		}
+		if (mo->n_mo) {
+			monit_objects_mavg_link_rec(e, mo->mos, mo->n_mo);
 		}
 	}
 }
@@ -911,24 +912,37 @@ monit_objects_mavg_link_mo(struct xe_data *globl, struct monit_object *mo)
 					monit_objects_mavg_link(mo, e);
 				} else {
 					/* different monitoring object */
-					monit_objects_mavg_link_d(globl, e);
+					monit_objects_mavg_link_rec(e,
+						globl->monit_objects,
+						globl->nmonit_objects);
 				}
 			}
 		}
 	}
 }
 
+static void
+monit_objects_mavg_link_ext_stat_rec(struct xe_data *globl,
+	struct monit_object *mos, size_t n_mo)
+{
+	size_t i;
+
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		monit_objects_mavg_link_mo(globl, mo);
+
+		if (mo->n_mo) {
+			monit_objects_mavg_link_ext_stat_rec(globl,
+				mo->mos, mo->n_mo);
+		}
+	}
+}
 
 void
 monit_objects_mavg_link_ext_stat(struct xe_data *globl)
 {
-	size_t i;
-
-	/* for each monitoring object */
-	for (i=0; i<globl->nmonit_objects; i++) {
-		struct monit_object *mo = &globl->monit_objects[i];
-
-		monit_objects_mavg_link_mo(globl, mo);
-	}
+	monit_objects_mavg_link_ext_stat_rec(globl, globl->monit_objects,
+		globl->nmonit_objects);
 }
 

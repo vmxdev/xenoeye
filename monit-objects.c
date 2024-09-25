@@ -89,12 +89,12 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 #undef STRCMP
 
 static int
-monit_object_info_parse(struct xe_data *data, const char *moname,
-	const char *fn)
+monit_object_info_parse(struct monit_object **mos, size_t *n_mo,
+	const char *moname, const char *fn)
 {
 	FILE *f;
 	struct stat st;
-	size_t s;
+	size_t i, s;
 	char *json;
 	int ret = 0;
 	struct monit_object mo, *motmp;
@@ -137,8 +137,7 @@ monit_object_info_parse(struct xe_data *data, const char *moname,
 		goto fail_parse;
 	}
 
-	motmp = realloc(data->monit_objects, (data->nmonit_objects + 1)
-		* sizeof(struct monit_object));
+	motmp = realloc(*mos, (*n_mo + 1) * sizeof(struct monit_object));
 	if (!motmp) {
 		LOG("realloc() failed");
 		goto fail_realloc;
@@ -148,10 +147,15 @@ monit_object_info_parse(struct xe_data *data, const char *moname,
 
 	/* copy name of monitoring object */
 	strcpy(mo.name, moname);
+	for (i=0; i<strlen(mo.name); i++) {
+		if (mo.name[i] == '/') {
+			mo.name[i] = '_';
+		}
+	}
 
-	data->monit_objects = motmp;
-	data->monit_objects[data->nmonit_objects] = mo;
-	data->nmonit_objects++;
+	*mos = motmp;
+	(*mos)[*n_mo] = mo;
+	(*n_mo)++;
 
 	ret = 1;
 
@@ -167,30 +171,33 @@ fail_open:
 	return ret;
 }
 
-
-int
-monit_objects_init(struct xe_data *data)
+static void
+monit_objects_load_rec(struct xe_data *globl,
+	const char *dirsuffix, struct monit_object **mos, size_t *n_mo)
 {
 	DIR *d;
 	struct dirent *dir;
-	int ret = 0;
-	int thread_err;
+	char dirname[PATH_MAX + 512];
 
-	free(data->monit_objects);
-	data->monit_objects = NULL;
-	data->nmonit_objects = 0;
+	sprintf(dirname, "%s/%s/", globl->mo_dir, dirsuffix);
+	if (strlen(dirname) >= PATH_MAX) {
+		LOG("Directory name too big: %s/%s", globl->mo_dir, dirsuffix);
+		return;
+	}
 
-	d = opendir(data->mo_dir);
+	d = opendir(dirname);
 	if (!d) {
 		LOG("Can't open directory with monitoring objects '%s': %s",
-			data->mo_dir, strerror(errno));
-		goto fail_opendir;
+			dirname, strerror(errno));
+		return;
 	}
 
 	while ((dir = readdir(d)) != NULL) {
 		size_t i;
 		struct monit_object *mo;
 		char mofile[PATH_MAX + 512];
+		char inner_dir[PATH_MAX];
+		char moname[PATH_MAX];
 
 		if (dir->d_name[0] == '.') {
 			/* skip hidden files */
@@ -201,26 +208,32 @@ monit_objects_init(struct xe_data *data)
 			continue;
 		}
 
-		sprintf(mofile, "%s/%s/mo.conf", data->mo_dir, dir->d_name);
+		sprintf(mofile, "%s/%s/mo.conf", dirname, dir->d_name);
 		if (strlen(mofile) >= PATH_MAX) {
-			LOG("Filename too big: %s/%s", data->mo_dir, dir->d_name);
+			LOG("Filename too big: %s/%s", dirname, dir->d_name);
 			continue;
 		}
 
-		LOG("Adding monitoring object '%s'", dir->d_name);
+		if (strlen(dirsuffix) == 0) {
+			sprintf(moname, "%s", dir->d_name);
+		} else {
+			sprintf(moname, "%s/%s", dirsuffix, dir->d_name);
+		}
 
-		if (!monit_object_info_parse(data, dir->d_name, mofile)) {
-			LOG("Monitoring object '%s' not added", dir->d_name);
+		LOG("Adding monitoring object '%s'", moname);
+
+		if (!monit_object_info_parse(mos, n_mo, moname, mofile)) {
+			LOG("Monitoring object '%s' not added", moname);
 			continue;
 		}
 
-		mo = &data->monit_objects[data->nmonit_objects - 1];
+		mo = &((*mos)[*n_mo - 1]);
 		for (i=0; i<mo->nfwm; i++) {
 			size_t j;
 			struct mo_fwm *fwm = &mo->fwms[i];
 
-			if (!fwm_fields_init(data->nthreads, fwm)) {
-				return 0;
+			if (!fwm_fields_init(globl->nthreads, fwm)) {
+				return;
 			}
 			if (fwm->time == 0) {
 				LOG("warning: timeout for '%s:%s' is not set"
@@ -258,21 +271,21 @@ monit_objects_init(struct xe_data *data)
 
 			/* make prefix for notification files */
 			sprintf(tmp_pfx, "%s/%s-%s",
-				data->notif_dir, mo->name, mavg->name);
+				globl->notif_dir, mo->name, mavg->name);
 
 			if (strlen(tmp_pfx) >= PATH_MAX) {
 				LOG("Filename too big: %s/%s", mo->dir,
 					mavg->name);
-				return 0;
+				return;
 			}
 
 			strcpy(mavg->notif_pfx, tmp_pfx);
 
-			if (!mavg_fields_init(data->nthreads, mavg)) {
-				return 0;
+			if (!mavg_fields_init(globl->nthreads, mavg)) {
+				return;
 			}
 			if (!mavg_limits_init(mavg)) {
-				return 0;
+				return;
 			}
 			if (mavg->size_secs == 0) {
 				LOG("warning: time for '%s:%s' is not set"
@@ -285,10 +298,10 @@ monit_objects_init(struct xe_data *data)
 
 		/* classification */
 		for (i=0; i<mo->nclassifications; i++) {
-			if (!classification_fields_init(data->nthreads,
+			if (!classification_fields_init(globl->nthreads,
 				&mo->classifications[i])) {
 
-				return 0;
+				return;
 			}
 
 			if (mo->classifications[i].time == 0) {
@@ -304,20 +317,44 @@ monit_objects_init(struct xe_data *data)
 		}
 
 		/* store path to monitoring object directory */
-		sprintf(mofile, "%s/%s/", data->mo_dir, dir->d_name);
+		sprintf(mofile, "%s/%s/", dirname, dir->d_name);
 		strcpy(mo->dir, mofile);
 
-		LOG("Monitoring object '%s' added", dir->d_name);
+		LOG("Monitoring object '%s' added", moname);
+
+		/* try to walk deeper */
+		if (strlen(dirsuffix) == 0) {
+			sprintf(inner_dir, "%s", dir->d_name);
+		} else {
+			sprintf(inner_dir, "%s/%s", dirsuffix, dir->d_name);
+		}
+		monit_objects_load_rec(globl, inner_dir, &mo->mos, &mo->n_mo);
 	}
 
 	closedir(d);
+}
+
+int
+monit_objects_init(struct xe_data *globl)
+{
+	int ret = 0;
+	int thread_err;
+
+	free(globl->monit_objects);
+	globl->monit_objects = NULL;
+	globl->nmonit_objects = 0;
+
+	monit_objects_load_rec(globl, "",
+		&globl->monit_objects,
+		&globl->nmonit_objects);
+
 
 	/* all monitoring objects are parsed, so we can link extended stats */
-	monit_objects_mavg_link_ext_stat(data);
+	monit_objects_mavg_link_ext_stat(globl);
 
 	/* create thread for background processing fixed windows in memory */
-	thread_err = pthread_create(&data->fwm_tid, NULL,
-		&fwm_bg_thread, data);
+	thread_err = pthread_create(&globl->fwm_tid, NULL,
+		&fwm_bg_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -326,8 +363,8 @@ monit_objects_init(struct xe_data *data)
 
 	/* moving averages */
 	/* thread with actions on overflow */
-	thread_err = pthread_create(&data->mavg_act_tid, NULL,
-		&mavg_act_thread, data);
+	thread_err = pthread_create(&globl->mavg_act_tid, NULL,
+		&mavg_act_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -335,8 +372,8 @@ monit_objects_init(struct xe_data *data)
 	}
 
 	/* dump thread */
-	thread_err = pthread_create(&data->mavg_dump_tid, NULL,
-		&mavg_dump_thread, data);
+	thread_err = pthread_create(&globl->mavg_dump_tid, NULL,
+		&mavg_dump_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -344,8 +381,8 @@ monit_objects_init(struct xe_data *data)
 	}
 
 	/* classifier thread */
-	thread_err = pthread_create(&data->clsf_tid, NULL,
-		&classification_bg_thread, data);
+	thread_err = pthread_create(&globl->clsf_tid, NULL,
+		&classification_bg_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -358,7 +395,6 @@ fail_clsfthread:
 fail_mavgthread:
 fail_fwmthread:
 	/* FIXME: free monitoring objects */
-fail_opendir:
 	return ret;
 }
 

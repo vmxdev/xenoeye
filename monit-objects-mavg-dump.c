@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2024, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -252,16 +252,47 @@ mavg_dump(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo)
 	return 1;
 }
 
+static void
+mavg_dump_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
+	time_t t)
+{
+	size_t i, j;
+
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		/* for each moving average */
+		for (j=0; j<mo->nmavg; j++) {
+			struct mo_mavg *mavg = &mo->mavgs[j];
+
+			if (mavg->dump_secs == 0) {
+				/* skip */
+				continue;
+			}
+
+			if ((mavg->last_dump_check + mavg->dump_secs) <= t) {
+				/* time to dump */
+				mavg_dump(mavg, globl->nthreads, mo);
+
+				mavg->last_dump_check = t;
+			}
+		}
+
+		if (mo->n_mo) {
+			mavg_dump_rec(globl, mo->mos, mo->n_mo, t);
+		}
+	}
+}
+
 void *
 mavg_dump_thread(void *arg)
 {
-	struct xe_data *data = (struct xe_data *)arg;
+	struct xe_data *globl = (struct xe_data *)arg;
 
 	for (;;) {
 		time_t t;
-		size_t i, j;
 
-		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
+		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
 			break;
 		}
@@ -272,29 +303,8 @@ mavg_dump_thread(void *arg)
 			return NULL;
 		}
 
-		/* for each monitoring object */
-		for (i=0; i<data->nmonit_objects; i++) {
-			struct monit_object *mo = &data->monit_objects[i];
-
-			/* for each moving average */
-			for (j=0; j<mo->nmavg; j++) {
-				struct mo_mavg *mavg = &mo->mavgs[j];
-
-				if (mavg->dump_secs == 0) {
-					/* skip */
-					continue;
-				}
-
-				if ((mavg->last_dump_check + mavg->dump_secs)
-					<= t) {
-
-					/* time to dump */
-					mavg_dump(mavg, data->nthreads, mo);
-
-					mavg->last_dump_check = t;
-				}
-			}
-		}
+		mavg_dump_rec(globl, globl->monit_objects,
+			globl->nmonit_objects, t);
 
 		sleep(1);
 	}

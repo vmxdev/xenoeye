@@ -88,35 +88,13 @@ device_rules_check(struct flow_info *flow, struct flow_packet_info *fpi)
 	return 1;
 }
 
-
-static inline int
-sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
+static void
+process_mo_sflow_rec(struct sfdata *s, uint8_t *end, struct monit_object *mos,
+	size_t n_mo)
 {
-	size_t t_id;
-	uint8_t *end = p + header_len;
-
-	if (rawpacket_parse(p, end, t, s->flow)
-		< RP_PARSER_STATE_NO_IP) {
-
-		/* Skip non-IP samples */
-		return 1;
-	}
-	/* check interfaces */
-	if (!device_rules_check(s->flow, s->fpi)) {
-		/* no error */
-		return 1;
-	}
-
-	/* debug print */
-	if (s->global->debug.print_flows) {
-		char debug_flow_str[1024];
-		sflow_debug_print(s->flow, debug_flow_str);
-
-		flow_print_str(&s->global->debug, s->flow, debug_flow_str);
-	}
-
-	for (t_id=0; t_id<s->global->nmonit_objects; t_id++) {
-		struct monit_object *mo = &s->global->monit_objects[t_id];
+	size_t i;
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
 
 		if (!filter_match(mo->expr, s->flow)) {
 			continue;
@@ -149,7 +127,42 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 
 			flow_print_str(&mo->debug, s->flow, debug_flow_str);
 		}
+
+		/* child objects */
+		if (mo->n_mo) {
+			process_mo_sflow_rec(s, end, mo->mos, mo->n_mo);
+		}
 	}
+}
+
+static inline int
+sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
+{
+	uint8_t *end = p + header_len;
+
+	if (rawpacket_parse(p, end, t, s->flow)
+		< RP_PARSER_STATE_NO_IP) {
+
+		/* Skip non-IP samples */
+		return 1;
+	}
+	/* check interfaces */
+	if (!device_rules_check(s->flow, s->fpi)) {
+		/* no error */
+		return 1;
+	}
+
+	/* debug print */
+	if (s->global->debug.print_flows) {
+		char debug_flow_str[1024];
+		sflow_debug_print(s->flow, debug_flow_str);
+
+		flow_print_str(&s->global->debug, s->flow, debug_flow_str);
+	}
+
+	process_mo_sflow_rec(s, end,
+		s->global->monit_objects, s->global->nmonit_objects);
+
 #ifdef FLOWS_CNT
 	atomic_fetch_add_explicit(&data->nflows, 1, memory_order_relaxed);
 #endif

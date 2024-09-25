@@ -10,8 +10,8 @@
 #define TOKEN_MAX_SIZE 512
 
 #define TCP_FLAGS_STR_MAX_SIZE 32
-#define TCP_UDP_PORT_STR_MAX_SIZE 16
-#define TCP_UDP_PP_STR_MAX_SIZE 64
+#define TCP_UDP_PORT_STR_MAX_SIZE 40
+#define TCP_UDP_PP_STR_MAX_SIZE 90
 
 #define LOG(...)                                               \
 do {                                                           \

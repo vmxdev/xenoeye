@@ -43,6 +43,16 @@
 
 typedef void (*flow_parse_func_t)(struct flow_info *, int, uint8_t *);
 
+struct nf_parse_data
+{
+	struct nf9_template_item *tmpl_9;
+	struct ipfix_stored_template *tmpl_ipfix;
+	int template_field_count;
+	uint8_t **ptr;
+	uint8_t *tmpfptr;
+	int length;
+};
+
 static flow_parse_func_t flow_parse_functions[UINT16_MAX];
 
 /* construct template key, used as key in persistent k-v templates storage */
@@ -133,6 +143,7 @@ sampling_rate_init(struct flow_packet_info *npi)
 	}
 }
 
+
 static int
 parse_netflow_v9_template(struct xe_data *data, struct flow_packet_info *npi,
 	uint8_t **ptr, int length)
@@ -175,65 +186,99 @@ parse_netflow_v9_template(struct xe_data *data, struct flow_packet_info *npi,
 }
 
 static void
-print_netflow_v9_flowset(struct nf9_template_item *tmpl,
-	int template_field_count,
-	uint8_t **ptr, uint8_t *fptr, int length,
-	char *debug_flow_str)
+print_netflow_v9_flowset(struct nf_parse_data *pd, char *debug_flow_str)
 {
 	int i;
 
 	debug_flow_str[0] = '\0';
-	for (i=0; i<template_field_count; i++) {
+	for (i=0; i<pd->template_field_count; i++) {
 		int flength, ftype;
 
-		flength = ntohs(tmpl->typelen[i].length);
-		ftype = ntohs(tmpl->typelen[i].type);
+		flength = ntohs(pd->tmpl_9->typelen[i].length);
+		ftype = ntohs(pd->tmpl_9->typelen[i].type);
 
-		flow_debug_add_field(flength, ftype, fptr, debug_flow_str);
+		flow_debug_add_field(flength, ftype, pd->tmpfptr,
+			debug_flow_str);
 
-		fptr += flength;
+		pd->tmpfptr += flength;
 
-		if ((fptr - (*ptr)) >= length) {
+		if ((pd->tmpfptr - (*(pd->ptr))) >= pd->length) {
 			break;
 		}
 	}
 }
 
+
+static void
+process_mo_nf9_rec(struct xe_data *globl, struct flow_packet_info *npi,
+	size_t thread_id, struct flow_info *flow,
+	struct nf_parse_data *pd,
+	struct monit_object *mos, size_t n_mo)
+{
+	size_t i;
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		if (!filter_match(mo->expr, flow)) {
+			continue;
+		}
+
+		monit_object_process_nf(globl, mo, thread_id, npi->time_ns,
+			flow);
+
+		if (mo->debug.print_flows) {
+			char debug_flow_str[1024];
+
+			print_netflow_v9_flowset(pd, debug_flow_str);
+
+			flow_print_str(&mo->debug, flow, debug_flow_str);
+		}
+
+		/* child objects */
+		if (mo->n_mo) {
+			process_mo_nf9_rec(globl, npi, thread_id, flow, pd,
+				mo->mos, mo->n_mo);
+		}
+	}
+}
+
 static int
-parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id, 
+parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id, 
 	struct flow_packet_info *npi, uint8_t **ptr,
 	int flowset_id, int length, int count)
 {
+	struct nf_parse_data pd;
+
 	uint8_t *fptr;
 	int cnt, i;
-	struct nf9_template_item *tmpl;
 	struct template_key tkey;
-	int template_field_count;
-	size_t t_id;
+
+	pd.ptr = ptr;
+	pd.length = length;
 
 	make_template_key(&tkey, flowset_id, npi, 9);
-	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
+	pd.tmpl_9 = netflow_template_find(&tkey,
+		globl->allow_templates_in_future);
 
-	if (!tmpl) {
+	if (!pd.tmpl_9) {
 /*		LOG("Unknown flowset id %d", ntohs(flowset_id));*/
 		return 0;
 	}
 
-	template_field_count = ntohs(tmpl->field_count);
+	pd.template_field_count = ntohs(pd.tmpl_9->field_count);
 
 	fptr = (*ptr);
 	for (cnt=0; cnt<count; cnt++) {
 		struct flow_info flow;
-		uint8_t *tmpfptr;
 
 		memset(&flow, 0, sizeof(struct flow_info));
-		tmpfptr = fptr;
+		pd.tmpfptr = fptr;
 
-		for (i=0; i<template_field_count; i++) {
+		for (i=0; i<pd.template_field_count; i++) {
 			int flength, ftype;
 
-			flength = ntohs(tmpl->typelen[i].length);
-			ftype = ntohs(tmpl->typelen[i].type);
+			flength = ntohs(pd.tmpl_9->typelen[i].length);
+			ftype = ntohs(pd.tmpl_9->typelen[i].type);
 
 			flow_parse_functions[ftype](&flow, flength, fptr);
 
@@ -247,36 +292,17 @@ parse_netflow_v9_flowset(struct xe_data *data, size_t thread_id,
 		virtual_fields_init(&flow, npi);
 
 		/* debug print */
-		if (data->debug.print_flows) {
+		if (globl->debug.print_flows) {
 			char debug_flow_str[1024];
 
-			print_netflow_v9_flowset(tmpl, template_field_count,
-				ptr, tmpfptr, length, debug_flow_str);
+			print_netflow_v9_flowset(&pd, debug_flow_str);
 
-			flow_print_str(&data->debug, &flow, debug_flow_str);
+			flow_print_str(&globl->debug, &flow, debug_flow_str);
 		}
 
-		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
-			struct monit_object *mo = &data->monit_objects[t_id];
+		process_mo_nf9_rec(globl, npi, thread_id, &flow, &pd,
+				globl->monit_objects, globl->nmonit_objects);
 
-			if (!filter_match(mo->expr, &flow)) {
-				continue;
-			}
-
-			monit_object_process_nf(data, mo, thread_id,
-				npi->time_ns, &flow);
-
-			if (mo->debug.print_flows) {
-				char debug_flow_str[1024];
-
-				print_netflow_v9_flowset(tmpl,
-					template_field_count, ptr, tmpfptr,
-					length, debug_flow_str);
-
-				flow_print_str(&mo->debug, &flow,
-					debug_flow_str);
-			}
-		}
 #ifdef FLOWS_CNT
 		atomic_fetch_add_explicit(&data->nflows, 1,
 			memory_order_relaxed);
@@ -414,69 +440,103 @@ parse_ipfix_template(struct xe_data *data, struct flow_packet_info *npi,
 }
 
 static void
-print_ipfix_flowset(struct ipfix_stored_template *tmpl,
-	int template_field_count,
-	uint8_t **ptr, uint8_t *fptr, int length,
+print_ipfix_flowset(struct nf_parse_data *pd,
 	char *debug_flow_str)
 {
 	int i;
 
 	debug_flow_str[0] = '\0';
-	for (i=0; i<template_field_count; i++) {
+	for (i=0; i<pd->template_field_count; i++) {
 		int flength, ftype;
 
-		flength = ntohs(tmpl->elements[i].length);
-		ftype = ntohs(tmpl->elements[i].id);
+		flength = ntohs(pd->tmpl_ipfix->elements[i].length);
+		ftype = ntohs(pd->tmpl_ipfix->elements[i].id);
 
-		flow_debug_add_field(flength, ftype, fptr, debug_flow_str);
+		flow_debug_add_field(flength, ftype, pd->tmpfptr,
+			debug_flow_str);
 
-		fptr += flength;
+		pd->tmpfptr += flength;
 
-		if ((fptr - (*ptr)) >= length) {
+		if ((pd->tmpfptr - (*(pd->ptr))) >= pd->length) {
 			break;
 		}
 	}
 }
 
+static void
+process_mo_ipfix_rec(struct xe_data *globl, struct flow_packet_info *npi,
+	size_t thread_id, struct flow_info *flow,
+	struct nf_parse_data *pd,
+	struct monit_object *mos, size_t n_mo)
+{
+	size_t i;
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		if (!filter_match(mo->expr, flow)) {
+			continue;
+		}
+
+		monit_object_process_nf(globl, mo, thread_id, npi->time_ns,
+			flow);
+
+		if (mo->debug.print_flows) {
+			char debug_flow_str[1024];
+
+			print_ipfix_flowset(pd, debug_flow_str);
+
+			flow_print_str(&mo->debug, flow, debug_flow_str);
+		}
+
+		/* child objects */
+		if (mo->n_mo) {
+			process_mo_ipfix_rec(globl, npi, thread_id, flow, pd,
+				mo->mos, mo->n_mo);
+		}
+	}
+}
+
 static int
-parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
+parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
 	struct flow_packet_info *npi, uint8_t **ptr, int flowset_id, int length)
 {
+	struct nf_parse_data pd;
+
 	uint8_t *fptr;
 	int i;
-	struct ipfix_stored_template *tmpl;
 	struct template_key tkey;
-	int template_field_count;
 	int stop = 0;
-	size_t t_id;
+
+	pd.ptr = ptr;
+	pd.length = length;
 
 	make_template_key(&tkey, flowset_id, npi, 10);
-	tmpl = netflow_template_find(&tkey, data->allow_templates_in_future);
+	pd.tmpl_ipfix = netflow_template_find(&tkey,
+		globl->allow_templates_in_future);
 
-	if (!tmpl) {
+	if (!pd.tmpl_ipfix) {
 		LOG("Unknown flowset id %d", ntohs(flowset_id));
 		return 0;
 	}
 
-	template_field_count = ntohs(tmpl->header.field_count);
+	pd.template_field_count = ntohs(pd.tmpl_ipfix->header.field_count);
 
 	fptr = (*ptr);
 	while (!stop) {
 		struct flow_info flow;
-		uint8_t *tmpfptr;
 
-		if ((length - (fptr - (*ptr))) < template_field_count) {
+		if ((length - (fptr - (*ptr))) < pd.template_field_count) {
 			break;
 		}
 
 		memset(&flow, 0, sizeof(struct flow_info));
-		tmpfptr = fptr;
+		pd.tmpfptr = fptr;
 
-		for (i=0; i<template_field_count; i++) {
+		for (i=0; i<pd.template_field_count; i++) {
 			int flength, ftype;
 
-			flength = ntohs(tmpl->elements[i].length);
-			ftype = ntohs(tmpl->elements[i].id);
+			flength = ntohs(pd.tmpl_ipfix->elements[i].length);
+			ftype = ntohs(pd.tmpl_ipfix->elements[i].id);
 
 			flow_parse_functions[ftype](&flow, flength, fptr);
 
@@ -490,38 +550,18 @@ parse_ipfix_flowset(struct xe_data *data, size_t thread_id,
 		/* virtual fields */
 		virtual_fields_init(&flow, npi);
 
-		if (data->debug.print_flows) {
+		if (globl->debug.print_flows) {
 			char debug_flow_str[1024];
 
-			print_ipfix_flowset(tmpl, template_field_count,
-				ptr, tmpfptr, length, debug_flow_str);
+			print_ipfix_flowset(&pd, debug_flow_str);
 
-			flow_print_str(&data->debug, &flow,
+			flow_print_str(&globl->debug, &flow,
 				debug_flow_str);
 		}
 
+		process_mo_ipfix_rec(globl, npi, thread_id, &flow, &pd,
+			globl->monit_objects, globl->nmonit_objects);
 
-		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
-			struct monit_object *mo = &data->monit_objects[t_id];
-
-			if (!filter_match(mo->expr, &flow)) {
-				continue;
-			}
-
-			monit_object_process_nf(data, mo, thread_id,
-				npi->time_ns, &flow);
-
-			if (mo->debug.print_flows) {
-				char debug_flow_str[1024];
-
-				print_ipfix_flowset(tmpl,
-					template_field_count, ptr, tmpfptr,
-					length, debug_flow_str);
-
-				flow_print_str(&mo->debug, &flow,
-					debug_flow_str);
-			}
-		}
 #ifdef FLOWS_CNT
 		atomic_fetch_add_explicit(&data->nflows, 1,
 			memory_order_relaxed);
@@ -598,9 +638,40 @@ NF5_FIELDS
 
 }
 
+static void
+process_mo_nf5_rec(struct xe_data *globl, struct flow_packet_info *npi,
+	size_t thread_id, struct flow_info *flow,
+	struct monit_object *mos, size_t n_mo)
+{
+	size_t i;
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		if (!filter_match(mo->expr, flow)) {
+			continue;
+		}
+
+		monit_object_process_nf(globl, mo, thread_id, npi->time_ns,
+			flow);
+
+		if (mo->debug.print_flows) {
+			char debug_flow_str[1024];
+
+			print_netflow_v5_flowset(flow, debug_flow_str);
+
+			flow_print_str(&mo->debug, flow, debug_flow_str);
+		}
+
+		/* child objects */
+		if (mo->n_mo) {
+			process_mo_nf5_rec(globl, npi, thread_id, flow,
+				mo->mos, mo->n_mo);
+		}
+	}
+}
 
 static int
-parse_netflow_v5(struct xe_data *data, size_t thread_id,
+parse_netflow_v5(struct xe_data *globl, size_t thread_id,
 	struct flow_packet_info *npi, int length)
 {
 	int i;
@@ -621,7 +692,7 @@ parse_netflow_v5(struct xe_data *data, size_t thread_id,
 
 	for (i=0; i<nflows; i++) {
 		struct flow_info flow;
-		size_t t_id;
+//		size_t t_id;
 
 		memset(&flow, 0, sizeof(struct flow_info));
 
@@ -639,32 +710,16 @@ NF5_FIELDS
 		virtual_fields_init(&flow, npi);
 
 		/* debug print */
-		if (data->debug.print_flows) {
+		if (globl->debug.print_flows) {
 			char debug_flow_str[1024];
 
 			print_netflow_v5_flowset(&flow, debug_flow_str);
-			flow_print_str(&data->debug, &flow, debug_flow_str);
+			flow_print_str(&globl->debug, &flow, debug_flow_str);
 		}
 
-		for (t_id=0; t_id<data->nmonit_objects; t_id++) {
-			struct monit_object *mo = &data->monit_objects[t_id];
+		process_mo_nf5_rec(globl, npi, thread_id, &flow,
+			globl->monit_objects, globl->nmonit_objects);
 
-			if (!filter_match(mo->expr, &flow)) {
-				continue;
-			}
-
-			monit_object_process_nf(data, mo, thread_id,
-				npi->time_ns, &flow);
-
-			if (mo->debug.print_flows) {
-				char debug_flow_str[1024];
-
-				print_netflow_v5_flowset(&flow,
-					debug_flow_str);
-				flow_print_str(&mo->debug, &flow,
-					debug_flow_str);
-			}
-		}
 #ifdef FLOWS_CNT
 		atomic_fetch_add_explicit(&data->nflows, 1,
 			memory_order_relaxed);

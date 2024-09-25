@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020-2023, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2024, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -184,7 +184,7 @@ pcapture_thread(void *arg)
 	struct pcap_pkthdr *header;
 	const unsigned char *packet;
 	int rc;
-	int64_t sec = 0;
+	/*int64_t sec = 0;*/
 
 	params_ptr = (struct capture_thread_params *)arg;
 	params = *params_ptr;

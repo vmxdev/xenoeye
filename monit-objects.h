@@ -252,6 +252,10 @@ struct monit_object
 	/* sFlow packet payload parsing */
 	int payload_parse_dns;
 	int payload_parse_sni;
+
+	/* hierarchical objects */
+	size_t n_mo;
+	struct monit_object *mos;
 };
 
 

@@ -206,17 +206,53 @@ mavg_check_underlimit(struct mo_mavg *mavg, size_t nthreads,
 	return 1;
 }
 
+static void
+underlimit_check_rec(struct xe_data *globl,
+	struct monit_object *mos, size_t n_mo, uint64_t time_ns)
+{
+	size_t i, j;
+
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &(mos[i]);
+
+		/* for each moving average */
+		for (j=0; j<mo->nmavg; j++) {
+			struct mo_mavg *mavg = &mo->mavgs[j];
+			uint64_t check_at;
+
+			if (mavg->nunderlimit == 0) {
+				continue;
+			}
+			LOG("Has underlimit!");
+
+			check_at = atomic_load_explicit(
+				&mavg->underlimit_check_at,
+				memory_order_relaxed);
+
+			if ((check_at == 0) || (time_ns < check_at)) {
+				continue;
+			}
+
+			mavg_check_underlimit(mavg, globl->nthreads, mo,
+				time_ns);
+		}
+
+		if (mo->n_mo) {
+			underlimit_check_rec(globl, mo->mos, mo->n_mo, time_ns);
+		}
+	}
+}
+
 void *
 mavg_check_underlimit_thread(void *arg)
 {
-	struct xe_data *data = (struct xe_data *)arg;
+	struct xe_data *globl = (struct xe_data *)arg;
 
 	for (;;) {
-		size_t i, j;
 		struct timespec tmsp;
 		uint64_t time_ns;
 
-		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
+		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
 			break;
 		}
@@ -227,32 +263,8 @@ mavg_check_underlimit_thread(void *arg)
 		}
 		time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
 
-		/* for each monitoring object */
-		for (i=0; i<data->nmonit_objects; i++) {
-			struct monit_object *mo = &data->monit_objects[i];
-
-			/* for each moving average */
-			for (j=0; j<mo->nmavg; j++) {
-				struct mo_mavg *mavg = &mo->mavgs[j];
-				uint64_t check_at;
-
-				if (mavg->nunderlimit == 0) {
-					continue;
-				}
-				LOG("Has underlimit!");
-
-				check_at = atomic_load_explicit(
-					&mavg->underlimit_check_at,
-					memory_order_relaxed);
-
-				if ((check_at == 0) || (time_ns < check_at)) {
-					continue;
-				}
-
-				mavg_check_underlimit(mavg, data->nthreads, mo,
-					time_ns);
-			}
-		}
+		underlimit_check_rec(globl, globl->monit_objects,
+			globl->nmonit_objects, time_ns);
 
 		sleep(2);
 	}

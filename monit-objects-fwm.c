@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2021-2023, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2021-2024, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -613,17 +613,50 @@ fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 	return 1;
 }
 
+static void
+fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
+	time_t t)
+{
+	int need_sleep = 1;
+	size_t i, j;
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &(mos[i]);
+
+		for (j=0; j<mo->nfwm; j++) {
+			struct mo_fwm *fwm = &mo->fwms[j];
+
+			if ((fwm->last_export + fwm->time) <= t) {
+				/* time to export */
+				if (fwm_merge(fwm, globl->nthreads,
+					mo->name, globl->exp_dir)) {
+
+					fwm->last_export = t;
+					need_sleep = 0;
+				} else {
+					continue;
+				}
+			}
+		}
+
+		if (mo->n_mo) {
+			fwm_merge_rec(globl, mo->mos, mo->n_mo, t);
+		}
+	}
+
+	if (need_sleep) {
+		sleep(1);
+	}
+}
+
 void *
 fwm_bg_thread(void *arg)
 {
-	struct xe_data *data = (struct xe_data *)arg;
+	struct xe_data *globl = (struct xe_data *)arg;
 
 	for (;;) {
 		time_t t;
-		size_t i, j;
-		int need_sleep = 1;
 
-		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
+		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
 			break;
 		}
@@ -634,29 +667,8 @@ fwm_bg_thread(void *arg)
 			return NULL;
 		}
 
-		for (i=0; i<data->nmonit_objects; i++) {
-			struct monit_object *mo = &data->monit_objects[i];
-
-			for (j=0; j<mo->nfwm; j++) {
-				struct mo_fwm *fwm = &mo->fwms[j];
-
-				if ((fwm->last_export + fwm->time) <= t) {
-					/* time to export */
-					if (fwm_merge(fwm, data->nthreads,
-						mo->name, data->exp_dir)) {
-
-						fwm->last_export = t;
-						need_sleep = 0;
-					} else {
-						continue;
-					}
-				}
-			}
-		}
-
-		if (need_sleep) {
-			sleep(1);
-		}
+		fwm_merge_rec(globl, globl->monit_objects,
+			globl->nmonit_objects, t);
 	}
 
 	return NULL;

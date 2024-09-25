@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2024, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -478,13 +478,48 @@ cursor_fail:
 	return ret;
 }
 
+static void
+check_rec(struct xe_data *globl, size_t bank,
+	struct monit_object *mos, size_t n_mo)
+{
+	size_t i;
+	for (i=0; i<n_mo; i++) {
+		size_t mwidx;
+		struct monit_object *mo = &mos[i];
+
+		/* for each moving average in this object */
+		for (mwidx=0; mwidx<mo->nmavg; mwidx++) {
+			size_t tidx;
+			struct mo_mavg *mw = &mo->mavgs[mwidx];
+			tkvdb_tr *db_glb = mw->glb_ovr_db;
+
+			/* for each thread data */
+			for (tidx=0; tidx<globl->nthreads; tidx++) {
+				tkvdb_tr *db_thr
+					= mw->thr_data[tidx].ovr_db[bank];
+
+				check_items(db_glb, db_thr);
+
+				/* reset per-thread databases */
+				db_thr->rollback(db_thr);
+				db_thr->begin(db_thr);
+			}
+
+			act(mw, db_glb, mw->size_secs * 1e9, mo->name);
+		}
+
+		if (mo->n_mo) {
+			check_rec(globl, bank, mo->mos, mo->n_mo);
+		}
+	}
+}
+
 void *
 mavg_act_thread(void *arg)
 {
 	struct xe_data *globl = (struct xe_data *)arg;
 
 	for (;;) {
-		size_t moidx;
 		size_t bank;
 
 		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
@@ -497,33 +532,8 @@ mavg_act_thread(void *arg)
 			memory_order_relaxed) % 2;
 
 		usleep(100000);
-
-		/* for each monitoring object */
-		for (moidx=0; moidx<globl->nmonit_objects; moidx++) {
-			size_t mwidx;
-			struct monit_object *mo = &globl->monit_objects[moidx];
-
-			/* for each moving average in this object */
-			for (mwidx=0; mwidx<mo->nmavg; mwidx++) {
-				size_t tidx;
-				struct mo_mavg *mw = &mo->mavgs[mwidx];
-				tkvdb_tr *db_glb = mw->glb_ovr_db;
-
-				/* for each thread data */
-				for (tidx=0; tidx<globl->nthreads; tidx++) {
-					tkvdb_tr *db_thr
-						= mw->thr_data[tidx].ovr_db[bank];
-
-					check_items(db_glb, db_thr);
-
-					/* reset per-thread databases */
-					db_thr->rollback(db_thr);
-					db_thr->begin(db_thr);
-				}
-
-				act(mw, db_glb, mw->size_secs * 1e9, mo->name);
-			}
-		}
+		check_rec(globl, bank,
+			globl->monit_objects, globl->nmonit_objects);
 	}
 
 	return NULL;
