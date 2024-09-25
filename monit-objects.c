@@ -195,7 +195,7 @@ monit_objects_load_rec(struct xe_data *globl,
 	while ((dir = readdir(d)) != NULL) {
 		size_t i;
 		struct monit_object *mo;
-		char mofile[PATH_MAX + 512];
+		char mofile[PATH_MAX * 2];
 		char inner_dir[PATH_MAX];
 		char moname[PATH_MAX];
 

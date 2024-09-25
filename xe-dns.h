@@ -2,6 +2,7 @@
 #define xe_dns_included
 
 #include <arpa/nameser.h>
+#include <arpa/inet.h>
 
 #define PREFIX "\t\t\t\t"
 

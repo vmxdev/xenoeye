@@ -576,7 +576,7 @@ main(int argc, char *argv[])
 	size_t max_size;
 	void *db4, *db6;
 	size_t db4_size, db6_size;
-	char path4[PATH_MAX], path6[PATH_MAX];
+	char path4[PATH_MAX + 32], path6[PATH_MAX + 32];
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
