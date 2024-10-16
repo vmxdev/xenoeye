@@ -621,9 +621,8 @@ fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 
 static void
 fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
-	time_t t)
+	time_t t, int *need_sleep)
 {
-	int need_sleep = 1;
 	size_t i, j;
 	for (i=0; i<n_mo; i++) {
 		struct monit_object *mo = &(mos[i]);
@@ -631,13 +630,13 @@ fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
 		for (j=0; j<mo->nfwm; j++) {
 			struct mo_fwm *fwm = &mo->fwms[j];
 
-			if ((fwm->last_export + fwm->time) <= t) {
+			if ((fwm->last_export / fwm->time) != (t / fwm->time)) {
 				/* time to export */
 				if (fwm_merge_and_dump(fwm, globl->nthreads,
 					mo->name, globl->exp_dir)) {
 
 					fwm->last_export = t;
-					need_sleep = 0;
+					*need_sleep = 0;
 				} else {
 					continue;
 				}
@@ -645,13 +644,10 @@ fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
 		}
 
 		if (mo->n_mo) {
-			fwm_merge_rec(globl, mo->mos, mo->n_mo, t);
+			fwm_merge_rec(globl, mo->mos, mo->n_mo, t, need_sleep);
 		}
 	}
 
-	if (need_sleep) {
-		sleep(1);
-	}
 }
 
 void *
@@ -661,6 +657,7 @@ fwm_bg_thread(void *arg)
 
 	for (;;) {
 		time_t t;
+		int need_sleep = 1;
 
 		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
@@ -674,7 +671,11 @@ fwm_bg_thread(void *arg)
 		}
 
 		fwm_merge_rec(globl, globl->monit_objects,
-			globl->nmonit_objects, t);
+			globl->nmonit_objects, t, &need_sleep);
+
+		if (need_sleep) {
+			sleep(1);
+		}
 	}
 
 	return NULL;
