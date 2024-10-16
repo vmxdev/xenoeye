@@ -371,6 +371,15 @@ monit_objects_init(struct xe_data *globl)
 		goto fail_mavgthread;
 	}
 
+	/* underflow check thread */
+	thread_err = pthread_create(&globl->mavg_under_tid, NULL,
+		&mavg_check_underlimit_thread, globl);
+
+	if (thread_err) {
+		LOG("Can't start thread: %s", strerror(thread_err));
+		goto fail_mavgthread;
+	}
+
 	/* dump thread */
 	thread_err = pthread_create(&globl->mavg_dump_tid, NULL,
 		&mavg_dump_thread, globl);

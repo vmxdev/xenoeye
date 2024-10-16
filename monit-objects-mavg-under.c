@@ -223,7 +223,6 @@ underlimit_check_rec(struct xe_data *globl,
 			if (mavg->nunderlimit == 0) {
 				continue;
 			}
-			LOG("Has underlimit!");
 
 			check_at = atomic_load_explicit(
 				&mavg->underlimit_check_at,
@@ -266,7 +265,7 @@ mavg_check_underlimit_thread(void *arg)
 		underlimit_check_rec(globl, globl->monit_objects,
 			globl->nmonit_objects, time_ns);
 
-		sleep(2);
+		sleep(1);
 	}
 
 	return NULL;

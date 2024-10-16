@@ -300,6 +300,7 @@ int classification_process_nf(struct monit_object *mo, size_t thread_id,
 
 void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);
+void *mavg_check_underlimit_thread(void *);
 
 #endif
 

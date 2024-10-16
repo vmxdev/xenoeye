@@ -50,14 +50,18 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 	for (i=0; i<window->fieldset.n_naggr; i++) {
 		keysize += window->fieldset.naggr[i].size;
 	}
-
+/*
 	if ((window->noverlimit > 1) || (window->nunderlimit > 1)) {
 		val_itemsize = sizeof(struct mavg_val)
 			+ sizeof(MAVG_TYPE)
-			* (window->noverlimit + window->nunderlimit - 1);
+			* (window->noverlimit + window->nunderlimit);
 	} else {
 		val_itemsize = sizeof(struct mavg_val);
 	}
+*/
+	val_itemsize = sizeof(struct mavg_val)
+		+ sizeof(MAVG_TYPE)
+		* (window->noverlimit + window->nunderlimit);
 
 	valsize = window->fieldset.n_aggr * val_itemsize;
 
