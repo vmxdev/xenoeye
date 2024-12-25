@@ -183,17 +183,17 @@ struct mavg_limit
 	MAVG_TYPE *def;
 };
 
-enum MAVG_OVRLM_TYPE
+enum MAVG_LIM_STATE
 {
-	MAVG_OVRLM_NEW,
-	MAVG_OVRLM_UPDATE,
-	MAVG_OVRLM_ALMOST_GONE,
-	MAVG_OVRLM_GONE
+	MAVG_LIM_NEW,
+	MAVG_LIM_UPDATE,
+	MAVG_LIM_ALMOST_GONE,
+	MAVG_LIM_GONE
 };
 
-struct mavg_ovrlm_data
+struct mavg_lim_data
 {
-	enum MAVG_OVRLM_TYPE type;
+	enum MAVG_LIM_STATE state;
 	uint64_t time_dump, time_last, time_back2norm;
 	MAVG_TYPE val;
 	MAVG_TYPE limit;
@@ -219,8 +219,11 @@ struct mo_mavg
 	size_t nunderlimit;
 	_Atomic uint64_t underlimit_check_at;
 
-	/* global database of overlimited items */
-	tkvdb_tr *glb_ovr_db;
+	/* per-moving average database of overlimited items */
+	tkvdb_tr *ovrerlm_db;
+
+	/* underlimited items */
+	tkvdb_tr *underlm_db;
 
 	size_t db_mem;
 
@@ -301,6 +304,9 @@ int classification_process_nf(struct monit_object *mo, size_t thread_id,
 void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);
 void *mavg_check_underlimit_thread(void *);
+
+int act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
+	int is_overlim);
 
 #endif
 

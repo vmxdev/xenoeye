@@ -30,8 +30,8 @@
 #include "monit-objects-common.h"
 
 static int
-build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	size_t *limit_id)
+build_file_name(char *path, struct mo_mavg *mavg, uint8_t *key, size_t keysize,
+	size_t *limit_id, int is_overlim)
 {
 	size_t i;
 	FILE *fname;
@@ -46,7 +46,11 @@ build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	/* get limit id */
 	memcpy(limit_id, key + keysize - sizeof(size_t), sizeof(size_t));
 
-	l = &mw->overlimit[*limit_id];
+	if (is_overlim) {
+		l = &mavg->overlimit[*limit_id];
+	} else {
+		l = &mavg->underlimit[*limit_id];
+	}
 
 	/* build file name */
 	fname = open_memstream(&nameptr, &namesize);
@@ -55,13 +59,13 @@ build_file_name(char *path, struct mo_mavg *mw, uint8_t *key, size_t keysize,
 		return 0;
 	}
 
-	fprintf(fname, "%s-%s-", mw->notif_pfx, l->name);
+	fprintf(fname, "%s-%s-", mavg->notif_pfx, l->name);
 	flddata = key;
-	for (i=0; i<mw->fieldset.n_naggr; i++) {
-		struct field *fld = &mw->fieldset.naggr[i];
+	for (i=0; i<mavg->fieldset.n_naggr; i++) {
+		struct field *fld = &mavg->fieldset.naggr[i];
 
 		monit_object_field_print(fld, fname, flddata, 0);
-		if ((i + 1) < mw->fieldset.n_naggr) {
+		if ((i + 1) < mavg->fieldset.n_naggr) {
 			fprintf(fname, "-");
 		}
 
@@ -113,7 +117,8 @@ build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
 
 static void
 exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
-	char *script, char *filename, MAVG_TYPE val, MAVG_TYPE limit)
+	char *script, char *filename, MAVG_TYPE val, MAVG_TYPE limit,
+	int is_overlim)
 {
 	int pid;
 	char **args;
@@ -130,7 +135,11 @@ exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
 	args[argidx++] = script;
 	args[argidx++] = mo_name;
 	args[argidx++] = mw->name;
-	args[argidx++] = mw->overlimit[limit_id].name;
+	if (is_overlim) {
+		args[argidx++] = mw->overlimit[limit_id].name;
+	} else {
+		args[argidx++] = mw->underlimit[limit_id].name;
+	}
 	args[argidx++] = filename;
 
 	flddata = key;
@@ -177,12 +186,23 @@ exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
 
 
 static void
-ext_stats_toggle(struct mo_mavg *mw, int on)
+ext_stats_toggle(struct mo_mavg *mw, int on, int is_overlim)
 {
-	size_t i, j;
+	size_t i, j, n;
 
-	for (i=0; i<mw->noverlimit; i++) {
-		struct mavg_limit *ml = &mw->overlimit[i];
+	if (is_overlim) {
+		n = mw->noverlimit;
+	} else {
+		n = mw->nunderlimit;
+	}
+
+	for (i=0; i<n; i++) {
+		struct mavg_limit *ml;
+		if (is_overlim) {
+			ml = &mw->overlimit[i];
+		} else {
+			ml = &mw->underlimit[i];
+		}
 
 		for (j=0; j<ml->n_ext_stat; j++) {
 			struct mavg_limit_ext_stat *e = &ml->ext_stat[j];
@@ -202,8 +222,8 @@ ext_stats_toggle(struct mo_mavg *mw, int on)
 
 
 static void
-on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, char *mo_name)
+on_limit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+	struct mavg_lim_data *ovr, char *mo_name, int is_overlim)
 {
 	FILE *f;
 	char filename[PATH_MAX];
@@ -212,9 +232,11 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	char *script;
 
 	/* turn on extended statistics */
-	ext_stats_toggle(mw, 1);
+	ext_stats_toggle(mw, 1, is_overlim);
 
-	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
+	if (!build_file_name(filename, mw, key, keysize, &limit_id,
+		is_overlim)) {
+
 		LOG("Can't create file");
 		return;
 	}
@@ -233,21 +255,26 @@ on_overlimit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	fclose(f);
 
 	/* start script */
-	script = mw->overlimit[limit_id].action_script;
+	if (is_overlim) {
+		script = mw->overlimit[limit_id].action_script;
+	} else {
+		script = mw->underlimit[limit_id].action_script;
+	}
+
 	exec_script(mw, key, limit_id, mo_name, script, filename, ovr->val,
-		ovr->limit);
+		ovr->limit, is_overlim);
 }
 
 static void
 on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, MAVG_TYPE val)
+	struct mavg_lim_data *ovr, MAVG_TYPE val)
 {
 	FILE *f;
 	char filename[PATH_MAX];
 	char filecont[1024];
 	size_t limit_id;
 
-	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
+	if (!build_file_name(filename, mw, key, keysize, &limit_id, 1)) {
 		LOG("Update failed");
 		return;
 	}
@@ -268,7 +295,7 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 static void
 on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
-	struct mavg_ovrlm_data *ovr, char *mo_name, MAVG_TYPE val)
+	struct mavg_lim_data *ld, char *mo_name, MAVG_TYPE val, int is_overlim)
 {
 	char filename[PATH_MAX];
 	char filecont[1024];
@@ -276,9 +303,11 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	char *script;
 
 	/* turn off extended statistics */
-	ext_stats_toggle(mw, 0);
+	ext_stats_toggle(mw, 0, is_overlim);
 
-	if (!build_file_name(filename, mw, key, keysize, &limit_id)) {
+	if (!build_file_name(filename, mw, key, keysize, &limit_id,
+		is_overlim)) {
+
 		return;
 	}
 
@@ -286,18 +315,23 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 		LOG("Can't remove file '%s': %s", filename, strerror(errno));
 	}
 
-	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
+	if (!build_file_content(filecont, mw, key, val, ld->limit)) {
 		return;
 	}
 
 	/* start script */
-	script = mw->overlimit[limit_id].back2norm_script;
+	if (is_overlim) {
+		script = mw->overlimit[limit_id].back2norm_script;
+	} else {
+		script = mw->underlimit[limit_id].back2norm_script;
+	}
 	exec_script(mw, key, limit_id, mo_name, script, filename, val,
-		ovr->limit);
+		ld->limit, is_overlim);
 }
 
-static int
-act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name)
+int
+act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
+	int is_overlim)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -323,63 +357,70 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name)
 	}
 
 	do {
-		struct mavg_ovrlm_data *ovr = c->val(c);
+		struct mavg_lim_data *ld = c->val(c);
 		MAVG_TYPE val;
+		int cmp_res;
 
-		if (ovr->type == MAVG_OVRLM_GONE) {
+		if (ld->state == MAVG_LIM_GONE) {
 			goto skip;
 		}
 
-		if (ovr->type == MAVG_OVRLM_NEW) {
-			on_overlimit(mw, c->key(c), c->keysize(c), ovr,
-				mo_name);
+		if (ld->state == MAVG_LIM_NEW) {
+			on_limit(mw, c->key(c), c->keysize(c), ld,
+				mo_name, is_overlim);
 
 			/* update dump time */
-			ovr->time_dump = time_ns;
+			ld->time_dump = time_ns;
 
 			/* change type */
-			ovr->type = MAVG_OVRLM_UPDATE;
+			ld->state = MAVG_LIM_UPDATE;
 			goto skip;
 		}
 
 		/* calculate val */
-		if (time_ns > (ovr->time_last + wnd_size_ns)) {
+		if (time_ns > (ld->time_last + wnd_size_ns)) {
 			val = 0.0;
 		} else {
-			val = ovr->val
-				- (time_ns - ovr->time_last) / wnd_size_ns * ovr->val;
+			val = ld->val
+				- (time_ns - ld->time_last)
+				  / wnd_size_ns * ld->val;
 		}
 
 
 		/* UPDATE or ALMOST_GONE */
-		if (val > ovr->limit) {
-			ovr->type = MAVG_OVRLM_UPDATE;
-			ovr->time_back2norm = 0;
+		if (is_overlim) {
+			cmp_res = val > ld->limit;
 		} else {
-			if (ovr->type == MAVG_OVRLM_UPDATE) {
-				ovr->type = MAVG_OVRLM_ALMOST_GONE;
-				ovr->time_back2norm = time_ns;
+			cmp_res = val < ld->limit;
+		}
+		if (cmp_res) {
+			ld->state = MAVG_LIM_UPDATE;
+			ld->time_back2norm = 0;
+		} else {
+			if (ld->state == MAVG_LIM_UPDATE) {
+				ld->state = MAVG_LIM_ALMOST_GONE;
+				ld->time_back2norm = time_ns;
 			}
 		}
 
-		if (ovr->type == MAVG_OVRLM_ALMOST_GONE) {
-			if (time_ns > (ovr->time_back2norm + ovr->back2norm_time_ns)) {
+		if (ld->state == MAVG_LIM_ALMOST_GONE) {
+			if (time_ns > (ld->time_back2norm + ld->back2norm_time_ns)) {
 				/* traffic is back to normal */
-				on_back_to_norm(mw, c->key(c), c->keysize(c), ovr,
-					mo_name, val);
+				on_back_to_norm(mw, c->key(c), c->keysize(c),
+					ld, mo_name, val, is_overlim);
 
-				ovr->type = MAVG_OVRLM_GONE;
+				ld->state = MAVG_LIM_GONE;
 				goto skip;
 			}
 		}
 
-		if ((ovr->time_dump + 3*1e9) > time_ns) {
+		if ((ld->time_dump + 3*1e9) > time_ns) {
 			goto skip;
 		}
 
 		/* update notification file */
-		on_update(mw, c->key(c), c->keysize(c), ovr, val);
-		ovr->time_dump = time_ns;
+		on_update(mw, c->key(c), c->keysize(c), ld, val);
+		ld->time_dump = time_ns;
 
 skip: ;
 	} while (c->next(c) == TKVDB_OK);
@@ -413,7 +454,7 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 		TKVDB_RES rc;
 		tkvdb_datum dtk, dtv;
 
-		struct mavg_ovrlm_data *val_thr = c->val(c);
+		struct mavg_lim_data *val_thr = c->val(c);
 
 		dtk.data = c->key(c);
 		dtk.size = c->keysize(c);
@@ -421,9 +462,9 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 		rc = db->get(db, &dtk, &dtv);
 		if (rc == TKVDB_OK) {
 			/* item is in database */
-			struct mavg_ovrlm_data *val_glb = dtv.data;
+			struct mavg_lim_data *val_glb = dtv.data;
 
-			if (val_glb->type == MAVG_OVRLM_UPDATE) {
+			if (val_glb->state == MAVG_LIM_UPDATE) {
 				/* update time */
 				val_glb->time_last = val_thr->time_last;
 
@@ -435,9 +476,9 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 					goto skip;
 				}
 				val_glb->val = val_thr->val;
-			} else if (val_glb->type == MAVG_OVRLM_GONE) {
+			} else if (val_glb->state == MAVG_LIM_GONE) {
 				/* restart actions */
-				val_glb->type = MAVG_OVRLM_NEW;
+				val_glb->state = MAVG_LIM_NEW;
 
 				val_glb->time_last = val_thr->time_last;
 				val_glb->time_dump = 0;
@@ -446,12 +487,12 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 				val_glb->back2norm_time_ns
 					= val_thr->back2norm_time_ns;
 			}
-			/* don't touch items with type MAVG_OVRLM_NEW */
+			/* don't touch items with type MAVG_LIM_NEW */
 		} else {
 			/* new item */
-			struct mavg_ovrlm_data val;
+			struct mavg_lim_data val;
 
-			val.type = MAVG_OVRLM_NEW;
+			val.state = MAVG_LIM_NEW;
 			val.time_last = val_thr->time_last;
 			val.time_dump = 0;
 			val.val = val_thr->val;
@@ -491,7 +532,7 @@ check_rec(struct xe_data *globl, size_t bank,
 		for (mwidx=0; mwidx<mo->nmavg; mwidx++) {
 			size_t tidx;
 			struct mo_mavg *mw = &mo->mavgs[mwidx];
-			tkvdb_tr *db_glb = mw->glb_ovr_db;
+			tkvdb_tr *db_glb = mw->ovrerlm_db;
 
 			/* for each thread data */
 			for (tidx=0; tidx<globl->nthreads; tidx++) {
@@ -505,7 +546,7 @@ check_rec(struct xe_data *globl, size_t bank,
 				db_thr->begin(db_thr);
 			}
 
-			act(mw, db_glb, mw->size_secs * 1e9, mo->name);
+			act(mw, db_glb, mw->size_secs * 1e9, mo->name, 1);
 		}
 
 		if (mo->n_mo) {

@@ -32,7 +32,64 @@
 #define MAVG_VAL(DATUM, I, SIZE) ((struct mavg_val *)&DATUM[SIZE * I])
 
 static int
-underlimit_check(struct mo_mavg *mavg, tkvdb_tr *db)
+underlimit_item_check(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
+	MAVG_TYPE limit, struct mavg_val *val, size_t limit_index,
+	uint64_t time_ns)
+{
+	TKVDB_RES rc;
+	tkvdb_datum dtk, dtv;
+	uint8_t key_with_limit_index[keysize + sizeof(size_t)];
+	MAVG_TYPE v = val->val;
+
+	memcpy(key_with_limit_index, key, keysize);
+	memcpy(key_with_limit_index + keysize, &limit_index, sizeof(size_t));
+
+	dtk.data = key_with_limit_index;
+	dtk.size = keysize + sizeof(size_t);
+
+	/* check if this item is in db */
+	rc = mavg->underlm_db->get(mavg->underlm_db, &dtk, &dtv);
+	if (rc == TKVDB_OK) {
+		/* in db, update values */
+		struct mavg_lim_data *ld = (struct mavg_lim_data *)dtv.data;
+
+		ld->time_last = time_ns;
+		ld->val = v;
+
+		ld->limit = limit;
+		ld->back2norm_time_ns
+			= mavg->underlimit[limit_index].back2norm_time_ns;
+	} else {
+		if (v < limit) {
+			/* not in db and less than limit, add to db */
+			struct mavg_lim_data ld;
+			ld.state = MAVG_LIM_NEW;
+			ld.time_last = time_ns;
+			ld.time_dump = 0;
+			ld.val = val->val;
+			ld.limit = limit;
+			ld.back2norm_time_ns
+				= mavg->underlimit[limit_index].back2norm_time_ns;
+
+			dtv.data = &ld;
+			dtv.size = sizeof(struct mavg_lim_data);
+
+			rc = mavg->underlm_db->put(mavg->underlm_db, &dtk, &dtv);
+			if (rc != TKVDB_OK) {
+				LOG("Can't append item to db with "\
+					"underlimited records, error code %d", rc);
+				return 0;
+			}
+		}
+	}
+
+	return 1;
+}
+
+
+static int
+underlimit_check(struct mo_mavg *mavg, tkvdb_tr *db, uint64_t time_ns,
+	size_t val_itemsize)
 {
 	tkvdb_cursor *c;
 
@@ -50,15 +107,22 @@ underlimit_check(struct mo_mavg *mavg, tkvdb_tr *db)
 	do {
 		size_t i;
 		uint8_t *key = c->key(c);
-		for (i=0; i<mavg->fieldset.n_naggr; i++) {
-			struct field *fld = &mavg->fieldset.naggr[i];
-			monit_object_field_print(fld, stderr, key, 1);
-			fprintf(stderr, "\n");
+		uint8_t *pval = c->val(c);
+
+		for (i=0; i<mavg->fieldset.n_aggr; i++) {
+			size_t j;
+			struct mavg_val *val;
+
+			val = MAVG_VAL(pval, i, val_itemsize);
+			for (j=0; j<mavg->nunderlimit; j++) {
+				size_t lidx = j + mavg->noverlimit;
+				MAVG_TYPE limit;
+				limit = val->limits[lidx];
+
+				underlimit_item_check(mavg, key, c->keysize(c),
+					limit, val, j, time_ns);
+			}
 		}
-/*
-		dtk.data = c->key(c);
-		dtk.size = c->keysize(c);
-*/
 	} while (c->next(c) == TKVDB_OK);
 
 empty:
@@ -70,7 +134,7 @@ empty:
 
 static int
 mavg_merge(struct mo_mavg *mavg, tkvdb_tr *db, tkvdb_tr *thread_db,
-	uint64_t time_ns, int skip_zeros)
+	uint64_t time_ns)
 {
 	MAVG_TYPE wndsize = mavg->size_secs * 1e9;
 	tkvdb_cursor *c;
@@ -90,7 +154,6 @@ mavg_merge(struct mo_mavg *mavg, tkvdb_tr *db, tkvdb_tr *thread_db,
 		TKVDB_RES rc;
 		tkvdb_datum dtk, dtv;
 		size_t i;
-		int has_non_zero = 0;
 
 		size_t val_itemsize = c->valsize(c);
 		uint8_t *vals_db = c->val(c);
@@ -117,9 +180,6 @@ mavg_merge(struct mo_mavg *mavg, tkvdb_tr *db, tkvdb_tr *thread_db,
 			if (tmdiff < wndsize) {
 				new_v = v - tmdiff / wndsize * v;
 				val->val = new_v;
-				if ((__int128_t)new_v != 0) {
-					has_non_zero = 1;
-				}
 			} else {
 				val->val = 0.0f;
 			}
@@ -133,10 +193,6 @@ mavg_merge(struct mo_mavg *mavg, tkvdb_tr *db, tkvdb_tr *thread_db,
 			}
 		}
 
-		/* skip zeros if needed */
-		if (skip_zeros && !has_non_zero) {
-			continue;
-		}
 
 		dtk.data = c->key(c);
 		dtk.size = c->keysize(c);
@@ -176,12 +232,13 @@ empty:
 
 
 static int
-mavg_check_underlimit(struct mo_mavg *mavg, size_t nthreads,
-	struct monit_object *mo, uint64_t time_ns)
+mavg_check_underlimit(struct monit_object *mo, struct mo_mavg *mavg,
+	size_t nthreads, uint64_t time_ns)
 {
 	tkvdb_tr *db;
 	size_t i;
 
+	/* temporary database with moving averages */
 	db = tkvdb_tr_create(NULL, NULL);
 	if (!db) {
 		LOG("Can't create transaction");
@@ -196,12 +253,14 @@ mavg_check_underlimit(struct mo_mavg *mavg, size_t nthreads,
 		thread_db = atomic_load_explicit(&mavg->thr_data[i].db,
 			memory_order_relaxed);
 
-		mavg_merge(mavg, db, thread_db, time_ns, 1);
+		mavg_merge(mavg, db, thread_db, time_ns);
 	}
 
-	underlimit_check(mavg, db);
+	underlimit_check(mavg, db, time_ns, mavg->thr_data[0].val_itemsize);
 
 	db->free(db);
+
+	act(mavg, mavg->underlm_db, mavg->size_secs * 1e9, mo->name, 0);
 
 	return 1;
 }
@@ -228,11 +287,11 @@ underlimit_check_rec(struct xe_data *globl,
 				&mavg->underlimit_check_at,
 				memory_order_relaxed);
 
-			if ((check_at == 0) || (time_ns < check_at)) {
+			if ((check_at != 0) && (time_ns < check_at)) {
 				continue;
 			}
 
-			mavg_check_underlimit(mavg, globl->nthreads, mo,
+			mavg_check_underlimit(mo, mavg, globl->nthreads,
 				time_ns);
 		}
 

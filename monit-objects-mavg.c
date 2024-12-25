@@ -50,15 +50,7 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 	for (i=0; i<window->fieldset.n_naggr; i++) {
 		keysize += window->fieldset.naggr[i].size;
 	}
-/*
-	if ((window->noverlimit > 1) || (window->nunderlimit > 1)) {
-		val_itemsize = sizeof(struct mavg_val)
-			+ sizeof(MAVG_TYPE)
-			* (window->noverlimit + window->nunderlimit);
-	} else {
-		val_itemsize = sizeof(struct mavg_val);
-	}
-*/
+
 	val_itemsize = sizeof(struct mavg_val)
 		+ sizeof(MAVG_TYPE)
 		* (window->noverlimit + window->nunderlimit);
@@ -121,12 +113,20 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 		data->ovr_db[1]->begin(data->ovr_db[1]);
 	}
 
-	window->glb_ovr_db = tkvdb_tr_create(NULL, params_ovr);
-	if (!window->glb_ovr_db) {
+	/* databases with over- and underlimited items */
+	window->ovrerlm_db = tkvdb_tr_create(NULL, params_ovr);
+	if (!window->ovrerlm_db) {
 		LOG("Can't create database for overlimited items");
 		return 0;
 	}
-	window->glb_ovr_db->begin(window->glb_ovr_db);
+	window->ovrerlm_db->begin(window->ovrerlm_db);
+
+	window->underlm_db = tkvdb_tr_create(NULL, params_ovr);
+	if (!window->underlm_db) {
+		LOG("Can't create database for underlimited items");
+		return 0;
+	}
+	window->underlm_db->begin(window->underlm_db);
 
 	window->nthreads = nthreads;
 
@@ -433,7 +433,7 @@ mavg_limits_init(struct mo_mavg *window)
 /* react on overlimit */
 static void
 mavg_on_overlimit(struct xe_data *globl, struct mavg_thread_data *data,
-	size_t limit_id, struct mavg_ovrlm_data *od)
+	size_t limit_id, struct mavg_lim_data *od)
 {
 	TKVDB_RES rc;
 	tkvdb_datum dtk, dtv;
@@ -454,7 +454,7 @@ mavg_on_overlimit(struct xe_data *globl, struct mavg_thread_data *data,
 	dtk.size = data->key_fullsize;
 
 	dtv.data = od;
-	dtv.size = sizeof(struct mavg_ovrlm_data);
+	dtv.size = sizeof(struct mavg_lim_data);
 
 	/* put without checks if this item exists */
 	rc = db->put(db, &dtk, &dtv);
@@ -485,12 +485,11 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 			limit = atomic_load_explicit(&pval->limits[j],
 				memory_order_relaxed);
 			if (val >= limit) {
-				struct mavg_ovrlm_data od;
+				struct mavg_lim_data od;
 
 				od.time_last = time_ns;
 				od.val = val;
-				atomic_store_explicit(&od.limit, limit,
-					memory_order_relaxed);
+				od.limit = limit;
 				od.back2norm_time_ns
 					= mavg->overlimit[j].back2norm_time_ns;
 
