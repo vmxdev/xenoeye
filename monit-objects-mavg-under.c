@@ -41,6 +41,8 @@ underlimit_item_check(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 	uint8_t key_with_limit_index[keysize + sizeof(size_t)];
 	MAVG_TYPE v = val->val;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	memcpy(key_with_limit_index, key, keysize);
 	memcpy(key_with_limit_index + keysize, &limit_index, sizeof(size_t));
 
@@ -58,7 +60,7 @@ underlimit_item_check(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 
 		ld->limit = limit;
 		ld->back2norm_time_ns
-			= mavg->underlimit[limit_index].back2norm_time_ns;
+			= lim_curr->underlimit[limit_index].back2norm_time_ns;
 	} else {
 		if (v < limit) {
 			/* not in db and less than limit, add to db */
@@ -69,7 +71,7 @@ underlimit_item_check(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 			ld.val = val->val;
 			ld.limit = limit;
 			ld.back2norm_time_ns
-				= mavg->underlimit[limit_index].back2norm_time_ns;
+				= lim_curr->underlimit[limit_index].back2norm_time_ns;
 
 			dtv.data = &ld;
 			dtv.size = sizeof(struct mavg_lim_data);
@@ -93,6 +95,8 @@ underlimit_check(struct mo_mavg *mavg, tkvdb_tr *db, uint64_t time_ns,
 {
 	tkvdb_cursor *c;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	c = tkvdb_cursor_create(db);
 	if (!c) {
 		LOG("tkvdb_cursor_create() failed");
@@ -114,8 +118,8 @@ underlimit_check(struct mo_mavg *mavg, tkvdb_tr *db, uint64_t time_ns,
 			struct mavg_val *val;
 
 			val = MAVG_VAL(pval, i, val_itemsize);
-			for (j=0; j<mavg->nunderlimit; j++) {
-				size_t lidx = j + mavg->noverlimit;
+			for (j=0; j<lim_curr->nunderlimit; j++) {
+				size_t lidx = j + lim_curr->noverlimit;
 				MAVG_TYPE limit;
 				limit = val->limits[lidx];
 
@@ -138,6 +142,8 @@ mavg_merge(struct mo_mavg *mavg, tkvdb_tr *db, tkvdb_tr *thread_db,
 {
 	MAVG_TYPE wndsize = mavg->size_secs * 1e9;
 	tkvdb_cursor *c;
+
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 
 	c = tkvdb_cursor_create(thread_db);
 	if (!c) {
@@ -186,7 +192,7 @@ mavg_merge(struct mo_mavg *mavg, tkvdb_tr *db, tkvdb_tr *thread_db,
 
 			/* rest of structure */
 			val->time_prev = time_ns;
-			for (j=0; j<mavg->noverlimit + mavg->nunderlimit; j++) {
+			for (j=0; j<lim_curr->noverlimit + lim_curr->nunderlimit; j++) {
 				v = atomic_load_explicit(&val_db->limits[j],
 					memory_order_relaxed);
 				val->limits[j] = v;
@@ -277,17 +283,9 @@ underlimit_check_rec(struct xe_data *globl,
 		/* for each moving average */
 		for (j=0; j<mo->nmavg; j++) {
 			struct mo_mavg *mavg = &mo->mavgs[j];
-			uint64_t check_at;
+			struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 
-			if (mavg->nunderlimit == 0) {
-				continue;
-			}
-
-			check_at = atomic_load_explicit(
-				&mavg->underlimit_check_at,
-				memory_order_relaxed);
-
-			if ((check_at != 0) && (time_ns < check_at)) {
+			if (lim_curr->nunderlimit == 0) {
 				continue;
 			}
 

@@ -70,6 +70,8 @@ struct xe_data
 
 	/* GeoIP/AS databases reload thread */
 	pthread_t geoip_tid;
+	/* config reload thread */
+	pthread_t config_tid;
 
 	/* templates */
 	int allow_templates_in_future;
@@ -101,6 +103,9 @@ struct xe_data
 
 	/* notify geoip thread about reload */
 	atomic_int reload_geoip;
+
+	/* config reload */
+	atomic_int reload_config;
 
 	/* notify threads about stop */
 	atomic_int stop;

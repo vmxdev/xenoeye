@@ -118,6 +118,7 @@ csv_next(char **line, char *val)
 	}
 }
 
+
 char *tcp_flags_to_str(uint8_t tf);
 void port_to_str(char *res, uint16_t port);
 void ports_pair_to_str(char *res, uint16_t port1, uint16_t port2);

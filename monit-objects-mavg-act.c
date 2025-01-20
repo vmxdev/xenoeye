@@ -43,13 +43,15 @@ build_file_name(char *path, struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 
 	struct mavg_limit *l;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	/* get limit id */
 	memcpy(limit_id, key + keysize - sizeof(size_t), sizeof(size_t));
 
 	if (is_overlim) {
-		l = &mavg->overlimit[*limit_id];
+		l = &lim_curr->overlimit[*limit_id];
 	} else {
-		l = &mavg->underlimit[*limit_id];
+		l = &lim_curr->underlimit[*limit_id];
 	}
 
 	/* build file name */
@@ -81,7 +83,7 @@ build_file_name(char *path, struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 }
 
 static int
-build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
+build_file_content(char *text, struct mo_mavg *mavg, uint8_t *key,
 	MAVG_TYPE val, MAVG_TYPE limit)
 {
 	size_t i;
@@ -97,8 +99,8 @@ build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
 	}
 
 	flddata = key;
-	for (i=0; i<mw->fieldset.n_naggr; i++) {
-		struct field *fld = &mw->fieldset.naggr[i];
+	for (i=0; i<mavg->fieldset.n_naggr; i++) {
+		struct field *fld = &mavg->fieldset.naggr[i];
 
 		monit_object_field_print(fld, fcont, flddata, 1);
 
@@ -116,7 +118,7 @@ build_file_content(char *text, struct mo_mavg *mw, uint8_t *key,
 }
 
 static void
-exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
+exec_script(struct mo_mavg *mavg, uint8_t *key, size_t limit_id, char *mo_name,
 	char *script, char *filename, MAVG_TYPE val, MAVG_TYPE limit,
 	int is_overlim)
 {
@@ -126,25 +128,27 @@ exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
 	uint8_t *flddata;
 	char *arg;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	if (!*script) {
 		return;
 	}
 
 	/* build script args */
-	args = alloca((mw->fieldset.n_naggr + 8) * sizeof(char *));
+	args = alloca((mavg->fieldset.n_naggr + 8) * sizeof(char *));
 	args[argidx++] = script;
 	args[argidx++] = mo_name;
-	args[argidx++] = mw->name;
+	args[argidx++] = mavg->name;
 	if (is_overlim) {
-		args[argidx++] = mw->overlimit[limit_id].name;
+		args[argidx++] = lim_curr->overlimit[limit_id].name;
 	} else {
-		args[argidx++] = mw->underlimit[limit_id].name;
+		args[argidx++] = lim_curr->underlimit[limit_id].name;
 	}
 	args[argidx++] = filename;
 
 	flddata = key;
-	for (i=0; i<mw->fieldset.n_naggr; i++) {
-		struct field *fld = &mw->fieldset.naggr[i];
+	for (i=0; i<mavg->fieldset.n_naggr; i++) {
+		struct field *fld = &mavg->fieldset.naggr[i];
 		arg = alloca(INET6_ADDRSTRLEN + 10);
 
 		monit_object_field_print_str(fld, arg, flddata, 0);
@@ -186,22 +190,24 @@ exec_script(struct mo_mavg *mw, uint8_t *key, size_t limit_id, char *mo_name,
 
 
 static void
-ext_stats_toggle(struct mo_mavg *mw, int on, int is_overlim)
+ext_stats_toggle(struct mo_mavg *mavg, int on, int is_overlim)
 {
 	size_t i, j, n;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	if (is_overlim) {
-		n = mw->noverlimit;
+		n = lim_curr->noverlimit;
 	} else {
-		n = mw->nunderlimit;
+		n = lim_curr->nunderlimit;
 	}
 
 	for (i=0; i<n; i++) {
 		struct mavg_limit *ml;
 		if (is_overlim) {
-			ml = &mw->overlimit[i];
+			ml = &(lim_curr->overlimit[i]);
 		} else {
-			ml = &mw->underlimit[i];
+			ml = &(lim_curr->underlimit[i]);
 		}
 
 		for (j=0; j<ml->n_ext_stat; j++) {
@@ -222,7 +228,7 @@ ext_stats_toggle(struct mo_mavg *mw, int on, int is_overlim)
 
 
 static void
-on_limit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+on_limit(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 	struct mavg_lim_data *ovr, char *mo_name, int is_overlim)
 {
 	FILE *f;
@@ -231,17 +237,19 @@ on_limit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	size_t limit_id;
 	char *script;
 
-	/* turn on extended statistics */
-	ext_stats_toggle(mw, 1, is_overlim);
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 
-	if (!build_file_name(filename, mw, key, keysize, &limit_id,
+	/* turn on extended statistics */
+	ext_stats_toggle(mavg, 1, is_overlim);
+
+	if (!build_file_name(filename, mavg, key, keysize, &limit_id,
 		is_overlim)) {
 
 		LOG("Can't create file");
 		return;
 	}
 
-	if (!build_file_content(filecont, mw, key, ovr->val, ovr->limit)) {
+	if (!build_file_content(filecont, mavg, key, ovr->val, ovr->limit)) {
 		return;
 	}
 
@@ -256,17 +264,17 @@ on_limit(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 
 	/* start script */
 	if (is_overlim) {
-		script = mw->overlimit[limit_id].action_script;
+		script = lim_curr->overlimit[limit_id].action_script;
 	} else {
-		script = mw->underlimit[limit_id].action_script;
+		script = lim_curr->underlimit[limit_id].action_script;
 	}
 
-	exec_script(mw, key, limit_id, mo_name, script, filename, ovr->val,
+	exec_script(mavg, key, limit_id, mo_name, script, filename, ovr->val,
 		ovr->limit, is_overlim);
 }
 
 static void
-on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+on_update(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 	struct mavg_lim_data *ovr, MAVG_TYPE val)
 {
 	FILE *f;
@@ -274,12 +282,12 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	char filecont[1024];
 	size_t limit_id;
 
-	if (!build_file_name(filename, mw, key, keysize, &limit_id, 1)) {
+	if (!build_file_name(filename, mavg, key, keysize, &limit_id, 1)) {
 		LOG("Update failed");
 		return;
 	}
 
-	if (!build_file_content(filecont, mw, key, val, ovr->limit)) {
+	if (!build_file_content(filecont, mavg, key, val, ovr->limit)) {
 		return;
 	}
 
@@ -294,7 +302,7 @@ on_update(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 }
 
 static void
-on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
+on_back_to_norm(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 	struct mavg_lim_data *ld, char *mo_name, MAVG_TYPE val, int is_overlim)
 {
 	char filename[PATH_MAX];
@@ -302,10 +310,12 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 	size_t limit_id;
 	char *script;
 
-	/* turn off extended statistics */
-	ext_stats_toggle(mw, 0, is_overlim);
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 
-	if (!build_file_name(filename, mw, key, keysize, &limit_id,
+	/* turn off extended statistics */
+	ext_stats_toggle(mavg, 0, is_overlim);
+
+	if (!build_file_name(filename, mavg, key, keysize, &limit_id,
 		is_overlim)) {
 
 		return;
@@ -315,22 +325,22 @@ on_back_to_norm(struct mo_mavg *mw, uint8_t *key, size_t keysize,
 		LOG("Can't remove file '%s': %s", filename, strerror(errno));
 	}
 
-	if (!build_file_content(filecont, mw, key, val, ld->limit)) {
+	if (!build_file_content(filecont, mavg, key, val, ld->limit)) {
 		return;
 	}
 
 	/* start script */
 	if (is_overlim) {
-		script = mw->overlimit[limit_id].back2norm_script;
+		script = lim_curr->overlimit[limit_id].back2norm_script;
 	} else {
-		script = mw->underlimit[limit_id].back2norm_script;
+		script = lim_curr->underlimit[limit_id].back2norm_script;
 	}
-	exec_script(mw, key, limit_id, mo_name, script, filename, val,
+	exec_script(mavg, key, limit_id, mo_name, script, filename, val,
 		ld->limit, is_overlim);
 }
 
 int
-act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
+act(struct mo_mavg *mavg, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
 	int is_overlim)
 {
 	int ret = 0;
@@ -366,7 +376,7 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
 		}
 
 		if (ld->state == MAVG_LIM_NEW) {
-			on_limit(mw, c->key(c), c->keysize(c), ld,
+			on_limit(mavg, c->key(c), c->keysize(c), ld,
 				mo_name, is_overlim);
 
 			/* update dump time */
@@ -406,7 +416,7 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
 		if (ld->state == MAVG_LIM_ALMOST_GONE) {
 			if (time_ns > (ld->time_back2norm + ld->back2norm_time_ns)) {
 				/* traffic is back to normal */
-				on_back_to_norm(mw, c->key(c), c->keysize(c),
+				on_back_to_norm(mavg, c->key(c), c->keysize(c),
 					ld, mo_name, val, is_overlim);
 
 				ld->state = MAVG_LIM_GONE;
@@ -419,7 +429,7 @@ act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
 		}
 
 		/* update notification file */
-		on_update(mw, c->key(c), c->keysize(c), ld, val);
+		on_update(mavg, c->key(c), c->keysize(c), ld, val);
 		ld->time_dump = time_ns;
 
 skip: ;
@@ -531,13 +541,13 @@ check_rec(struct xe_data *globl, size_t bank,
 		/* for each moving average in this object */
 		for (mwidx=0; mwidx<mo->nmavg; mwidx++) {
 			size_t tidx;
-			struct mo_mavg *mw = &mo->mavgs[mwidx];
-			tkvdb_tr *db_glb = mw->ovrerlm_db;
+			struct mo_mavg *mavg = &mo->mavgs[mwidx];
+			tkvdb_tr *db_glb = mavg->ovrerlm_db;
 
 			/* for each thread data */
 			for (tidx=0; tidx<globl->nthreads; tidx++) {
 				tkvdb_tr *db_thr
-					= mw->thr_data[tidx].ovr_db[bank];
+					= mavg->thr_data[tidx].ovr_db[bank];
 
 				check_items(db_glb, db_thr);
 
@@ -546,7 +556,7 @@ check_rec(struct xe_data *globl, size_t bank,
 				db_thr->begin(db_thr);
 			}
 
-			act(mw, db_glb, mw->size_secs * 1e9, mo->name, 1);
+			act(mavg, db_glb, mavg->size_secs * 1e9, mo->name, 1);
 		}
 
 		if (mo->n_mo) {

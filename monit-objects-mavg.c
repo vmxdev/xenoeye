@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022-2024, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2025, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,40 +33,43 @@
 #define MAVG_VAL(DATUM, I, SIZE) ((struct mavg_val *)&DATUM[SIZE * I])
 
 int
-mavg_fields_init(size_t nthreads, struct mo_mavg *window)
+mavg_fields_init(size_t nthreads, struct mo_mavg *mavg)
 {
 	size_t i, keysize, valsize, val_itemsize;
+
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	tkvdb_params *params, *params_ovr;
 
 	params = tkvdb_params_create();
 	tkvdb_param_set(params, TKVDB_PARAM_ALIGNVAL, 16);
 	tkvdb_param_set(params, TKVDB_PARAM_TR_DYNALLOC, 0);
-	tkvdb_param_set(params, TKVDB_PARAM_TR_LIMIT, window->db_mem);
+	tkvdb_param_set(params, TKVDB_PARAM_TR_LIMIT, mavg->db_mem);
 
 	params_ovr = tkvdb_params_create();
 	tkvdb_param_set(params_ovr, TKVDB_PARAM_ALIGNVAL, 16);
 
 	keysize = 0;
-	for (i=0; i<window->fieldset.n_naggr; i++) {
-		keysize += window->fieldset.naggr[i].size;
+	for (i=0; i<mavg->fieldset.n_naggr; i++) {
+		keysize += mavg->fieldset.naggr[i].size;
 	}
 
 	val_itemsize = sizeof(struct mavg_val)
 		+ sizeof(MAVG_TYPE)
-		* (window->noverlimit + window->nunderlimit);
+		* (lim_curr->noverlimit + lim_curr->nunderlimit);
 
-	valsize = window->fieldset.n_aggr * val_itemsize;
+	valsize = mavg->fieldset.n_aggr * val_itemsize;
 
 
 	/* per-thread data */
-	window->thr_data = calloc(nthreads, sizeof(struct mavg_thread_data));
-	if (!window->thr_data) {
+	mavg->thr_data = calloc(nthreads, sizeof(struct mavg_thread_data));
+	if (!mavg->thr_data) {
 		LOG("calloc() failed");
 		return 0;
 	}
 
 	for (i=0; i<nthreads; i++) {
-		struct mavg_thread_data *data = &window->thr_data[i];
+		struct mavg_thread_data *data = &mavg->thr_data[i];
 		tkvdb_tr *tmp_db;
 
 		data->keysize = keysize;
@@ -97,7 +100,7 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 		atomic_store_explicit(&data->db, tmp_db, memory_order_relaxed);
 
 
-		/* init databases with limits */
+		/* init per-thread databases with limits */
 		data->ovr_db[0] = tkvdb_tr_create(NULL, params_ovr);
 		if (!data->ovr_db[0]) {
 			LOG("Can't create database for overlimited items");
@@ -114,21 +117,21 @@ mavg_fields_init(size_t nthreads, struct mo_mavg *window)
 	}
 
 	/* databases with over- and underlimited items */
-	window->ovrerlm_db = tkvdb_tr_create(NULL, params_ovr);
-	if (!window->ovrerlm_db) {
+	mavg->ovrerlm_db = tkvdb_tr_create(NULL, params_ovr);
+	if (!mavg->ovrerlm_db) {
 		LOG("Can't create database for overlimited items");
 		return 0;
 	}
-	window->ovrerlm_db->begin(window->ovrerlm_db);
+	mavg->ovrerlm_db->begin(mavg->ovrerlm_db);
 
-	window->underlm_db = tkvdb_tr_create(NULL, params_ovr);
-	if (!window->underlm_db) {
+	mavg->underlm_db = tkvdb_tr_create(NULL, params_ovr);
+	if (!mavg->underlm_db) {
 		LOG("Can't create database for underlimited items");
 		return 0;
 	}
-	window->underlm_db->begin(window->underlm_db);
+	mavg->underlm_db->begin(mavg->underlm_db);
 
-	window->nthreads = nthreads;
+	mavg->nthreads = nthreads;
 
 	tkvdb_params_free(params);
 	tkvdb_params_free(params_ovr);
@@ -300,7 +303,7 @@ mavg_config(struct aajson *a, aajson_val *value,
 	struct monit_object *mo)
 {
 	size_t i;
-	struct mo_mavg *window;
+	struct mo_mavg *mavg;
 
 	if (a->path_stack[2].type != AAJSON_PATH_ITEM_ARRAY) {
 		LOG("'mavg' must be array");
@@ -308,7 +311,7 @@ mavg_config(struct aajson *a, aajson_val *value,
 	}
 
 	i = a->path_stack[2].data.array_idx;
-	if (i >= mo->nmavg) {
+	if ((i >= mo->nmavg) && (!mo->is_reloading)) {
 		struct mo_mavg *tmp;
 
 		/* append new window */
@@ -326,51 +329,91 @@ mavg_config(struct aajson *a, aajson_val *value,
 		mo->nmavg = i + 1;
 	}
 
-	window = &mo->mavgs[i];
+	mavg = &mo->mavgs[i];
 
 	if (STRCMP(a, 3, "name") == 0) {
-		strcpy(window->name, value->str);
+		if (mo->is_reloading) {
+			LOG("Reloading of key 'name' not implemented yet");
+			return 1;
+		}
+
+		strcpy(mavg->name, value->str);
 	} else if (STRCMP(a, 3, "fields") == 0) {
-		if (!config_field_append(value->str, window)) {
+		if (mo->is_reloading) {
+			LOG("Reloading of key 'fields' not implemented yet");
+			return 1;
+		}
+
+		if (!config_field_append(value->str, mavg)) {
 			return 0;
 		}
 	} else if (STRCMP(a, 3, "time") == 0) {
+		if (mo->is_reloading) {
+			LOG("Reloading of key 'time' not implemented yet");
+			return 1;
+		}
+
 		int tmp_time = atoi(value->str);
 		if (tmp_time < 0) {
 			LOG("Incorrect time '%s'", value->str);
 			return 0;
 		}
 
-		window->size_secs = tmp_time;
+		mavg->size_secs = tmp_time;
 	} else if (STRCMP(a, 3, "dump") == 0) {
+		if (mo->is_reloading) {
+			LOG("Reloading of key 'dump' not implemented yet");
+			return 1;
+		}
+
 		int tmp_time = atoi(value->str);
 		if (tmp_time < 0) {
 			LOG("Incorrect dump time '%s'", value->str);
 			return 0;
 		}
 
-		window->dump_secs = tmp_time;
+		mavg->dump_secs = tmp_time;
 	} else if (STRCMP(a, 3, "mem-m") == 0) {
+		if (mo->is_reloading) {
+			LOG("Reloading of key 'mem-m' not implemented yet");
+			return 1;
+		}
 		int tmp_mem = atoi(value->str);
 		if (tmp_mem < 0) {
 			LOG("Incorrect db size '%s', using default %dM",
 				value->str,
 				MAVG_DEFAULT_DB_SIZE / (1024 * 1024));
-			window->db_mem = MAVG_DEFAULT_DB_SIZE;
+			mavg->db_mem = MAVG_DEFAULT_DB_SIZE;
 		} else {
-			window->db_mem = tmp_mem * 1024 * 1024;
+			mavg->db_mem = tmp_mem * 1024 * 1024;
 		}
 	} else if (STRCMP(a, 3, "overlimit") == 0) {
-		if (!mavg_config_limit(a, value, &window->overlimit,
-			&window->noverlimit,
-			window->fieldset.n_aggr)) {
+		struct mavg_limits *lim;
+		if (!mo->is_reloading) {
+			lim = MAVG_LIM_CURR(mavg);
+		} else {
+			lim = MAVG_LIM_NOT_CURR(mavg);
+		}
+
+		if (!mavg_config_limit(a, value,
+			&lim->overlimit,
+			&lim->noverlimit,
+			mavg->fieldset.n_aggr)) {
 
 			return 0;
 		}
 	} else if (STRCMP(a, 3, "underlimit") == 0) {
-		if (!mavg_config_limit(a, value, &window->underlimit,
-			&window->nunderlimit,
-			window->fieldset.n_aggr)) {
+		struct mavg_limits *lim;
+		if (!mo->is_reloading) {
+			lim = MAVG_LIM_CURR(mavg);
+		} else {
+			lim = MAVG_LIM_NOT_CURR(mavg);
+		}
+
+		if (!mavg_config_limit(a, value,
+			&lim->underlimit,
+			&lim->nunderlimit,
+			mavg->fieldset.n_aggr)) {
 
 			return 0;
 		}
@@ -380,7 +423,7 @@ mavg_config(struct aajson *a, aajson_val *value,
 }
 
 static int
-mavg_limits_do_init(struct mo_mavg *window, struct mavg_limit *limit, size_t n)
+mavg_limits_do_init(struct mo_mavg *mavg, struct mavg_limit *limit, size_t n)
 {
 	size_t i;
 	tkvdb_params *params;
@@ -404,7 +447,7 @@ mavg_limits_do_init(struct mo_mavg *window, struct mavg_limit *limit, size_t n)
 		l->db->begin(l->db);
 		if (l->file[0]) {
 			/* try to read file */
-			mavg_limits_file_load(window, l);
+			mavg_limits_file_load(mavg, l);
 		}
 	}
 
@@ -412,18 +455,23 @@ mavg_limits_do_init(struct mo_mavg *window, struct mavg_limit *limit, size_t n)
 	return 1;
 }
 
-int
-mavg_limits_init(struct mo_mavg *window)
-{
-	if (!mavg_limits_do_init(window, window->overlimit,
-		window->noverlimit)) {
 
+int
+mavg_limits_init(struct mo_mavg *mavg, int is_reloading)
+{
+	struct mavg_limits *lim;
+
+	if (!is_reloading) {
+		lim = MAVG_LIM_CURR(mavg);
+	} else {
+		lim = MAVG_LIM_NOT_CURR(mavg);
+	}
+
+	if (!mavg_limits_do_init(mavg, lim->overlimit, lim->noverlimit)) {
 		return 0;
 	}
 
-	if (!mavg_limits_do_init(window, window->underlimit,
-		window->nunderlimit)) {
-
+	if (!mavg_limits_do_init(mavg, lim->underlimit, lim->nunderlimit)) {
 		return 0;
 	}
 
@@ -472,6 +520,8 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 {
 	size_t i, j;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	for (i=0; i<mavg->fieldset.n_aggr; i++) {
 		MAVG_TYPE val;
 		struct mavg_val *pval;
@@ -480,7 +530,7 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 		val = vals[i] / (MAVG_TYPE)mavg->size_secs;
 
 		/* overlimit */
-		for (j=0; j<mavg->noverlimit; j++) {
+		for (j=0; j<lim_curr->noverlimit; j++) {
 			MAVG_TYPE limit;
 			limit = atomic_load_explicit(&pval->limits[j],
 				memory_order_relaxed);
@@ -491,7 +541,7 @@ mavg_limits_check(struct xe_data *globl, struct mo_mavg *mavg,
 				od.val = val;
 				od.limit = limit;
 				od.back2norm_time_ns
-					= mavg->overlimit[j].back2norm_time_ns;
+					= lim_curr->overlimit[j].back2norm_time_ns;
 
 				mavg_on_overlimit(globl, data, j, &od);
 			}
@@ -530,6 +580,8 @@ mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 {
 	size_t i, j;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	memset(data->val, 0, data->valsize);
 
 	for (i=0; i<mavg->fieldset.n_aggr; i++) {
@@ -544,10 +596,10 @@ mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 
 		/* setup limits */
 		/* overlimit */
-		for (j=0; j<mavg->noverlimit; j++) {
+		for (j=0; j<lim_curr->noverlimit; j++) {
 			TKVDB_RES rc;
 			tkvdb_datum dtkey, dtval;
-			tkvdb_tr *tr = mavg->overlimit[j].db;
+			tkvdb_tr *tr = lim_curr->overlimit[j].db;
 
 			dtkey.data = data->key;
 			dtkey.size = data->keysize;
@@ -561,17 +613,17 @@ mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 			} else {
 				/* not found, using default */
 				atomic_store_explicit(&pval->limits[j],
-					mavg->overlimit[j].def[i],
+					lim_curr->overlimit[j].def[i],
 					memory_order_relaxed);
 			}
 		}
 
 		/* underlimit */
-		for (j=0; j<mavg->nunderlimit; j++) {
+		for (j=0; j<lim_curr->nunderlimit; j++) {
 			TKVDB_RES rc;
 			tkvdb_datum dtkey, dtval;
-			tkvdb_tr *tr = mavg->underlimit[j].db;
-			size_t lidx = j + mavg->noverlimit;
+			tkvdb_tr *tr = lim_curr->underlimit[j].db;
+			size_t lidx = j + lim_curr->noverlimit;
 
 			dtkey.data = data->key;
 			dtkey.size = data->keysize;
@@ -585,7 +637,7 @@ mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 			} else {
 				/* not found, using default */
 				atomic_store_explicit(&pval->limits[lidx],
-					mavg->underlimit[j].def[i],
+					lim_curr->underlimit[j].def[i],
 					memory_order_relaxed);
 			}
 		}
@@ -897,13 +949,16 @@ monit_objects_mavg_link_mo(struct xe_data *globl, struct monit_object *mo)
 {
 	size_t i, j, k;
 
+
 	/* for each moving average */
 	for (i=0; i<mo->nmavg; i++) {
-		struct mo_mavg *mw = &mo->mavgs[i];
+		struct mo_mavg *mavg = &mo->mavgs[i];
+
+		struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 
 		/* for each overlimit set */
-		for (j=0; j<mw->noverlimit; j++) {
-			struct mavg_limit *lm = &mw->overlimit[j];
+		for (j=0; j<lim_curr->noverlimit; j++) {
+			struct mavg_limit *lm = &(lim_curr->overlimit[j]);
 
 			/* for each ext table */
 			for (k=0; k<lm->n_ext_stat; k++) {
@@ -947,5 +1002,47 @@ monit_objects_mavg_link_ext_stat(struct xe_data *globl)
 {
 	monit_objects_mavg_link_ext_stat_rec(globl, globl->monit_objects,
 		globl->nmonit_objects);
+}
+
+static void
+mavg_limits_do_free(struct mavg_limit *limit, size_t n)
+{
+	size_t i;
+
+	for (i=0; i<n; i++) {
+		struct mavg_limit *l = &limit[i];
+
+		if (l->db) {
+			l->db->free(l->db);
+			l->db = NULL;
+		}
+	}
+
+	if (limit->def) {
+		free(limit->def);
+		limit->def = NULL;
+	}
+
+	if (limit->ext_stat) {
+		free(limit->ext_stat);
+		limit->ext_stat = NULL;
+	}
+}
+
+void
+mavg_limits_free(struct mo_mavg *mavg)
+{
+	/* FIXME: incomplete */
+	struct mavg_limits *lim = MAVG_LIM_NOT_CURR(mavg);
+
+	if (lim->overlimit) {
+		mavg_limits_do_free(lim->overlimit, lim->noverlimit);
+	}
+
+	if (lim->underlimit) {
+		mavg_limits_do_free(lim->underlimit, lim->nunderlimit);
+	}
+
+	lim->noverlimit = lim->nunderlimit = 0;
 }
 

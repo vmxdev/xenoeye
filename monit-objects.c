@@ -42,6 +42,8 @@
 
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
+static void monit_object_mavg_limits_free(struct monit_object *mo);
+
 static int
 monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
@@ -53,6 +55,10 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 	if (a->path_stack_pos == 1) {
 		if (strcmp(key, "filter") == 0) {
 			struct filter_input input;
+
+			if (mo->is_reloading) {
+				return 1;
+			}
 
 			memset(&input, 0, sizeof(input));
 			input.s = value->str;
@@ -66,10 +72,18 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 	}
 
 	if (STRCMP(a, 1, "debug") == 0) {
+		if (mo->is_reloading) {
+			return 1;
+		}
+
 		return flow_debug_config(a, value, &mo->debug);
 	}
 
 	if (STRCMP(a, 1, "fwm") == 0) {
+		if (mo->is_reloading) {
+			return 1;
+		}
+
 		/* fixed window in memory */
 		return fwm_config(a, value, mo);
 	}
@@ -80,6 +94,10 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 	}
 
 	if (STRCMP(a, 1, "classification") == 0) {
+		if (mo->is_reloading) {
+			return 1;
+		}
+
 		return classification_config(a, value, mo);
 	}
 
@@ -89,15 +107,14 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 #undef STRCMP
 
 static int
-monit_object_info_parse(struct monit_object **mos, size_t *n_mo,
-	const char *moname, const char *fn)
+monit_object_info_parse(struct monit_object *mo, const char *moname,
+	const char *fn)
 {
 	FILE *f;
 	struct stat st;
 	size_t i, s;
 	char *json;
 	int ret = 0;
-	struct monit_object mo, *motmp;
 
 	struct aajson a;
 
@@ -126,40 +143,31 @@ monit_object_info_parse(struct monit_object **mos, size_t *n_mo,
 		goto fail_fread;
 	}
 
-	memset(&mo, 0, sizeof(struct monit_object));
+	/* get last modification time */
+	mo->modif_time = st.st_mtim;
 
 	/* parse */
 	aajson_init(&a, json);
-	aajson_parse(&a, &monit_object_json_callback, &mo);
+	aajson_parse(&a, &monit_object_json_callback, mo);
 	if (a.error) {
 		LOG("Can't parse config file '%s' (line: %lu, col: %lu): %s",
 			fn, a.line, a.col, a.errmsg);
 		goto fail_parse;
 	}
 
-	motmp = realloc(*mos, (*n_mo + 1) * sizeof(struct monit_object));
-	if (!motmp) {
-		LOG("realloc() failed");
-		goto fail_realloc;
-	}
-
-	/*filter_dump(mo.expr, stdout);*/
+	/* copy path to file */
+	strcpy(mo->mo_path, fn);
 
 	/* copy name of monitoring object */
-	strcpy(mo.name, moname);
-	for (i=0; i<strlen(mo.name); i++) {
-		if (mo.name[i] == '/') {
-			mo.name[i] = '_';
+	strcpy(mo->name, moname);
+	for (i=0; i<strlen(mo->name); i++) {
+		if (mo->name[i] == '/') {
+			mo->name[i] = '_';
 		}
 	}
 
-	*mos = motmp;
-	(*mos)[*n_mo] = mo;
-	(*n_mo)++;
-
 	ret = 1;
 
-fail_realloc:
 fail_parse:
 fail_fread:
 	free(json);
@@ -171,9 +179,80 @@ fail_open:
 	return ret;
 }
 
+static int
+monit_object_add(struct monit_object **mos, size_t *n_mo,
+	const char *moname, const char *fn)
+{
+	struct monit_object mo, *motmp;
+
+	memset(&mo, 0, sizeof(struct monit_object));
+
+	if (!monit_object_info_parse(&mo, moname, fn)) {
+		return 0;
+	}
+
+	/* append to list of monitoring objects */
+	motmp = realloc(*mos, (*n_mo + 1) * sizeof(struct monit_object));
+	if (!motmp) {
+		LOG("realloc() failed");
+		return 0;
+	}
+
+	/*filter_dump(mo.expr, stdout);*/
+
+	*mos = motmp;
+	(*mos)[*n_mo] = mo;
+	(*n_mo)++;
+
+	return 1;
+}
+
+
+static inline int
+cmp_modtime(const struct timespec *ts1, const struct timespec *ts2)
+{
+	uint64_t tm1 = ts1->tv_sec * 1e9 + ts1->tv_nsec;
+	uint64_t tm2 = ts2->tv_sec * 1e9 + ts2->tv_nsec;
+
+	return (tm1 == tm2);
+}
+
+static struct monit_object *
+monit_object_need_reload(struct monit_object *mos, size_t n_mo, const char *fn)
+{
+	size_t i;
+
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		if (strcmp(mo->mo_path, fn) == 0) {
+			/* found */
+			struct stat st;
+
+			if (stat(fn, &st) < 0) {
+				LOG("Can't stat() file '%s': %s",
+					fn, strerror(errno));
+				continue;
+			}
+
+			if (!cmp_modtime(&st.st_mtim, &mo->modif_time)) {
+				LOG("File %s was modified, reloading", fn);
+				return mo;
+			}
+		}
+
+		if (mo->n_mo) {
+			return monit_object_need_reload(mo->mos, mo->n_mo, fn);
+		}
+	}
+
+	return NULL;
+}
+
 static void
 monit_objects_load_rec(struct xe_data *globl,
-	const char *dirsuffix, struct monit_object **mos, size_t *n_mo)
+	const char *dirsuffix, struct monit_object **mos, size_t *n_mo,
+	int is_reload)
 {
 	DIR *d;
 	struct dirent *dir;
@@ -220,14 +299,28 @@ monit_objects_load_rec(struct xe_data *globl,
 			sprintf(moname, "%s/%s", dirsuffix, dir->d_name);
 		}
 
-		LOG("Adding monitoring object '%s'", moname);
+		if (is_reload) {
+			mo = monit_object_need_reload(globl->monit_objects,
+				globl->nmonit_objects, mofile);
+			if (!mo) {
+				continue;
+			}
 
-		if (!monit_object_info_parse(mos, n_mo, moname, mofile)) {
-			LOG("Monitoring object '%s' not added", moname);
-			continue;
+			mo->is_reloading = 1;
+			LOG("Reloading monitoring object '%s'", moname);
+			monit_object_mavg_limits_free(mo);
+			if (!monit_object_info_parse(mo, moname, mofile)) {
+				continue;
+			}
+		} else {
+			LOG("Adding monitoring object '%s'", moname);
+			if (!monit_object_add(mos, n_mo, moname, mofile)) {
+				LOG("Monitoring object '%s' not added", moname);
+				continue;
+			}
+			mo = &((*mos)[*n_mo - 1]);
 		}
 
-		mo = &((*mos)[*n_mo - 1]);
 		for (i=0; i<mo->nfwm; i++) {
 			size_t j;
 			struct mo_fwm *fwm = &mo->fwms[i];
@@ -269,25 +362,27 @@ monit_objects_load_rec(struct xe_data *globl,
 			struct mo_mavg *mavg = &mo->mavgs[i];
 			char tmp_pfx[PATH_MAX * 3];
 
-			/* make prefix for notification files */
-			sprintf(tmp_pfx, "%s/%s-%s",
-				globl->notif_dir, mo->name, mavg->name);
+			if (!is_reload) {
+				/* make prefix for notification files */
+				sprintf(tmp_pfx, "%s/%s-%s",
+					globl->notif_dir, mo->name, mavg->name);
 
-			if (strlen(tmp_pfx) >= PATH_MAX) {
-				LOG("Filename too big: %s/%s", mo->dir,
-					mavg->name);
+				if (strlen(tmp_pfx) >= PATH_MAX) {
+					LOG("Filename too big: %s/%s", mo->dir,
+						mavg->name);
+					return;
+				}
+
+				strcpy(mavg->notif_pfx, tmp_pfx);
+
+				if (!mavg_fields_init(globl->nthreads, mavg)) {
+					return;
+				}
+			}
+			if (!mavg_limits_init(mavg, is_reload)) {
 				return;
 			}
-
-			strcpy(mavg->notif_pfx, tmp_pfx);
-
-			if (!mavg_fields_init(globl->nthreads, mavg)) {
-				return;
-			}
-			if (!mavg_limits_init(mavg)) {
-				return;
-			}
-			if (mavg->size_secs == 0) {
+			if (!is_reload && (mavg->size_secs == 0)) {
 				LOG("warning: time for '%s:%s' is not set"
 					", using default %d",
 					mo->name, mavg->name,
@@ -320,7 +415,18 @@ monit_objects_load_rec(struct xe_data *globl,
 		sprintf(mofile, "%s/%s/", dirname, dir->d_name);
 		strcpy(mo->dir, mofile);
 
-		LOG("Monitoring object '%s' added", moname);
+		if (!is_reload) {
+			LOG("Monitoring object '%s' added", moname);
+		} else {
+
+			for (i=0; i<mo->nmavg; i++) {
+				struct mo_mavg *mavg = &mo->mavgs[i];
+
+				atomic_fetch_add_explicit(&mavg->lim_curr_idx,
+					1, memory_order_relaxed);
+			}
+			LOG("Monitoring object '%s' reloaded", moname);
+		}
 
 		/* try to walk deeper */
 		if (strlen(dirsuffix) == 0) {
@@ -328,10 +434,21 @@ monit_objects_load_rec(struct xe_data *globl,
 		} else {
 			sprintf(inner_dir, "%s/%s", dirsuffix, dir->d_name);
 		}
-		monit_objects_load_rec(globl, inner_dir, &mo->mos, &mo->n_mo);
+		monit_objects_load_rec(globl, inner_dir, &mo->mos, &mo->n_mo,
+			is_reload);
 	}
 
 	closedir(d);
+}
+
+int
+monit_objects_reload(struct xe_data *globl)
+{
+	monit_objects_load_rec(globl, "",
+		&globl->monit_objects,
+		&globl->nmonit_objects, 1);
+
+	return 1;
 }
 
 int
@@ -346,7 +463,7 @@ monit_objects_init(struct xe_data *globl)
 
 	monit_objects_load_rec(globl, "",
 		&globl->monit_objects,
-		&globl->nmonit_objects);
+		&globl->nmonit_objects, 0);
 
 
 	/* all monitoring objects are parsed, so we can link extended stats */
@@ -867,5 +984,15 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 	}
 
 	return 1;
+}
+
+static void
+monit_object_mavg_limits_free(struct monit_object *mo)
+{
+	size_t i;
+	for (i=0; i<mo->nmavg; i++) {
+		struct mo_mavg *mavg = &mo->mavgs[i];
+		mavg_limits_free(mavg);
+	}
 }
 

@@ -61,9 +61,14 @@ on_ctrl_c(int s)
 static void
 on_hup(int s)
 {
+	/* It is not safe to use the pthread_cond_signal() function
+	 * in a signal handler
+	 */
 	(void)s;
 	/* notify geoip thread */
 	atomic_store_explicit(&globl->reload_geoip, 1, memory_order_relaxed);
+
+	atomic_store_explicit(&globl->reload_config, 1, memory_order_relaxed);
 }
 
 
@@ -77,9 +82,32 @@ print_usage(const char *progname)
 	fprintf(stderr, "    -h print this message\n");
 }
 
+static void *
+config_reload_thread(void *arg)
+{
+	struct xe_data *globl = arg;
+
+	for (;;) {
+		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
+			break;
+		}
+		if (atomic_load_explicit(&globl->reload_config,
+			memory_order_relaxed)) {
+
+			atomic_store_explicit(&globl->reload_config, 0,
+				memory_order_relaxed);
+			LOG("Reloading config");
+			monit_objects_reload(globl);
+			LOG("config reloaded");
+		}
+		usleep(10000);
+	}
+
+	return NULL;
+}
 
 #ifdef FLOWS_CNT
-static void*
+static void *
 fc_thread(void *arg)
 {
 	struct xe_data *globl = arg;
@@ -481,6 +509,14 @@ main(int argc, char *argv[])
 
 	if (!netflow_templates_init(&data)) {
 		LOG("Can't init templates storage, exiting");
+		return EXIT_FAILURE;
+	}
+
+	/* config reload thread */
+	thread_err = pthread_create(&data.config_tid, NULL,
+		&config_reload_thread, &data);
+	if (thread_err) {
+		LOG("Can't start thread: %s", strerror(thread_err));
 		return EXIT_FAILURE;
 	}
 

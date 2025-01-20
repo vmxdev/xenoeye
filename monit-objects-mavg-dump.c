@@ -45,6 +45,8 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 	struct timespec tmsp;
 	uint64_t time_ns;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
 		LOG("clock_gettime() failed: %s", strerror(errno));
 	}
@@ -123,9 +125,9 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 			fprintf(out, "%lu ", (uint64_t)vals[i]);
 
 			/* limits */
-			if (mavg->noverlimit > 0) {
+			if (lim_curr->noverlimit > 0) {
 				fprintf(out, "(");
-				for (j=0; j<mavg->noverlimit; j++) {
+				for (j=0; j<lim_curr->noverlimit; j++) {
 					/* */
 					MAVG_TYPE limit;
 					limit = atomic_load_explicit(
@@ -136,10 +138,10 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 				fprintf(out, ")");
 			}
 
-			if (mavg->nunderlimit > 0) {
+			if (lim_curr->nunderlimit > 0) {
 				fprintf(out, "[");
-				for (j=0; j<mavg->nunderlimit; j++) {
-					size_t lidx = j + mavg->noverlimit;
+				for (j=0; j<lim_curr->nunderlimit; j++) {
+					size_t lidx = j + lim_curr->noverlimit;
 					MAVG_TYPE limit;
 					limit = atomic_load_explicit(
 						&val->limits[lidx],

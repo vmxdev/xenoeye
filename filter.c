@@ -99,8 +99,9 @@ filter_id_to_addr(struct filter_input *f, char *host,
 			am->ip.v4.mask = 0;
 
 			for (i=0; i<am->mask_len; i++) {
-				am->ip.v4.mask |= 1UL << i;
+				am->ip.v4.mask |= 1UL << (31 - i);
 			}
+			am->ip.v4.mask = htobe32(am->ip.v4.mask);
 
 			/* apply mask to address */
 			am->ip.v4.addr &= am->ip.v4.mask;
@@ -112,8 +113,10 @@ filter_id_to_addr(struct filter_input *f, char *host,
 			am->ip.v6.mask = 0;
 
 			for (i=0; i<am->mask_len; i++) {
-				am->ip.v6.mask |= 1UL << i;
+				am->ip.v6.mask |= 1UL << ((16*8-1) - i);
 			}
+			/* FIXME: check endianness */
+			am->ip.v6.mask = bswap128(am->ip.v6.mask);
 
 			am->ip.v6.addr &= am->ip.v6.mask;
 		}
