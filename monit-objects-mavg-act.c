@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022-2024, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2025, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -486,6 +486,7 @@ check_items(tkvdb_tr *db, tkvdb_tr *db_thread)
 					goto skip;
 				}
 				val_glb->val = val_thr->val;
+				val_glb->limit = val_thr->limit;
 			} else if (val_glb->state == MAVG_LIM_GONE) {
 				/* restart actions */
 				val_glb->state = MAVG_LIM_NEW;

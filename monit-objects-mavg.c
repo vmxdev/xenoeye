@@ -651,6 +651,99 @@ mavg_val_init(struct mo_mavg *mavg, struct flow_info *flow,
 	}
 }
 
+static void
+mavg_limits_update_db(struct mo_mavg *mavg, tkvdb_tr *db,
+	struct mavg_limits *lim, size_t val_itemsize)
+{
+	tkvdb_cursor *c;
+
+	c = tkvdb_cursor_create(db);
+	if (!c) {
+		LOG("tkvdb_cursor_create() failed");
+		return;
+	}
+
+	if (c->first(c) != TKVDB_OK) {
+		goto empty;
+	}
+
+	/* iterate over all set */
+	do {
+		size_t i;
+
+		tkvdb_datum dtk = c->key_datum(c);
+		tkvdb_datum dtv = c->val_datum(c);
+
+		for (i=0; i<mavg->fieldset.n_aggr; i++) {
+			struct mavg_val *pval;
+			size_t j;
+
+			pval = MAVG_VAL(((uint8_t *)dtv.data), i, val_itemsize);
+
+			for (j=0; j<lim->noverlimit; j++) {
+				TKVDB_RES rc;
+				tkvdb_datum dtval;
+
+				/* search in limits database */
+				tkvdb_tr *tr = lim->overlimit[j].db;
+				rc = tr->get(tr, &dtk, &dtval);
+				if (rc == TKVDB_OK) {
+					/* found, using value as limit */
+					MAVG_TYPE *limptr = (MAVG_TYPE *)dtval.data;
+					atomic_store_explicit(&pval->limits[j],
+						*limptr, memory_order_relaxed);
+				} else {
+					/* not found, using default */
+					atomic_store_explicit(&pval->limits[j],
+						lim->overlimit[j].def[i],
+						memory_order_relaxed);
+				}
+			}
+
+			for (j=0; j<lim->nunderlimit; j++) {
+				TKVDB_RES rc;
+				tkvdb_datum dtval;
+				size_t lidx = j + lim->noverlimit;
+
+				tkvdb_tr *tr = lim->underlimit[j].db;
+				rc = tr->get(tr, &dtk, &dtval);
+				if (rc == TKVDB_OK) {
+					MAVG_TYPE *limptr = (MAVG_TYPE *)dtval.data;
+					atomic_store_explicit(&pval->limits[lidx],
+						*limptr, memory_order_relaxed);
+				} else {
+					atomic_store_explicit(&pval->limits[lidx],
+						lim->overlimit[j].def[i],
+						memory_order_relaxed);
+				}
+			}
+		}
+	} while (c->next(c) == TKVDB_OK);
+
+	empty:
+		c->free(c);
+}
+
+void
+mavg_limits_update(struct xe_data *globl, struct monit_object *mo)
+{
+	size_t i;
+
+	for (i=0; i<mo->nmavg; i++) {
+		size_t tidx;
+		struct mo_mavg *mavg = &mo->mavgs[i];
+		struct mavg_limits *lim = MAVG_LIM_NOT_CURR(mavg);
+
+		for (tidx=0; tidx<globl->nthreads; tidx++) {
+			tkvdb_tr *db;
+			db = atomic_load_explicit(&mavg->thr_data[tidx].db,
+				memory_order_relaxed);
+			mavg_limits_update_db(mavg, db, lim,
+				mavg->thr_data[tidx].val_itemsize);
+		}
+	}
+}
+
 /* try to reset MA database when there is not enough memory */
 static int
 try_reset_db(struct mo_mavg *mavg, struct mavg_thread_data *thr_data)

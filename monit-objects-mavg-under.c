@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2024, Vladimir Misyurov
+ * Copyright (c) 2024-2025, Vladimir Misyurov
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -286,6 +286,10 @@ underlimit_check_rec(struct xe_data *globl,
 			struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 
 			if (lim_curr->nunderlimit == 0) {
+				continue;
+			}
+
+			if (time_ns < (mavg->start_ns + mavg->size_secs*1e9)) {
 				continue;
 			}
 

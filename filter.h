@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <math.h>
-#include <byteswap.h>
 #include "xenoeye.h"
 #include "iplist.h"
 #include "geoip.h"
@@ -411,22 +410,6 @@ xdiv(uint64_t dividend, uint64_t divisor, int is_log, int k)
 	}
 
 	return quotient;
-}
-
-/* __builtin_bswap128 */
-static inline xe_ip
-bswap128(xe_ip x)
-{
-	union _128_as_64 {
-		xe_ip v;
-		uint64_t q[2];
-	} u1, u2;
-
-	u1.v = x;
-	u2.q[1] = bswap_64(u1.q[0]);
-	u2.q[0] = bswap_64(u1.q[1]);
-
-	return u2.v;
 }
 
 #endif

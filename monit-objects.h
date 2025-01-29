@@ -221,6 +221,8 @@ struct mo_mavg
 
 	time_t last_dump_check;
 
+	uint64_t start_ns;
+
 	/* limits */
 	struct mavg_limits lim[2];
 	/* atomic index of current limits bank */
@@ -308,6 +310,7 @@ void monit_objects_mavg_link_ext_stat(struct xe_data *globl);
 int monit_object_mavg_process_nf(struct xe_data *globl,
 	struct monit_object *mo, size_t thread_id,
 	uint64_t time_ns, struct flow_info *flow);
+void mavg_limits_update(struct xe_data *globl, struct monit_object *mo);
 void mavg_limits_free(struct mo_mavg *mavg);
 
 /* classification */

@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020-2024, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2025, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -278,6 +278,15 @@ monit_objects_load_rec(struct xe_data *globl,
 		char inner_dir[PATH_MAX];
 		char moname[PATH_MAX];
 
+		struct timespec tmsp;
+		uint64_t time_ns;
+
+		if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
+			LOG("clock_gettime() failed: %s", strerror(errno));
+			continue;
+		}
+		time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
+
 		if (dir->d_name[0] == '.') {
 			/* skip hidden files */
 			continue;
@@ -312,6 +321,7 @@ monit_objects_load_rec(struct xe_data *globl,
 			if (!monit_object_info_parse(mo, moname, mofile)) {
 				continue;
 			}
+			mavg_limits_update(globl, mo);
 		} else {
 			LOG("Adding monitoring object '%s'", moname);
 			if (!monit_object_add(mos, n_mo, moname, mofile)) {
@@ -325,8 +335,10 @@ monit_objects_load_rec(struct xe_data *globl,
 			size_t j;
 			struct mo_fwm *fwm = &mo->fwms[i];
 
-			if (!fwm_fields_init(globl->nthreads, fwm)) {
-				return;
+			if (!is_reload) {
+				if (!fwm_fields_init(globl->nthreads, fwm)) {
+					return;
+				}
 			}
 			if (fwm->time == 0) {
 				LOG("warning: timeout for '%s:%s' is not set"
@@ -362,6 +374,8 @@ monit_objects_load_rec(struct xe_data *globl,
 			struct mo_mavg *mavg = &mo->mavgs[i];
 			char tmp_pfx[PATH_MAX * 3];
 
+			mavg->start_ns = time_ns;
+
 			if (!is_reload) {
 				/* make prefix for notification files */
 				sprintf(tmp_pfx, "%s/%s-%s",
@@ -393,10 +407,12 @@ monit_objects_load_rec(struct xe_data *globl,
 
 		/* classification */
 		for (i=0; i<mo->nclassifications; i++) {
-			if (!classification_fields_init(globl->nthreads,
-				&mo->classifications[i])) {
+			if (!is_reload) {
+				if (!classification_fields_init(globl->nthreads,
+					&mo->classifications[i])) {
 
-				return;
+					return;
+				}
 			}
 
 			if (mo->classifications[i].time == 0) {
