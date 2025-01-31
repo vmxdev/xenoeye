@@ -324,6 +324,11 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
+Если при создании функции не хватает прав (`ERROR:  permission denied for schema public`), выполните:
+``` sh
+$ sudo su - postgres -c "psql -d xenoeyedb -c 'ALTER DATABASE xenoeyedb OWNER TO xenoeye;'"
+```
+
 Функция строит топ-N сущностей (стран, городов, IP-адресов и т.п.) за период и отбирает только их. Те, кто не попал в топ, группируются под названием 'Other'.
 
 При создании панели в Графане в поле для SQL запроса можно написать вызов этой функции:

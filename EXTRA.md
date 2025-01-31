@@ -323,6 +323,11 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
+If you don't have enough permissions when creating a function (`ERROR: permission denied for schema public`), then run:
+``` sh
+$ sudo su - postgres -c "psql -d xenoeyedb -c 'ALTER DATABASE xenoeyedb OWNER TO xenoeye;'"
+```
+
 The function builds the top N entities (countries, cities, IP addresses, etc.) for a period and selects only them. Those who are not included in the top are grouped under the name 'Other'.
 
 When creating a panel in Grafana, you can write a call to this function in the SQL query field:
