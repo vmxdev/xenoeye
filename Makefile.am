@@ -2,7 +2,7 @@ AM_CPPFLAGS = -I$(srcdir)/tkvdb
 
 bin_PROGRAMS = xenoeye xemkgeodb xegeoq xesflow
 xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
-	utils.h netflow.h netflow.c \
+	utils.h utils.c utils-data.inc netflow.h netflow.c \
 	netflow-templates.c netflow-templates.h \
 	sflow.c sflow.h xe-sni.h xe-dns.h \
 	tkvdb/tkvdb.c tkvdb/tkvdb.h \
@@ -13,6 +13,8 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	monit-objects.c monit-objects.h \
 	monit-objects-fwm.c monit-objects-mavg.c \
 	monit-objects-mavg-act.c monit-objects-mavg-dump.c \
+	monit-objects-mavg-limfile.c \
+	monit-objects-mavg-under.c \
 	classification.c \
 	flow-debug.h flow-debug.c \
 	devices.h devices.c \

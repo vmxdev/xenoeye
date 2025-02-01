@@ -232,15 +232,12 @@ iplist_try_load(const char *filename, const char *listname)
 		goto realloc_fail;
 	}
 
+	memset(&tmp[n_iplists], 0, sizeof(struct iplist));
 	strcpy(tmp[n_iplists].name, listname);
-	tmp[n_iplists].nodes4 = NULL;
-	tmp[n_iplists].n4 = 0;
-
-	tmp[n_iplists].nodes6 = NULL;
-	tmp[n_iplists].n6 = 0;
 
 	for (;;) {
-		char line[INET6_ADDRSTRLEN + 1];
+		/* lines with comments can be pretty long */
+		char line[1024];
 		char *str_addr;
 		uint32_t addr;
 		xe_ip addr6;

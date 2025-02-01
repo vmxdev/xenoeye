@@ -62,7 +62,7 @@ struct xe_data
 	pthread_t fwm_tid;
 
 	/* moving averages */
-	pthread_t mavg_dump_tid, mavg_act_tid;
+	pthread_t mavg_dump_tid, mavg_act_tid, mavg_under_tid;
 	_Atomic size_t mavg_db_bank_idx;
 
 	/* classification thread */
@@ -70,6 +70,8 @@ struct xe_data
 
 	/* GeoIP/AS databases reload thread */
 	pthread_t geoip_tid;
+	/* config reload thread */
+	pthread_t config_tid;
 
 	/* templates */
 	int allow_templates_in_future;
@@ -101,6 +103,9 @@ struct xe_data
 
 	/* notify geoip thread about reload */
 	atomic_int reload_geoip;
+
+	/* config reload */
+	atomic_int reload_config;
 
 	/* notify threads about stop */
 	atomic_int stop;

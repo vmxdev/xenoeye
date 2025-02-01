@@ -17,10 +17,6 @@ struct flow_info
 	void *payload_ptr;
 
 	/* virtual fields for export devices */
-	uint8_t dev_ip[4];
-	int dev_ip_size;
-	int has_dev_ip;
-
 	uint8_t dev_ip6[16];
 	int dev_ip6_size;
 	int has_dev_ip6;
@@ -28,6 +24,10 @@ struct flow_info
 	uint8_t dev_id[4];
 	int dev_id_size;
 	int has_dev_id;
+
+	uint8_t dev_mark[4];
+	int dev_mark_size;
+	int has_dev_mark;
 
 	uint32_t sampling_rate;
 };

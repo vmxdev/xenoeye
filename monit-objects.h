@@ -39,7 +39,7 @@ struct two_banks_db
 	tkvdb_tr *bank[2];
 
 	/* current bank */
-	size_t _Atomic idx;
+	atomic_size_t idx;
 };
 
 struct mo_fieldset
@@ -74,7 +74,7 @@ struct fwm_thread_data
 struct mo_fwm
 {
 	int is_extended;
-	_Atomic int is_active;
+	atomic_int is_active;
 
 	char name[TOKEN_MAX_SIZE];
 	struct mo_fieldset fieldset;
@@ -102,7 +102,7 @@ struct classification_thread_data
 	tkvdb_tr *trs[2];
 
 	/* current bank index */
-	_Atomic uint64_t tr_idx;
+	atomic_size_t tr_idx;
 
 	uint8_t *key;
 	uint64_t val;
@@ -136,10 +136,12 @@ struct mavg_val
 {
 	_Atomic MAVG_TYPE val;
 	_Atomic uint64_t time_prev;
-	MAVG_TYPE limits_max[1]; /* growing array (noverlimit items) */
+
+	/* growing array (noverlimit + nunderlimit items) */
+	_Atomic MAVG_TYPE limits[1];
 };
 
-struct mavg_data
+struct mavg_thread_data
 {
 	/* atomic pointer to database */
 	tkvdb_tr *_Atomic db;
@@ -177,21 +179,31 @@ struct mavg_limit
 
 	tkvdb_tr *db;
 
-	/* default */
+	/* array of defaults */
 	MAVG_TYPE *def;
 };
 
-enum MAVG_OVRLM_TYPE
+
+struct mavg_limits
 {
-	MAVG_OVRLM_NEW,
-	MAVG_OVRLM_UPDATE,
-	MAVG_OVRLM_ALMOST_GONE,
-	MAVG_OVRLM_GONE
+	struct mavg_limit *overlimit;
+	size_t noverlimit;
+
+	struct mavg_limit *underlimit;
+	size_t nunderlimit;
 };
 
-struct mavg_ovrlm_data
+enum MAVG_LIM_STATE
 {
-	enum MAVG_OVRLM_TYPE type;
+	MAVG_LIM_NEW,
+	MAVG_LIM_UPDATE,
+	MAVG_LIM_ALMOST_GONE,
+	MAVG_LIM_GONE
+};
+
+struct mavg_lim_data
+{
+	enum MAVG_LIM_STATE state;
 	uint64_t time_dump, time_last, time_back2norm;
 	MAVG_TYPE val;
 	MAVG_TYPE limit;
@@ -209,24 +221,38 @@ struct mo_mavg
 
 	time_t last_dump_check;
 
-	/* limits */
-	struct mavg_limit *overlimit;
-	size_t noverlimit;
+	uint64_t start_ns;
 
-	/* global database of overlimited items */
-	tkvdb_tr *glb_ovr_db;
+	/* limits */
+	struct mavg_limits lim[2];
+	/* atomic index of current limits bank */
+	atomic_size_t lim_curr_idx;
+
+	/* per-mavg database of overlimited items */
+	tkvdb_tr *ovrerlm_db;
+
+	/* underlimited items */
+	tkvdb_tr *underlm_db;
 
 	size_t db_mem;
 
 	/* each thread has it's own data */
 	size_t nthreads;
-	struct mavg_data *data;
+	struct mavg_thread_data *thr_data;
 };
 
 struct monit_object
 {
 	char dir[PATH_MAX];
 	char name[PATH_MAX];
+
+	/* path to config file */
+	char mo_path[PATH_MAX];
+	/* modification time */
+	struct timespec modif_time;
+	/* when reloading config this is not 0 */
+	int is_reloading;
+
 	struct filter_expr *expr;
 
 	struct xe_debug debug;
@@ -246,11 +272,17 @@ struct monit_object
 	/* sFlow packet payload parsing */
 	int payload_parse_dns;
 	int payload_parse_sni;
+
+	/* hierarchical objects */
+	size_t n_mo;
+	struct monit_object *mos;
 };
 
 
 int monit_objects_init(struct xe_data *data);
 int monit_objects_free(struct xe_data *data);
+
+int monit_objects_reload(struct xe_data *data);
 
 int monit_object_match(struct monit_object *mo, struct flow_info *fi);
 int monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
@@ -266,17 +298,20 @@ void monit_object_key_add_fld(struct field *fld, uint8_t *key,
 
 /* fixed windows in memory */
 int fwm_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
-int fwm_fields_init(size_t nthreads, struct mo_fwm *window);
+int fwm_fields_init(size_t nthreads, struct mo_fwm *fwm);
 void *fwm_bg_thread(void *);
 
 /* moving averages */
 int mavg_config(struct aajson *a, aajson_val *value, struct monit_object *mo);
-int mavg_fields_init(size_t nthreads, struct mo_mavg *window);
-int mavg_limits_init(struct mo_mavg *window);
+int mavg_fields_init(size_t nthreads, struct mo_mavg *mavg);
+int mavg_limits_init(struct mo_mavg *mavg, int is_reloading);
+int mavg_limits_file_load(struct mo_mavg *mavg, struct mavg_limit *l);
 void monit_objects_mavg_link_ext_stat(struct xe_data *globl);
 int monit_object_mavg_process_nf(struct xe_data *globl,
 	struct monit_object *mo, size_t thread_id,
 	uint64_t time_ns, struct flow_info *flow);
+void mavg_limits_update(struct xe_data *globl, struct monit_object *mo);
+void mavg_limits_free(struct mo_mavg *mavg);
 
 /* classification */
 void *classification_bg_thread(void *);
@@ -289,6 +324,10 @@ int classification_process_nf(struct monit_object *mo, size_t thread_id,
 
 void *mavg_dump_thread(void *);
 void *mavg_act_thread(void *);
+void *mavg_check_underlimit_thread(void *);
+
+int act(struct mo_mavg *mw, tkvdb_tr *db, MAVG_TYPE wnd_size_ns, char *mo_name,
+	int is_overlim);
 
 #endif
 

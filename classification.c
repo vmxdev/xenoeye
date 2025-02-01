@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2023, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2023-2024, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -778,17 +778,56 @@ classification_merge(struct mo_classification *clsf, size_t nthreads,
 	return 1;
 }
 
+static void
+classification_merge_rec(struct xe_data *globl, struct monit_object *mos,
+	size_t n_mo, time_t t)
+{
+	size_t i;
+	int need_sleep = 1;
+
+	for (i=0; i<n_mo; i++) {
+		size_t j;
+		struct monit_object *mo = &mos[i];
+
+		for (j=0; j<mo->nclassifications; j++) {
+			struct mo_classification *clsf
+				= &mo->classifications[j];
+
+			if ((clsf->last_export + clsf->time) <= t) {
+				/* time to export */
+				if (classification_merge(clsf,
+					globl->nthreads,
+					mo->name, globl->clsf_dir)) {
+
+					clsf->last_export = t;
+					need_sleep = 0;
+				} else {
+					continue;
+				}
+
+				load_db(clsf, globl->clsf_dir, mo->name);
+			}
+		}
+
+		if (mo->n_mo) {
+			classification_merge_rec(globl, mo->mos, mo->n_mo, t);
+		}
+	}
+
+	if (need_sleep) {
+		sleep(1);
+	}
+}
+
 void *
 classification_bg_thread(void *arg)
 {
-	struct xe_data *data = (struct xe_data *)arg;
+	struct xe_data *globl = (struct xe_data *)arg;
 
 	for (;;) {
 		time_t t;
-		size_t i;
-		int need_sleep = 1;
 
-		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
+		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
 			break;
 		}
@@ -799,33 +838,8 @@ classification_bg_thread(void *arg)
 			return NULL;
 		}
 
-		for (i=0; i<data->nmonit_objects; i++) {
-			size_t j;
-			struct monit_object *mo = &data->monit_objects[i];
-			for (j=0; j<mo->nclassifications; j++) {
-				struct mo_classification *clsf
-					= &mo->classifications[j];
-
-				if ((clsf->last_export + clsf->time) <= t) {
-					/* time to export */
-					if (classification_merge(clsf,
-						data->nthreads,
-						mo->name, data->clsf_dir)) {
-
-						clsf->last_export = t;
-						need_sleep = 0;
-					} else {
-						continue;
-					}
-
-					load_db(clsf, data->clsf_dir, mo->name);
-				}
-			}
-		}
-
-		if (need_sleep) {
-			sleep(1);
-		}
+		classification_merge_rec(globl, globl->monit_objects,
+			globl->nmonit_objects, t);
 	}
 
 	return NULL;

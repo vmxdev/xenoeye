@@ -11,6 +11,12 @@ monit_object_nf_val(struct flow_info *flow, struct field *fld)
 	return get_nf_val(flow_fld, fld->size);
 }
 
+#define MAVG_LIM_CURR(MAVG) &(MAVG->lim[                                      \
+	atomic_load_explicit(&MAVG->lim_curr_idx, memory_order_relaxed) % 2])
+
+#define MAVG_LIM_NOT_CURR(MAVG) &(MAVG->lim[                                  \
+	(atomic_load_explicit(&MAVG->lim_curr_idx, memory_order_relaxed) + 1) \
+	% 2])
 
 #endif
 

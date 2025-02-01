@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Vladimir Misyurov
+ * Copyright (c) 2023-2025, Vladimir Misyurov
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,7 +22,6 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <arpa/inet.h>
-#include <byteswap.h>
 
 #include "geoip.h"
 #include "ip-btrie.h"
@@ -180,23 +179,6 @@ ctz_128(xe_ip x)
 	}
 	return count;
 }
-
-/* __builtin_bswap128 */
-inline xe_ip
-bswap128(xe_ip x)
-{
-	union _128_as_64 {
-		xe_ip v;
-		uint64_t q[2];
-	} u1, u2;
-
-	u1.v = x;
-	u2.q[1] = bswap_64(u1.q[0]);
-	u2.q[0] = bswap_64(u1.q[1]);
-
-	return u2.v;
-}
-
 
 static void
 add_range6(struct btrie_node_geo *geodb, size_t *geodb_size,
@@ -576,7 +558,7 @@ main(int argc, char *argv[])
 	size_t max_size;
 	void *db4, *db6;
 	size_t db4_size, db6_size;
-	char path4[PATH_MAX], path6[PATH_MAX];
+	char path4[PATH_MAX + 32], path6[PATH_MAX + 32];
 
 	openlog(NULL, LOG_PERROR, LOG_USER);
 

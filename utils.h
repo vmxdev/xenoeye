@@ -5,8 +5,14 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <stdint.h>
+#include <byteswap.h>
 
 #define TOKEN_MAX_SIZE 512
+
+#define TCP_FLAGS_STR_MAX_SIZE 32
+#define TCP_UDP_PORT_STR_MAX_SIZE 40
+#define TCP_UDP_PP_STR_MAX_SIZE 90
 
 #define LOG(...)                                               \
 do {                                                           \
@@ -113,7 +119,28 @@ csv_next(char **line, char *val)
 	}
 }
 
+
+char *tcp_flags_to_str(uint8_t tf);
+void port_to_str(char *res, uint16_t port);
+void ports_pair_to_str(char *res, uint16_t port1, uint16_t port2);
+
 typedef __int128_t xe_ip;
+
+/* __builtin_bswap128 */
+static inline xe_ip
+bswap128(xe_ip x)
+{
+	union _128_as_64 {
+		xe_ip v;
+		uint64_t q[2];
+	} u1, u2;
+
+	u1.v = x;
+	u2.q[1] = bswap_64(u1.q[0]);
+	u2.q[0] = bswap_64(u1.q[1]);
+
+	return u2.v;
+}
 
 #endif
 

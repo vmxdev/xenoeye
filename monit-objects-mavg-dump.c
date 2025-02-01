@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2025, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -45,6 +45,8 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 	struct timespec tmsp;
 	uint64_t time_ns;
 
+	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
+
 	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
 		LOG("clock_gettime() failed: %s", strerror(errno));
 	}
@@ -74,6 +76,36 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 	do {
 		uint8_t *data = c->key(c);
 		uint8_t *pval = c->val(c);
+		int need_print = 0;
+
+		/* array of vals */
+		MAVG_TYPE vals[mavg->fieldset.n_aggr];
+
+		/* calculate vals */
+		for (i=0; i<mavg->fieldset.n_aggr; i++) {
+			struct mavg_val *val;
+
+			val = MAVG_VAL(pval, i, val_itemsize);
+			vals[i] = val->val;
+
+			/* correct value */
+			if (time_ns > (val->time_prev + wnd_size_ns)) {
+				vals[i] = 0.0;
+			} else {
+				vals[i] = vals[i] - (time_ns - val->time_prev)
+					/ wnd_size_ns * vals[i];
+				vals[i] /= (MAVG_TYPE)mavg->size_secs;
+			}
+
+			if ((uint64_t)vals[i] != 0) {
+				need_print = 1;
+			}
+		}
+
+		/* skip all-zero vals */
+		if (!need_print) {
+			continue;
+		}
 
 
 		for (i=0; i<mavg->fieldset.n_naggr; i++) {
@@ -84,33 +116,41 @@ mavg_dump_tr(FILE *out, struct mo_mavg *mavg, tkvdb_tr *tr,
 		}
 
 		fprintf(out, " :: ");
+
 		for (i=0; i<mavg->fieldset.n_aggr; i++) {
 			size_t j;
 			struct mavg_val *val;
-			MAVG_TYPE v;
-
 			val = MAVG_VAL(pval, i, val_itemsize);
-			v = val->val;
 
-			/* correct value */
-			if (time_ns > (val->time_prev + wnd_size_ns)) {
-				v = 0.0;
-			} else {
-				v = v - (time_ns - val->time_prev)
-					/ wnd_size_ns * v;
-				v /= (MAVG_TYPE)mavg->size_secs;
-			}
-
-			fprintf(out, "%lu ", (uint64_t)v);
+			fprintf(out, "%lu ", (uint64_t)vals[i]);
 
 			/* limits */
-			fprintf(out, "(");
-			for (j=0; j<mavg->noverlimit; j++) {
-				/* */
-				fprintf(out, "%lu ", (uint64_t)val->limits_max[j]);
+			if (lim_curr->noverlimit > 0) {
+				fprintf(out, "(");
+				for (j=0; j<lim_curr->noverlimit; j++) {
+					/* */
+					MAVG_TYPE limit;
+					limit = atomic_load_explicit(
+						&val->limits[j],
+						memory_order_relaxed);
+					fprintf(out, "%lu ", (uint64_t)limit);
+				}
+				fprintf(out, ")");
 			}
 
-			fprintf(out, ")");
+			if (lim_curr->nunderlimit > 0) {
+				fprintf(out, "[");
+				for (j=0; j<lim_curr->nunderlimit; j++) {
+					size_t lidx = j + lim_curr->noverlimit;
+					MAVG_TYPE limit;
+					limit = atomic_load_explicit(
+						&val->limits[lidx],
+						memory_order_relaxed);
+					fprintf(out, "%lu ", (uint64_t)limit);
+				}
+				fprintf(out, "]");
+			}
+
 		}
 
 		fprintf(out, "\n");
@@ -160,10 +200,10 @@ mavg_dump_do(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo,
 	for (i=0; i<nthreads; i++) {
 		tkvdb_tr *db;
 
-		db = atomic_load_explicit(&mavg->data[i].db,
+		db = atomic_load_explicit(&mavg->thr_data[i].db,
 			memory_order_relaxed);
 
-		mavg_dump_tr(f, mavg, db, mavg->data[i].val_itemsize);
+		mavg_dump_tr(f, mavg, db, mavg->thr_data[i].val_itemsize);
 	}
 
 	if (append) {
@@ -214,16 +254,47 @@ mavg_dump(struct mo_mavg *mavg, size_t nthreads, struct monit_object *mo)
 	return 1;
 }
 
+static void
+mavg_dump_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
+	time_t t)
+{
+	size_t i, j;
+
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		/* for each moving average */
+		for (j=0; j<mo->nmavg; j++) {
+			struct mo_mavg *mavg = &mo->mavgs[j];
+
+			if (mavg->dump_secs == 0) {
+				/* skip */
+				continue;
+			}
+
+			if ((mavg->last_dump_check + mavg->dump_secs) <= t) {
+				/* time to dump */
+				mavg_dump(mavg, globl->nthreads, mo);
+
+				mavg->last_dump_check = t;
+			}
+		}
+
+		if (mo->n_mo) {
+			mavg_dump_rec(globl, mo->mos, mo->n_mo, t);
+		}
+	}
+}
+
 void *
 mavg_dump_thread(void *arg)
 {
-	struct xe_data *data = (struct xe_data *)arg;
+	struct xe_data *globl = (struct xe_data *)arg;
 
 	for (;;) {
 		time_t t;
-		size_t i, j;
 
-		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
+		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
 			break;
 		}
@@ -234,29 +305,8 @@ mavg_dump_thread(void *arg)
 			return NULL;
 		}
 
-		/* for each monitoring object */
-		for (i=0; i<data->nmonit_objects; i++) {
-			struct monit_object *mo = &data->monit_objects[i];
-
-			/* for each moving average */
-			for (j=0; j<mo->nmavg; j++) {
-				struct mo_mavg *mavg = &mo->mavgs[j];
-
-				if (mavg->dump_secs == 0) {
-					/* skip */
-					continue;
-				}
-
-				if ((mavg->last_dump_check + mavg->dump_secs)
-					<= t) {
-
-					/* time to dump */
-					mavg_dump(mavg, data->nthreads, mo);
-
-					mavg->last_dump_check = t;
-				}
-			}
-		}
+		mavg_dump_rec(globl, globl->monit_objects,
+			globl->nmonit_objects, t);
 
 		sleep(1);
 	}

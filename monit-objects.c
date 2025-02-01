@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020-2024, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2025, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -42,6 +42,8 @@
 
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
+static void monit_object_mavg_limits_free(struct monit_object *mo);
+
 static int
 monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 {
@@ -53,6 +55,10 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 	if (a->path_stack_pos == 1) {
 		if (strcmp(key, "filter") == 0) {
 			struct filter_input input;
+
+			if (mo->is_reloading) {
+				return 1;
+			}
 
 			memset(&input, 0, sizeof(input));
 			input.s = value->str;
@@ -66,10 +72,18 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 	}
 
 	if (STRCMP(a, 1, "debug") == 0) {
+		if (mo->is_reloading) {
+			return 1;
+		}
+
 		return flow_debug_config(a, value, &mo->debug);
 	}
 
 	if (STRCMP(a, 1, "fwm") == 0) {
+		if (mo->is_reloading) {
+			return 1;
+		}
+
 		/* fixed window in memory */
 		return fwm_config(a, value, mo);
 	}
@@ -80,6 +94,10 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 	}
 
 	if (STRCMP(a, 1, "classification") == 0) {
+		if (mo->is_reloading) {
+			return 1;
+		}
+
 		return classification_config(a, value, mo);
 	}
 
@@ -89,15 +107,14 @@ monit_object_json_callback(struct aajson *a, aajson_val *value, void *user)
 #undef STRCMP
 
 static int
-monit_object_info_parse(struct xe_data *data, const char *moname,
+monit_object_info_parse(struct monit_object *mo, const char *moname,
 	const char *fn)
 {
 	FILE *f;
 	struct stat st;
-	size_t s;
+	size_t i, s;
 	char *json;
 	int ret = 0;
-	struct monit_object mo, *motmp;
 
 	struct aajson a;
 
@@ -126,36 +143,31 @@ monit_object_info_parse(struct xe_data *data, const char *moname,
 		goto fail_fread;
 	}
 
-	memset(&mo, 0, sizeof(struct monit_object));
+	/* get last modification time */
+	mo->modif_time = st.st_mtim;
 
 	/* parse */
 	aajson_init(&a, json);
-	aajson_parse(&a, &monit_object_json_callback, &mo);
+	aajson_parse(&a, &monit_object_json_callback, mo);
 	if (a.error) {
 		LOG("Can't parse config file '%s' (line: %lu, col: %lu): %s",
 			fn, a.line, a.col, a.errmsg);
 		goto fail_parse;
 	}
 
-	motmp = realloc(data->monit_objects, (data->nmonit_objects + 1)
-		* sizeof(struct monit_object));
-	if (!motmp) {
-		LOG("realloc() failed");
-		goto fail_realloc;
-	}
-
-	/*filter_dump(mo.expr, stdout);*/
+	/* copy path to file */
+	strcpy(mo->mo_path, fn);
 
 	/* copy name of monitoring object */
-	strcpy(mo.name, moname);
-
-	data->monit_objects = motmp;
-	data->monit_objects[data->nmonit_objects] = mo;
-	data->nmonit_objects++;
+	strcpy(mo->name, moname);
+	for (i=0; i<strlen(mo->name); i++) {
+		if (mo->name[i] == '/') {
+			mo->name[i] = '_';
+		}
+	}
 
 	ret = 1;
 
-fail_realloc:
 fail_parse:
 fail_fread:
 	free(json);
@@ -167,30 +179,113 @@ fail_open:
 	return ret;
 }
 
+static int
+monit_object_add(struct monit_object **mos, size_t *n_mo,
+	const char *moname, const char *fn)
+{
+	struct monit_object mo, *motmp;
 
-int
-monit_objects_init(struct xe_data *data)
+	memset(&mo, 0, sizeof(struct monit_object));
+
+	if (!monit_object_info_parse(&mo, moname, fn)) {
+		return 0;
+	}
+
+	/* append to list of monitoring objects */
+	motmp = realloc(*mos, (*n_mo + 1) * sizeof(struct monit_object));
+	if (!motmp) {
+		LOG("realloc() failed");
+		return 0;
+	}
+
+	/*filter_dump(mo.expr, stdout);*/
+
+	*mos = motmp;
+	(*mos)[*n_mo] = mo;
+	(*n_mo)++;
+
+	return 1;
+}
+
+
+static inline int
+cmp_modtime(const struct timespec *ts1, const struct timespec *ts2)
+{
+	uint64_t tm1 = ts1->tv_sec * 1e9 + ts1->tv_nsec;
+	uint64_t tm2 = ts2->tv_sec * 1e9 + ts2->tv_nsec;
+
+	return (tm1 == tm2);
+}
+
+static struct monit_object *
+monit_object_need_reload(struct monit_object *mos, size_t n_mo, const char *fn)
+{
+	size_t i;
+
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
+
+		if (strcmp(mo->mo_path, fn) == 0) {
+			/* found */
+			struct stat st;
+
+			if (stat(fn, &st) < 0) {
+				LOG("Can't stat() file '%s': %s",
+					fn, strerror(errno));
+				continue;
+			}
+
+			if (!cmp_modtime(&st.st_mtim, &mo->modif_time)) {
+				LOG("File %s was modified, reloading", fn);
+				return mo;
+			}
+		}
+
+		if (mo->n_mo) {
+			return monit_object_need_reload(mo->mos, mo->n_mo, fn);
+		}
+	}
+
+	return NULL;
+}
+
+static void
+monit_objects_load_rec(struct xe_data *globl,
+	const char *dirsuffix, struct monit_object **mos, size_t *n_mo,
+	int is_reload)
 {
 	DIR *d;
 	struct dirent *dir;
-	int ret = 0;
-	int thread_err;
+	char dirname[PATH_MAX + 512];
 
-	free(data->monit_objects);
-	data->monit_objects = NULL;
-	data->nmonit_objects = 0;
+	sprintf(dirname, "%s/%s/", globl->mo_dir, dirsuffix);
+	if (strlen(dirname) >= PATH_MAX) {
+		LOG("Directory name too big: %s/%s", globl->mo_dir, dirsuffix);
+		return;
+	}
 
-	d = opendir(data->mo_dir);
+	d = opendir(dirname);
 	if (!d) {
 		LOG("Can't open directory with monitoring objects '%s': %s",
-			data->mo_dir, strerror(errno));
-		goto fail_opendir;
+			dirname, strerror(errno));
+		return;
 	}
 
 	while ((dir = readdir(d)) != NULL) {
 		size_t i;
 		struct monit_object *mo;
-		char mofile[PATH_MAX + 512];
+		char mofile[PATH_MAX * 2];
+		char inner_dir[PATH_MAX];
+		char moname[PATH_MAX];
+
+		struct timespec tmsp;
+		uint64_t time_ns;
+
+		if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
+			LOG("clock_gettime() failed: %s", strerror(errno));
+			continue;
+		}
+		time_ns = tmsp.tv_sec * 1e9 + tmsp.tv_nsec;
 
 		if (dir->d_name[0] == '.') {
 			/* skip hidden files */
@@ -201,26 +296,49 @@ monit_objects_init(struct xe_data *data)
 			continue;
 		}
 
-		sprintf(mofile, "%s/%s/mo.conf", data->mo_dir, dir->d_name);
+		sprintf(mofile, "%s/%s/mo.conf", dirname, dir->d_name);
 		if (strlen(mofile) >= PATH_MAX) {
-			LOG("Filename too big: %s/%s", data->mo_dir, dir->d_name);
+			LOG("Filename too big: %s/%s", dirname, dir->d_name);
 			continue;
 		}
 
-		LOG("Adding monitoring object '%s'", dir->d_name);
-
-		if (!monit_object_info_parse(data, dir->d_name, mofile)) {
-			LOG("Monitoring object '%s' not added", dir->d_name);
-			continue;
+		if (strlen(dirsuffix) == 0) {
+			sprintf(moname, "%s", dir->d_name);
+		} else {
+			sprintf(moname, "%s/%s", dirsuffix, dir->d_name);
 		}
 
-		mo = &data->monit_objects[data->nmonit_objects - 1];
+		if (is_reload) {
+			mo = monit_object_need_reload(globl->monit_objects,
+				globl->nmonit_objects, mofile);
+			if (!mo) {
+				continue;
+			}
+
+			mo->is_reloading = 1;
+			LOG("Reloading monitoring object '%s'", moname);
+			monit_object_mavg_limits_free(mo);
+			if (!monit_object_info_parse(mo, moname, mofile)) {
+				continue;
+			}
+			mavg_limits_update(globl, mo);
+		} else {
+			LOG("Adding monitoring object '%s'", moname);
+			if (!monit_object_add(mos, n_mo, moname, mofile)) {
+				LOG("Monitoring object '%s' not added", moname);
+				continue;
+			}
+			mo = &((*mos)[*n_mo - 1]);
+		}
+
 		for (i=0; i<mo->nfwm; i++) {
 			size_t j;
 			struct mo_fwm *fwm = &mo->fwms[i];
 
-			if (!fwm_fields_init(data->nthreads, fwm)) {
-				return 0;
+			if (!is_reload) {
+				if (!fwm_fields_init(globl->nthreads, fwm)) {
+					return;
+				}
 			}
 			if (fwm->time == 0) {
 				LOG("warning: timeout for '%s:%s' is not set"
@@ -256,25 +374,29 @@ monit_objects_init(struct xe_data *data)
 			struct mo_mavg *mavg = &mo->mavgs[i];
 			char tmp_pfx[PATH_MAX * 3];
 
-			/* make prefix for notification files */
-			sprintf(tmp_pfx, "%s/%s-%s",
-				data->notif_dir, mo->name, mavg->name);
+			mavg->start_ns = time_ns;
 
-			if (strlen(tmp_pfx) >= PATH_MAX) {
-				LOG("Filename too big: %s/%s", mo->dir,
-					mavg->name);
-				return 0;
-			}
+			if (!is_reload) {
+				/* make prefix for notification files */
+				sprintf(tmp_pfx, "%s/%s-%s",
+					globl->notif_dir, mo->name, mavg->name);
 
-			strcpy(mavg->notif_pfx, tmp_pfx);
+				if (strlen(tmp_pfx) >= PATH_MAX) {
+					LOG("Filename too big: %s/%s", mo->dir,
+						mavg->name);
+					return;
+				}
 
-			if (!mavg_fields_init(data->nthreads, mavg)) {
-				return 0;
+				strcpy(mavg->notif_pfx, tmp_pfx);
+
+				if (!mavg_fields_init(globl->nthreads, mavg)) {
+					return;
+				}
 			}
-			if (!mavg_limits_init(mavg)) {
-				return 0;
+			if (!mavg_limits_init(mavg, is_reload)) {
+				return;
 			}
-			if (mavg->size_secs == 0) {
+			if (!is_reload && (mavg->size_secs == 0)) {
 				LOG("warning: time for '%s:%s' is not set"
 					", using default %d",
 					mo->name, mavg->name,
@@ -285,10 +407,12 @@ monit_objects_init(struct xe_data *data)
 
 		/* classification */
 		for (i=0; i<mo->nclassifications; i++) {
-			if (!classification_fields_init(data->nthreads,
-				&mo->classifications[i])) {
+			if (!is_reload) {
+				if (!classification_fields_init(globl->nthreads,
+					&mo->classifications[i])) {
 
-				return 0;
+					return;
+				}
 			}
 
 			if (mo->classifications[i].time == 0) {
@@ -304,20 +428,66 @@ monit_objects_init(struct xe_data *data)
 		}
 
 		/* store path to monitoring object directory */
-		sprintf(mofile, "%s/%s/", data->mo_dir, dir->d_name);
+		sprintf(mofile, "%s/%s/", dirname, dir->d_name);
 		strcpy(mo->dir, mofile);
 
-		LOG("Monitoring object '%s' added", dir->d_name);
+		if (!is_reload) {
+			LOG("Monitoring object '%s' added", moname);
+		} else {
+
+			for (i=0; i<mo->nmavg; i++) {
+				struct mo_mavg *mavg = &mo->mavgs[i];
+
+				atomic_fetch_add_explicit(&mavg->lim_curr_idx,
+					1, memory_order_relaxed);
+			}
+			LOG("Monitoring object '%s' reloaded", moname);
+		}
+
+		/* try to walk deeper */
+		if (strlen(dirsuffix) == 0) {
+			sprintf(inner_dir, "%s", dir->d_name);
+		} else {
+			sprintf(inner_dir, "%s/%s", dirsuffix, dir->d_name);
+		}
+		monit_objects_load_rec(globl, inner_dir, &mo->mos, &mo->n_mo,
+			is_reload);
 	}
 
 	closedir(d);
+}
+
+int
+monit_objects_reload(struct xe_data *globl)
+{
+	monit_objects_load_rec(globl, "",
+		&globl->monit_objects,
+		&globl->nmonit_objects, 1);
+
+	return 1;
+}
+
+int
+monit_objects_init(struct xe_data *globl)
+{
+	int ret = 0;
+	int thread_err;
+
+	free(globl->monit_objects);
+	globl->monit_objects = NULL;
+	globl->nmonit_objects = 0;
+
+	monit_objects_load_rec(globl, "",
+		&globl->monit_objects,
+		&globl->nmonit_objects, 0);
+
 
 	/* all monitoring objects are parsed, so we can link extended stats */
-	monit_objects_mavg_link_ext_stat(data);
+	monit_objects_mavg_link_ext_stat(globl);
 
 	/* create thread for background processing fixed windows in memory */
-	thread_err = pthread_create(&data->fwm_tid, NULL,
-		&fwm_bg_thread, data);
+	thread_err = pthread_create(&globl->fwm_tid, NULL,
+		&fwm_bg_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -326,8 +496,17 @@ monit_objects_init(struct xe_data *data)
 
 	/* moving averages */
 	/* thread with actions on overflow */
-	thread_err = pthread_create(&data->mavg_act_tid, NULL,
-		&mavg_act_thread, data);
+	thread_err = pthread_create(&globl->mavg_act_tid, NULL,
+		&mavg_act_thread, globl);
+
+	if (thread_err) {
+		LOG("Can't start thread: %s", strerror(thread_err));
+		goto fail_mavgthread;
+	}
+
+	/* underflow check thread */
+	thread_err = pthread_create(&globl->mavg_under_tid, NULL,
+		&mavg_check_underlimit_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -335,8 +514,8 @@ monit_objects_init(struct xe_data *data)
 	}
 
 	/* dump thread */
-	thread_err = pthread_create(&data->mavg_dump_tid, NULL,
-		&mavg_dump_thread, data);
+	thread_err = pthread_create(&globl->mavg_dump_tid, NULL,
+		&mavg_dump_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -344,8 +523,8 @@ monit_objects_init(struct xe_data *data)
 	}
 
 	/* classifier thread */
-	thread_err = pthread_create(&data->clsf_tid, NULL,
-		&classification_bg_thread, data);
+	thread_err = pthread_create(&globl->clsf_tid, NULL,
+		&classification_bg_thread, globl);
 
 	if (thread_err) {
 		LOG("Can't start thread: %s", strerror(thread_err));
@@ -358,7 +537,6 @@ fail_clsfthread:
 fail_mavgthread:
 fail_fwmthread:
 	/* FIXME: free monitoring objects */
-fail_opendir:
 	return ret;
 }
 
@@ -568,10 +746,9 @@ monit_object_func_geoip(struct field *fld, struct flow_info *flow,
 		}
 		memcpy(key, geoip_get_field(g, geoip->field), size - 1);
 	} else if (geoip->ip_size == sizeof(xe_ip)) {
-		xe_ip addr = *((xe_ip *)
-			((uintptr_t)flow + geoip->ip_off));
+		xe_ip *addr = (xe_ip *)((uintptr_t)flow + geoip->ip_off);
 
-		if (!geoip_lookup6(&addr, &g)) {
+		if (!geoip_lookup6(addr, &g)) {
 			key[0] = '?';
 			return;
 		}
@@ -604,10 +781,9 @@ monit_object_func_as(struct field *fld, struct flow_info *flow,
 			not_found = 1;
 		}
 	} else if (as->ip_size == sizeof(xe_ip)) {
-		xe_ip addr = *((xe_ip *)
-			((uintptr_t)flow + as->ip_off));
+		xe_ip *addr = (xe_ip *)((uintptr_t)flow + as->ip_off);
 
-		if (!as_lookup6(&addr, &a)) {
+		if (!as_lookup6(addr, &a)) {
 			not_found = 1;
 		}
 	}
@@ -623,6 +799,50 @@ monit_object_func_as(struct field *fld, struct flow_info *flow,
 			memcpy(key, &a->asd, size);
 		}
 	}
+}
+
+static void
+monit_object_func_tfstr(struct field *fld, struct flow_info *flow,
+	uint8_t *key)
+{
+	char *s;
+	uint8_t flags;
+
+	memset(key, 0, TCP_FLAGS_STR_MAX_SIZE);
+
+	flags = get_nf_val((uintptr_t)flow + fld->func_data.tfstr.tf_off, 1);
+	s = tcp_flags_to_str(flags);
+
+	strcpy((char *)key, s);
+}
+
+static void
+monit_object_func_portstr(struct field *fld, struct flow_info *flow,
+	uint8_t *key)
+{
+	uint16_t port;
+
+	memset(key, 0, TCP_UDP_PORT_STR_MAX_SIZE);
+	port = get_nf_val((uintptr_t)flow + fld->func_data.portstr.port_off,
+		fld->func_data.portstr.port_size);
+
+	port_to_str((char *)key, port);
+}
+
+static void
+monit_object_func_ppstr(struct field *fld, struct flow_info *flow,
+	uint8_t *key)
+{
+	uint16_t port1, port2;
+
+	memset(key, 0, TCP_UDP_PP_STR_MAX_SIZE);
+
+	port1 = get_nf_val((uintptr_t)flow + fld->func_data.ppstr.arg1_off,
+		fld->func_data.ppstr.arg1_size);
+	port2 = get_nf_val((uintptr_t)flow + fld->func_data.ppstr.arg2_off,
+		fld->func_data.ppstr.arg2_size);
+
+	ports_pair_to_str((char *)key, port1, port2);
 }
 
 void
@@ -651,6 +871,15 @@ FOR_LIST_OF_GEOIP_FIELDS
 			case ASN:
 			case ASD:
 				monit_object_func_as(fld, flow, key);
+				break;
+			case TFSTR:
+				monit_object_func_tfstr(fld, flow, key);
+				break;
+			case PORTSTR:
+				monit_object_func_portstr(fld, flow, key);
+				break;
+			case PPSTR:
+				monit_object_func_ppstr(fld, flow, key);
 				break;
 			default:
 				break;
@@ -771,5 +1000,15 @@ monit_object_process_nf(struct xe_data *globl, struct monit_object *mo,
 	}
 
 	return 1;
+}
+
+static void
+monit_object_mavg_limits_free(struct monit_object *mo)
+{
+	size_t i;
+	for (i=0; i<mo->nmavg; i++) {
+		struct mo_mavg *mavg = &mo->mavgs[i];
+		mavg_limits_free(mavg);
+	}
 }
 

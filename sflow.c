@@ -3,6 +3,7 @@
 #include "sflow.h"
 #include "filter.h"
 #include "flow-debug.h"
+#include "devices.h"
 
 #define COPY_TO_FLOW(D, F, R, N)  \
 do {                              \
@@ -57,29 +58,43 @@ do {                              \
 static int xe_sni(uint8_t *p, uint8_t *end, char *domain);
 static int xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips);
 
-static inline int
-sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
+static int
+device_rules_check(struct flow_info *flow, struct flow_packet_info *fpi)
 {
-	size_t t_id;
-	uint8_t *end = p + header_len;
+	struct device dev;
+	uint32_t mark;
 
-	if (rawpacket_parse(p, end, t, s->flow)
-		< RP_PARSER_STATE_NO_IP) {
+	/* FIXME: add IPv6 */
+	dev.ip_ver = 4;
+	dev.ip = 0;
+	memcpy(&dev.ip, &fpi->src_addr_ipv4, 4);
 
-		/* Skip non-IP samples */
+	dev.id = fpi->source_id;
+
+	if (!device_get_mark(&dev, flow)) {
+		/* device not found */
+		return 1;
+	}
+
+	if (dev.skip_unmarked && (dev.mark == 0)) {
 		return 0;
 	}
 
-	/* debug print */
-	if (s->global->debug.print_flows) {
-		char debug_flow_str[1024];
-		sflow_debug_print(s->flow, debug_flow_str);
+	mark = htobe32(dev.mark);
+	memcpy(&flow->dev_mark[0], &mark, sizeof(uint32_t));
+	flow->dev_mark_size = sizeof(uint32_t);
+	flow->has_dev_mark = 1;
 
-		flow_print_str(&s->global->debug, s->flow, debug_flow_str);
-	}
+	return 1;
+}
 
-	for (t_id=0; t_id<s->global->nmonit_objects; t_id++) {
-		struct monit_object *mo = &s->global->monit_objects[t_id];
+static void
+process_mo_sflow_rec(struct sfdata *s, uint8_t *end, struct monit_object *mos,
+	size_t n_mo)
+{
+	size_t i;
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &mos[i];
 
 		if (!filter_match(mo->expr, s->flow)) {
 			continue;
@@ -112,7 +127,42 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 
 			flow_print_str(&mo->debug, s->flow, debug_flow_str);
 		}
+
+		/* child objects */
+		if (mo->n_mo) {
+			process_mo_sflow_rec(s, end, mo->mos, mo->n_mo);
+		}
 	}
+}
+
+static inline int
+sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
+{
+	uint8_t *end = p + header_len;
+
+	if (rawpacket_parse(p, end, t, s->flow)
+		< RP_PARSER_STATE_NO_IP) {
+
+		/* Skip non-IP samples */
+		return 1;
+	}
+	/* check interfaces */
+	if (!device_rules_check(s->flow, s->fpi)) {
+		/* no error */
+		return 1;
+	}
+
+	/* debug print */
+	if (s->global->debug.print_flows) {
+		char debug_flow_str[1024];
+		sflow_debug_print(s->flow, debug_flow_str);
+
+		flow_print_str(&s->global->debug, s->flow, debug_flow_str);
+	}
+
+	process_mo_sflow_rec(s, end,
+		s->global->monit_objects, s->global->nmonit_objects);
+
 #ifdef FLOWS_CNT
 	atomic_fetch_add_explicit(&data->nflows, 1, memory_order_relaxed);
 #endif

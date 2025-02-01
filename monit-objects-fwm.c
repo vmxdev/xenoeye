@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2021-2023, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2021-2024, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -216,7 +216,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	time_t t;
 	char path[PATH_MAX * 2];
 	size_t i;
-	int first_field;
+	int first_field, first_line;
 	int n;
 	int hit_limit = 0;
 	char table_name[PATH_MAX + 512];
@@ -284,14 +284,19 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	n = 0;
 
 	fprintf(f, "BEGIN;\n");
+	fprintf(f, "insert into \"%s\" ", table_name);
+	fprintf(f, "values\n");
+	first_line = 1;
 	do {
 		uint8_t *data = c->key(c);
 		uint8_t data_mut[512];
 
-		fprintf(f, "insert into \"%s\" ", table_name);
-		fprintf(f, "values ( to_timestamp(%llu), ",
-			(long long unsigned)t);
-
+		if (!first_line) {
+			fprintf(f, ",\n");
+		} else {
+			first_line = 0;
+		}
+		fprintf(f, "  ( to_timestamp(%llu), ", (long long unsigned)t);
 		first_field = 1;
 		/* parse key */
 		for (i=0; i<fwm->fieldset.n; i++) {
@@ -334,7 +339,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 			}
 		}
 
-		fprintf(f, ");\n");
+		fprintf(f, ")");
 
 		/* check limit */
 		n++;
@@ -345,6 +350,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 			}
 		}
 	} while (c->next(c) == TKVDB_OK);
+	fprintf(f, ";\n");
 
 	/* calculate others */
 	if (hit_limit) {
@@ -421,7 +427,7 @@ cursor_fail:
 }
 
 static int
-fwm_sort_tr(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
+fwm_sort_and_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	const char *exp_dir)
 {
 	int ret = 0;
@@ -571,7 +577,7 @@ empty:
 }
 
 static int
-fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
+fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 	const char *exp_dir)
 {
 	size_t i;
@@ -606,24 +612,54 @@ fwm_merge(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 		fwm_merge_tr(fwm, tr_merge, tr);
 	}
 
-	fwm_sort_tr(fwm, tr_merge, mo_name, exp_dir);
+	fwm_sort_and_dump(fwm, tr_merge, mo_name, exp_dir);
 
 	tr_merge->free(tr_merge);
 
 	return 1;
 }
 
+static void
+fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
+	time_t t, int *need_sleep)
+{
+	size_t i, j;
+	for (i=0; i<n_mo; i++) {
+		struct monit_object *mo = &(mos[i]);
+
+		for (j=0; j<mo->nfwm; j++) {
+			struct mo_fwm *fwm = &mo->fwms[j];
+
+			if ((fwm->last_export / fwm->time) != (t / fwm->time)) {
+				/* time to export */
+				if (fwm_merge_and_dump(fwm, globl->nthreads,
+					mo->name, globl->exp_dir)) {
+
+					fwm->last_export = t;
+					*need_sleep = 0;
+				} else {
+					continue;
+				}
+			}
+		}
+
+		if (mo->n_mo) {
+			fwm_merge_rec(globl, mo->mos, mo->n_mo, t, need_sleep);
+		}
+	}
+
+}
+
 void *
 fwm_bg_thread(void *arg)
 {
-	struct xe_data *data = (struct xe_data *)arg;
+	struct xe_data *globl = (struct xe_data *)arg;
 
 	for (;;) {
 		time_t t;
-		size_t i, j;
 		int need_sleep = 1;
 
-		if (atomic_load_explicit(&data->stop, memory_order_relaxed)) {
+		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
 			break;
 		}
@@ -634,25 +670,8 @@ fwm_bg_thread(void *arg)
 			return NULL;
 		}
 
-		for (i=0; i<data->nmonit_objects; i++) {
-			struct monit_object *mo = &data->monit_objects[i];
-
-			for (j=0; j<mo->nfwm; j++) {
-				struct mo_fwm *fwm = &mo->fwms[j];
-
-				if ((fwm->last_export + fwm->time) <= t) {
-					/* time to export */
-					if (fwm_merge(fwm, data->nthreads,
-						mo->name, data->exp_dir)) {
-
-						fwm->last_export = t;
-						need_sleep = 0;
-					} else {
-						continue;
-					}
-				}
-			}
-		}
+		fwm_merge_rec(globl, globl->monit_objects,
+			globl->nmonit_objects, t, &need_sleep);
 
 		if (need_sleep) {
 			sleep(1);
