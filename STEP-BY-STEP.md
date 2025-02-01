@@ -23,9 +23,14 @@
 
 ### Build and install
 
-In minimal Debian, you need to install the following packages to build:
+In minimal Debian 12, you need to install the following packages to build:
 
-```sh
+``` sh
+$ sudo apt -y install git autoconf gcc make libpcap-dev libtool
+```
+
+For Debian 13:
+``` sh
 $ sudo apt -y install git autoconf gcc make libpcap-dev
 ```
 
