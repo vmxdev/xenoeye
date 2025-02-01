@@ -34,7 +34,7 @@ check_PROGRAMS = test_filters
 test_filters_SOURCES = tests/test_filters.c \
 	filter.c filter-lexer.c filter-parser.c \
 	iplist.c filter-parser-funcs.c \
-	geoip.c
+	geoip.c utils.c
 TESTS = $(check_PROGRAMS)
 
 # config file
