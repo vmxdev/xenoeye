@@ -1,3 +1,21 @@
+/*
+ * xenoeye
+ *
+ * Copyright (c) 2025, Vladimir Misyurov
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+ * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+ * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+ * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ * PERFORMANCE OF THIS SOFTWARE.
+ */
+
 #include "utils.h"
 #include "flow-info.h"
 #include "sflow.h"
@@ -57,36 +75,6 @@ do {                              \
 
 static int xe_sni(uint8_t *p, uint8_t *end, char *domain);
 static int xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips);
-
-static int
-device_rules_check(struct flow_info *flow, struct flow_packet_info *fpi)
-{
-	struct device dev;
-	uint32_t mark;
-
-	/* FIXME: add IPv6 */
-	dev.ip_ver = 4;
-	dev.ip = 0;
-	memcpy(&dev.ip, &fpi->src_addr_ipv4, 4);
-
-	dev.id = fpi->source_id;
-
-	if (!device_get_mark(&dev, flow)) {
-		/* device not found */
-		return 1;
-	}
-
-	if (dev.skip_unmarked && (dev.mark == 0)) {
-		return 0;
-	}
-
-	mark = htobe32(dev.mark);
-	memcpy(&flow->dev_mark[0], &mark, sizeof(uint32_t));
-	flow->dev_mark_size = sizeof(uint32_t);
-	flow->has_dev_mark = 1;
-
-	return 1;
-}
 
 static void
 process_mo_sflow_rec(struct sfdata *s, uint8_t *end, struct monit_object *mos,

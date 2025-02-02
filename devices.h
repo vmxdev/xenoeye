@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "utils.h"
 
+struct flow_packet_info;
+
 struct device
 {
 	int use_ip;
@@ -25,7 +27,7 @@ struct device
 int devices_load(const char *filename);
 
 int device_get_sampling_rate(struct device *d);
-int device_get_mark(struct device *d, struct flow_info *fi);
+int device_rules_check(struct flow_info *flow, struct flow_packet_info *fpi);
 
 #endif
 

@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2021, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2021-2025, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,6 +20,7 @@
 
 #include "filter.h"
 #include "devices.h"
+#include "flow-info.h"
 #include "aajson/aajson.h"
 
 struct devices_info
@@ -233,7 +234,7 @@ device_get_sampling_rate(struct device *d)
 	return found;
 }
 
-int
+static int
 device_get_mark(struct device *d, struct flow_info *fi)
 {
 	size_t i;
@@ -278,6 +279,36 @@ device_get_mark(struct device *d, struct flow_info *fi)
 			d->mark++;
 		}
 	}
+
+	return 1;
+}
+
+int
+device_rules_check(struct flow_info *flow, struct flow_packet_info *fpi)
+{
+	struct device dev;
+	uint32_t mark;
+
+	/* FIXME: add IPv6 */
+	dev.ip_ver = 4;
+	dev.ip = 0;
+	memcpy(&dev.ip, &fpi->src_addr_ipv4, 4);
+
+	dev.id = fpi->source_id;
+
+	if (!device_get_mark(&dev, flow)) {
+		/* device not found */
+		return 1;
+	}
+
+	if (dev.skip_unmarked && (dev.mark == 0)) {
+		return 0;
+	}
+
+	mark = htobe32(dev.mark);
+	memcpy(&flow->dev_mark[0], &mark, sizeof(uint32_t));
+	flow->dev_mark_size = sizeof(uint32_t);
+	flow->has_dev_mark = 1;
 
 	return 1;
 }
