@@ -231,7 +231,7 @@ process_mo_nf9_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 
 			print_netflow_v9_flowset(pd, debug_flow_str);
 
-			flow_print_str(&mo->debug, flow, debug_flow_str);
+			flow_print_str(&mo->debug, flow, debug_flow_str, 0);
 		}
 
 		/* child objects */
@@ -300,7 +300,7 @@ parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id,
 
 			print_netflow_v9_flowset(&pd, debug_flow_str);
 
-			flow_print_str(&globl->debug, &flow, debug_flow_str);
+			flow_print_str(&globl->debug, &flow, debug_flow_str, 0);
 		}
 
 		process_mo_nf9_rec(globl, fpi, thread_id, &flow, &pd,
@@ -488,7 +488,7 @@ process_mo_ipfix_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 
 			print_ipfix_flowset(pd, debug_flow_str);
 
-			flow_print_str(&mo->debug, flow, debug_flow_str);
+			flow_print_str(&mo->debug, flow, debug_flow_str, 0);
 		}
 
 		/* child objects */
@@ -562,7 +562,7 @@ parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
 			print_ipfix_flowset(&pd, debug_flow_str);
 
 			flow_print_str(&globl->debug, &flow,
-				debug_flow_str);
+				debug_flow_str, 0);
 		}
 
 		process_mo_ipfix_rec(globl, fpi, thread_id, &flow, &pd,
@@ -665,7 +665,7 @@ process_mo_nf5_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 
 			print_netflow_v5_flowset(flow, debug_flow_str);
 
-			flow_print_str(&mo->debug, flow, debug_flow_str);
+			flow_print_str(&mo->debug, flow, debug_flow_str, 0);
 		}
 
 		/* child objects */
@@ -698,7 +698,6 @@ parse_netflow_v5(struct xe_data *globl, size_t thread_id,
 
 	for (i=0; i<nflows; i++) {
 		struct flow_info flow;
-//		size_t t_id;
 
 		memset(&flow, 0, sizeof(struct flow_info));
 
@@ -723,7 +722,7 @@ NF5_FIELDS
 			char debug_flow_str[1024];
 
 			print_netflow_v5_flowset(&flow, debug_flow_str);
-			flow_print_str(&globl->debug, &flow, debug_flow_str);
+			flow_print_str(&globl->debug, &flow, debug_flow_str, 0);
 		}
 
 		process_mo_nf5_rec(globl, fpi, thread_id, &flow,

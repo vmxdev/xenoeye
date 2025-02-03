@@ -15,7 +15,7 @@ void flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 	char *debug_flow_str);
 
 void flow_print_str(struct xe_debug *debug, struct flow_info *fi,
-	char *flow_str);
+	char *flow_str, int is_sflow);
 
 void sflow_debug_print(struct flow_info *fi, char *str);
 

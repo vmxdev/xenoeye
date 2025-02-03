@@ -113,7 +113,7 @@ process_mo_sflow_rec(struct sfdata *s, uint8_t *end, struct monit_object *mos,
 			char debug_flow_str[1024];
 			sflow_debug_print(s->flow, debug_flow_str);
 
-			flow_print_str(&mo->debug, s->flow, debug_flow_str);
+			flow_print_str(&mo->debug, s->flow, debug_flow_str, 1);
 		}
 
 		/* child objects */
@@ -145,7 +145,7 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 		char debug_flow_str[1024];
 		sflow_debug_print(s->flow, debug_flow_str);
 
-		flow_print_str(&s->global->debug, s->flow, debug_flow_str);
+		flow_print_str(&s->global->debug, s->flow, debug_flow_str, 1);
 	}
 
 	process_mo_sflow_rec(s, end,

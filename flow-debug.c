@@ -100,7 +100,8 @@ flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 }
 
 void
-flow_print_str(struct xe_debug *debug, struct flow_info *fi, char *flow_str)
+flow_print_str(struct xe_debug *debug, struct flow_info *fi, char *flow_str,
+	int is_sflow)
 {
 	char devinfo[128];
 	char classinfo[16 + CLASS_NAME_MAX];
@@ -117,11 +118,17 @@ FOR_LIST_OF_CLASSES
 
 	memcpy(&dev_id, &fi->dev_id[0], sizeof(uint32_t));
 
-	sprintf(devinfo, "; *dev-ip: %d.%d.%d.%d; *dev-id: %d, *rate: %u",
-		fi->dev_ip[0], fi->dev_ip[1],
-		fi->dev_ip[2], fi->dev_ip[3],
-		ntohl(dev_id),
-		fi->sampling_rate);
+	if (is_sflow) {
+		sprintf(devinfo, "; *dev-id: %d, *rate: %u",
+			ntohl(dev_id),
+			fi->sampling_rate);
+	} else {
+		sprintf(devinfo, "; *dev-ip: %d.%d.%d.%d; *dev-id: %d, *rate: %u",
+			fi->dev_ip[0], fi->dev_ip[1],
+			fi->dev_ip[2], fi->dev_ip[3],
+			ntohl(dev_id),
+			fi->sampling_rate);
+	}
 
 	strcat(flow_str, devinfo);
 
