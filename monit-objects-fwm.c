@@ -276,14 +276,14 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 
 	/* index */
 	if (!fwm->dont_create_index) {
-		fprintf(f, "create index concurrently if not exists "
+		fprintf(f, "create index if not exists "
 			"\"%s_idx\" on \"%s\"(time);\n\n",
 			table_name, table_name);
 	}
 
 	n = 0;
 
-	fprintf(f, "BEGIN;\n");
+	/*fprintf(f, "BEGIN;\n");*/
 	fprintf(f, "insert into \"%s\" ", table_name);
 	fprintf(f, "values\n");
 	first_line = 1;
@@ -412,7 +412,7 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 
 		fprintf(f, ");\n");
 	}
-	fprintf(f, "COMMIT;\n");
+	/*fprintf(f, "COMMIT;\n");*/
 
 	ret = 1;
 empty:
