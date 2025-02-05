@@ -306,6 +306,10 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		strcpy(data->geodb_dir, value->str);
 	}
 
+	if (STRCMP(a, 1, "db-export") == 0) {
+		strcpy(data->db_exporter_path, value->str);
+	}
+
 
 	if (a->path_stack_pos < 2) {
 		return 1;

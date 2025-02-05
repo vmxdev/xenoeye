@@ -428,7 +428,7 @@ cursor_fail:
 
 static int
 fwm_sort_and_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
-	const char *exp_dir)
+	const char *exp_dir, int *is_not_empty)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -451,6 +451,7 @@ fwm_sort_and_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 		goto tr_fail;
 	}
 
+	*is_not_empty = 1;
 	tr_merge->begin(tr_merge);
 
 	/* iterate over all set */
@@ -578,7 +579,7 @@ empty:
 
 static int
 fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
-	const char *exp_dir)
+	const char *exp_dir, int *is_not_empty)
 {
 	size_t i;
 	tkvdb_tr *tr_merge;
@@ -612,7 +613,7 @@ fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 		fwm_merge_tr(fwm, tr_merge, tr);
 	}
 
-	fwm_sort_and_dump(fwm, tr_merge, mo_name, exp_dir);
+	fwm_sort_and_dump(fwm, tr_merge, mo_name, exp_dir, is_not_empty);
 
 	tr_merge->free(tr_merge);
 
@@ -621,7 +622,7 @@ fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 
 static void
 fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
-	time_t t, int *need_sleep)
+	time_t t, int *need_sleep, int *is_not_empty)
 {
 	size_t i, j;
 	for (i=0; i<n_mo; i++) {
@@ -633,7 +634,8 @@ fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
 			if ((fwm->last_export / fwm->time) != (t / fwm->time)) {
 				/* time to export */
 				if (fwm_merge_and_dump(fwm, globl->nthreads,
-					mo->name, globl->exp_dir)) {
+					mo->name, globl->exp_dir,
+					is_not_empty)) {
 
 					fwm->last_export = t;
 					*need_sleep = 0;
@@ -644,10 +646,40 @@ fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
 		}
 
 		if (mo->n_mo) {
-			fwm_merge_rec(globl, mo->mos, mo->n_mo, t, need_sleep);
+			fwm_merge_rec(globl, mo->mos, mo->n_mo, t,
+				need_sleep, is_not_empty);
 		}
 	}
 
+}
+
+static void
+db_export(const char *script)
+{
+	int pid;
+
+	if (!*script) {
+		return;
+	}
+
+	pid = fork();
+	if (pid == 0) {
+		/* child */
+		pid = fork();
+		if (pid == 0) {
+			/* double fork */
+			setsid();
+			if (execl(script, script, NULL) == -1) {
+				LOG("Can't start script '%s': %s",
+					script, strerror(errno));
+			}
+		} else if (pid == -1) {
+			LOG("Can't fork(): %s", strerror(errno));
+		}
+		exit(EXIT_FAILURE);
+	} else if (pid == -1) {
+		LOG("Can't fork(): %s", strerror(errno));
+	}
 }
 
 void *
@@ -658,6 +690,7 @@ fwm_bg_thread(void *arg)
 	for (;;) {
 		time_t t;
 		int need_sleep = 1;
+		int is_not_empty = 0;
 
 		if (atomic_load_explicit(&globl->stop, memory_order_relaxed)) {
 			/* stop */
@@ -671,7 +704,13 @@ fwm_bg_thread(void *arg)
 		}
 
 		fwm_merge_rec(globl, globl->monit_objects,
-			globl->nmonit_objects, t, &need_sleep);
+			globl->nmonit_objects, t,
+			&need_sleep, &is_not_empty);
+
+		if (is_not_empty) {
+			/* has files to export */
+			db_export(globl->db_exporter_path);
+		}
 
 		if (need_sleep) {
 			sleep(1);

@@ -101,6 +101,9 @@ struct xe_data
 	/* path to dir with GeoIP/AS DBs */
 	char geodb_dir[PATH_MAX];
 
+	/* path to DB export script */
+	char db_exporter_path[PATH_MAX];
+
 	/* notify geoip thread about reload */
 	atomic_int reload_geoip;
 
