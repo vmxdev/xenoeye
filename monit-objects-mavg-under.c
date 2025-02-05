@@ -43,6 +43,7 @@ underlimit_item_check(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 	/* adjust to value per second */
 	v /= mavg->size_secs;
 
+	/*LOG("Underlimit debug: val %f, limit %f", v, limit);*/
 	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 
 	memcpy(key_with_limit_index, key, keysize);
@@ -63,6 +64,12 @@ underlimit_item_check(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 		ld->limit = limit;
 		ld->back2norm_time_ns
 			= lim_curr->underlimit[limit_index].back2norm_time_ns;
+
+		if (v < limit) {
+			if (ld->state == MAVG_LIM_GONE) {
+				ld->state = MAVG_LIM_NEW;
+			}
+		}
 	} else {
 		if (v < limit) {
 			/* not in db and less than limit, add to db */
