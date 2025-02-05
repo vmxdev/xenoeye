@@ -40,6 +40,8 @@ underlimit_item_check(struct mo_mavg *mavg, uint8_t *key, size_t keysize,
 	tkvdb_datum dtk, dtv;
 	uint8_t key_with_limit_index[keysize + sizeof(size_t)];
 	MAVG_TYPE v = val->val;
+	/* adjust to value per second */
+	v /= mavg->size_secs;
 
 	struct mavg_limits *lim_curr = MAVG_LIM_CURR(mavg);
 

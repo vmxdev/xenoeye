@@ -686,7 +686,12 @@ mavg_limits_update_db(struct mo_mavg *mavg, tkvdb_tr *db,
 
 				/* search in limits database */
 				tkvdb_tr *tr = lim->overlimit[j].db;
-				rc = tr->get(tr, &dtk, &dtval);
+				if (tr) {
+					rc = tr->get(tr, &dtk, &dtval);
+				} else {
+					rc = TKVDB_NOT_FOUND;
+				}
+
 				if (rc == TKVDB_OK) {
 					/* found, using value as limit */
 					MAVG_TYPE *limptr = (MAVG_TYPE *)dtval.data;
@@ -706,14 +711,19 @@ mavg_limits_update_db(struct mo_mavg *mavg, tkvdb_tr *db,
 				size_t lidx = j + lim->noverlimit;
 
 				tkvdb_tr *tr = lim->underlimit[j].db;
-				rc = tr->get(tr, &dtk, &dtval);
+				if (tr) {
+					rc = tr->get(tr, &dtk, &dtval);
+				} else {
+					rc = TKVDB_NOT_FOUND;
+				}
+
 				if (rc == TKVDB_OK) {
 					MAVG_TYPE *limptr = (MAVG_TYPE *)dtval.data;
 					atomic_store_explicit(&pval->limits[lidx],
 						*limptr, memory_order_relaxed);
 				} else {
 					atomic_store_explicit(&pval->limits[lidx],
-						lim->overlimit[j].def[i],
+						lim->underlimit[j].def[i],
 						memory_order_relaxed);
 				}
 			}
