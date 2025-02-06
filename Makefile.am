@@ -49,3 +49,4 @@ install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/notifications"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/clsf"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/geoip"
+	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/scripts"
