@@ -37,8 +37,12 @@ test_filters_SOURCES = tests/test_filters.c \
 	geoip.c utils.c
 TESTS = $(check_PROGRAMS)
 
-# config file
+# config files
 dist_sysconf_DATA = xenoeye.conf devices.conf
+
+# DB export script
+libexec_SCRIPTS = scripts/xe-dbexport-pg.sh
+
 
 # data directories
 install-data-local:
@@ -49,4 +53,3 @@ install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/notifications"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/clsf"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/geoip"
-	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/scripts"

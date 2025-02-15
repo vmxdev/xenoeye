@@ -50,11 +50,11 @@ $ git submodule update --init --recursive
 
 ``` sh
 $ autoreconf -i
-$ ./configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib
+$ ./configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib --libexecdir=/var/lib/xenoeye/scripts
 $ make
 ```
 
-После этого должен получиться бинарный файл `xenoeye`
+После этого должны собраться бинарные файлы.
 
 
 #### Установка
@@ -65,7 +65,7 @@ $ sudo make install
 $ sudo chown -R user:user /var/lib/xenoeye/
 ```
 
-`make install` копирует бинарный файл xenoeye в /usr/local/bin, конфигурационные файлы xenoeye.conf и devices.conf в /etc/xenoeye и создает каталоги /var/lib/xenoeye/mo, /var/lib/xenoeye/exp и /var/lib/xenoeye/expfailed.
+`make install` копирует бинарные файлы в /usr/local/bin, конфигурационные файлы xenoeye.conf и devices.conf в /etc/xenoeye и создает каталоги в /var/lib/xenoeye/.
 
 Каталог `/var/lib/xenoeye` должен быть доступен для записи процессу xenoeye
 
@@ -110,7 +110,11 @@ $ xenoeye
 $ xenoeye -c /path/to/xenoeye.conf
 ```
 
-Если вы используете захват с помощью pcap, коллектор должен запускаться с правами суперпользователя
+Если вы используете захват с помощью pcap, коллектор должен запускаться с правами суперпользователя или добавьте capabilities
+
+``` sh
+$ sudo setcap "cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+pe" /path/to/xenoeye
+```
 
 После того, как коллектор получит Netflow-пакеты с шаблонами, он сможет парсить фловы с данными. Они будут отправляться в `syslog` и одновременно выводиться в `stderr` приблизительно в таком текстовом виде:
 
@@ -431,14 +435,19 @@ time                   octets       src_host
 
 Для того чтобы данные появились в СУБД нужно эти файлы периодически отдавать утилите `psql`.
 
-В каталоге `scripts/` находится файл `fill-db.sh`, который это делает. Измените в нем параметры подключения (`user:password@127.0.0.1:5432/database`) и пути к каталогам если нужно. База данных должна существовать, пользователь должен иметь права на запись.
+Если вы установили коллектор с помощью `make install`, в каталоге `/var/lib/xenoeye/scripts/` будет находиться скрипт `xe-dbexport-pg.sh`, который это делает.
+
+Измените в нем параметры подключения (пользователя, пароль, название БД) и пути к каталогам, если нужно. База данных должна существовать, пользователь должен иметь права на запись.
 
   * `EXP_DIR` — каталог, в котором скрипт ищет файлы экспорта
   * `FAIL_DIR` — каталог, куда скрипт складывает файлы если экспорт закончился неудачей (нет подключения к СУБД или что-то еще пошло не так)
 
-Скрипт можно запускать из командной строки (в бесконечном цикле `while true; do ./fill-db.sh ; sleep 10; done`) или из крона.
+Скрипт будет запускаться автоматически после генерации SQL-файлов.
 
-Мы запускаем этот скрипт в бесконечном цикле в tmux-окне. В отдельном окне коллектор, в отдельном - скрипт экспорта.
+Путь к скрипту задается в `xenoeye.conf`:
+``` json
+"db-export": "/var/lib/xenoeye/scripts/xe-dbexport-pg.sh"
+```
 
 
 #### Быстрая подсказка: как установить PostgreSQL на одном сервере с коллектором
@@ -452,15 +461,9 @@ Enter it again:
 $ sudo su - postgres -c "createdb xenoeyedb"
 $ sudo su - postgres -c "psql -d xenoeyedb -c 'GRANT ALL PRIVILEGES ON DATABASE xenoeyedb TO xenoeye;'"
 GRANT
+$ sudo su - postgres -c "psql -d xenoeyedb -c 'ALTER DATABASE xenoeyedb OWNER TO xenoeye;'"
+ALTER DATABASE
 ```
-
-``` sh
-$ vi scripts/fill-db.sh
-```
-
-Отредактируйте параметры подключения, если нужно:
-
-  `psql postgresql://user:password@127.0.0.1:5432/database -f "$sqlscript"`
 
 
 ### Простые отчеты по IP-адресам

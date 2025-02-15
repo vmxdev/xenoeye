@@ -53,11 +53,11 @@ Actually build
 
 ```sh
 $ autoreconf -i
-$ ./configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib
+$ ./configure --sysconfdir=/etc/xenoeye --localstatedir=/var/lib --libexecdir=/var/lib/xenoeye/scripts
 $ make
 ```
 
-After that, you should get a binary file `xenoeye`
+After that, you should get a binary files
 
 
 #### Install
@@ -68,7 +68,7 @@ $ sudo make install
 $ sudo chown -R user:user /var/lib/xenoeye/
 ```
 
-`make install` copies binary file `xenoeye` to /usr/local/bin, config files `xenoeye.conf` and `devices.conf` to /etc/xenoeye and creates directories /var/lib/xenoeye/mo, /var/lib/xenoeye/exp и /var/lib/xenoeye/expfailed
+`make install` copies binary file `xenoeye` to /usr/local/bin, config files `xenoeye.conf` and `devices.conf` to /etc/xenoeye and creates directories in /var/lib/xenoeye/
 
 The directory `/var/lib/xenoeye` must be writable by the xenoeye process
 
@@ -113,7 +113,11 @@ or
 $ xenoeye -c /path/to/xenoeye.conf
 ```
 
-If you are capturing with pcap, the collector must be run as root
+If you are capturing with pcap, the collector must be run as root or add capabilities
+
+``` sh
+$ sudo setcap "cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+pe" /path/to/xenoeye
+```
  
 After the collector receives Netflow template packets, it can parse data flows. They will be sent to `syslog` and simultaneously output to `stderr` in approximately the following text form:
 ```
@@ -431,17 +435,21 @@ Restart the collector and it will start generating data files.
 
 The collector does not send data directly to the DBMS, but generates export files as SQL scripts. These files are created in the export directory (default '/var/lib/xenoeye/exp')
 
-In order for the data to appear in the DBMS, these files must be periodically given to the `psql` utility.
+In order for the data to appear in the DBMS, these files must be processed periodically by the `psql` utility.
 
-The `scripts/` directory contains the `fill-db.sh` file that does this. Change the connection parameters in it (`user:password@127.0.0.1:5432/database`) and directory paths if necessary. The database must exist and the user must have write access.
+If you installed the collector using `make install`, there will be a script `xe-dbexport-pg.sh` in the `/var/lib/xenoeye/scripts/` directory that does this.
+
+Change the connection parameters (user, password, database name) and directory paths in this script if necessary. The database must exist and the user must have write access.
 
   * `EXP_DIR` - directory where the script looks for export files
   * `FAIL_DIR` - the directory where the script puts the files if the export fails (there is no connection to the DBMS or something else went wrong)
 
-The script can be run from the command line (in an infinite loop `while true; do ./fill-db.sh ; sleep 10; done`) or from cron.
+The script will be run automatically after generating SQL files.
 
-We are running this script in an infinite loop in a tmux window. Collector in a separate window, export script in a separate window.
-
+The path to the script is specified in `xenoeye.conf`:
+``` json
+"db-export": "/var/lib/xenoeye/scripts/xe-dbexport-pg.sh"
+```
 
 #### Quick tip: how to install PostgreSQL on the same server as the collector
 
@@ -454,15 +462,9 @@ Enter it again:
 $ sudo su - postgres -c "createdb xenoeyedb"
 $ sudo su - postgres -c "psql -d xenoeyedb -c 'GRANT ALL PRIVILEGES ON DATABASE xenoeyedb TO xenoeye;'"
 GRANT
+$ sudo su - postgres -c "psql -d xenoeyedb -c 'ALTER DATABASE xenoeyedb OWNER TO xenoeye;'"
+ALTER DATABASE
 ```
-
-``` sh
-$ vi scripts/fill-db.sh
-```
-
-Edit connection settings if needed
-
-  `psql postgresql://user:password@127.0.0.1:5432/database -f "$sqlscript"`
 
 
 ### Simple Reporting by IP Addresses

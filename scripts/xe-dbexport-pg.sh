@@ -12,7 +12,7 @@ fi
 TMPFILE=$(mktemp $EXP_DIR/tmp.XXXXXX)
 
 { echo "BEGIN;" ; cat $FILES; echo "COMMIT;"; } > "$TMPFILE"
-psql postgresql://xenoeye:password@localhost/xenoeyedb -f "$TMPFILE" > /dev/null 2>/dev/null
+psql -v "ON_ERROR_STOP=1" postgresql://xenoeye:password@localhost/xenoeyedb -f "$TMPFILE" > /dev/null 2>/dev/null
 
 if [ $? -eq 0 ]; then
     rm -f $FILES
