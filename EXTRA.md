@@ -8,10 +8,10 @@
   * [Traffic classification](#traffic-classification)
   * [sFlow](#sflow)
   * [Additional data analysis using sFlow: DNS and SNI](#additional-data-analysis-using-sflow-dns-and-sni)
-  * [Nested/Hierarchical Monitoring Objects](#)
-  * [Interfaces classification](#)
-  * [Traffic drops below threshold]()
-  * [Changing moving average thresholds without restarting the collector](#)
+  * [Nested/Hierarchical Monitoring Objects](#nestedhierarchical-monitoring-objects)
+  * [Interfaces classification](#interfaces-classification)
+  * [Traffic drops below threshold](#traffic-drops-below-threshold)
+  * [Changing moving average thresholds without restarting the collector](#changing-moving-average-thresholds-without-restarting-the-collector)
 
 
 ### GeoIP
