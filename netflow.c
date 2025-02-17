@@ -367,11 +367,12 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
  * each item (both ipfix_inf_element_iana and ipfix_inf_element_enterprise)
  * in template converted to ipfix_inf_element_enterprise
  */
-static void
+static int
 ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
-	unsigned int field_count)
+	unsigned int field_count, int length)
 {
 	unsigned int i;
+	uint8_t *pstart = *ptr;
 
 	/* copy template header */
 	memcpy(tmpl, *ptr, sizeof(struct ipfix_template_header));
@@ -385,18 +386,31 @@ ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 		ent = (struct ipfix_inf_element_enterprise *)(*ptr);
 		if ((ntohs(ent->id) >> 15) & 1) {
 			/* enterprise */
+			int l = *ptr - pstart
+				+ sizeof(struct ipfix_inf_element_enterprise);
+			if (l > length) {
+				LOG("IPFIX template: packet too short");
+				return 0;
+			}
 			tmpl->elements[i].id = ent->id;
 			tmpl->elements[i].length = ent->length;
 			tmpl->elements[i].number = ent->number;
 			*ptr += sizeof(struct ipfix_inf_element_enterprise);
 		} else {
 			/* iana */
+			int l = *ptr - pstart
+				+ sizeof(struct ipfix_inf_element_iana);
+			if (l > length) {
+				LOG("IPFIX template: packet too short");
+				return 0;
+			}
 			tmpl->elements[i].id = ent->id;
 			tmpl->elements[i].length = ent->length;
 			tmpl->elements[i].number = 0;
 			*ptr += sizeof(struct ipfix_inf_element_iana);
 		}
 	}
+	return 1;
 }
 
 static int
@@ -409,6 +423,11 @@ parse_ipfix_template(struct xe_data *data, struct flow_packet_info *fpi,
 	uint16_t template_id, field_count;
 	struct template_key tkey;
 	size_t template_size;
+
+	if (sizeof(struct ipfix_template_header) > (size_t)length) {
+		LOG("IPFIX template: packet too short");
+		return 0;
+	}
 
 	tmpl_header = (struct ipfix_template_header *)(*ptr);
 	template_id = tmpl_header->template_id;
@@ -424,7 +443,11 @@ parse_ipfix_template(struct xe_data *data, struct flow_packet_info *fpi,
 		+ sizeof(struct ipfix_inf_element_enterprise) * field_count;
 	tmpl = alloca(template_size);
 
-	ipfix_template_convert(tmpl, ptr, field_count);
+	if (!ipfix_template_convert(tmpl, ptr, field_count,
+		length - sizeof(struct ipfix_template_header))) {
+
+		return 0;
+	}
 
 	make_template_key(&tkey, template_id, fpi, 10);
 	tmpl_db = netflow_template_find(&tkey,
