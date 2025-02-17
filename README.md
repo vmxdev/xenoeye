@@ -5,30 +5,28 @@ Lightweight Netflow/IPFIX collector
 
 The documentation is mostly translated automatically using Google translator, so if you see something weird - feel free to let us know.
 
-With this collector and [Netflow](https://en.wikipedia.org/wiki/NetFlow) you can
+With this collector you can
 
-  * See the traffic of IP networks, individual IP addresses or services
-  * Monitor network traffic and quickly respond to bursts
-  * Monitor traffic patterns, packet distribution using different Netflow fields
+  * Monitor traffic of IP networks, individual IP addresses or services
+  * React quickly to traffic spikes or traffic drops below thresholds
+  * Monitor traffic patterns and distribution of network packets using data from Netflow/IPFIX/sFlow
 
 
 ## Key Features
 
-Please read carefully: some items may not be suitable for you
-
-  * The project is in beta state. The collector works for us, but we cannot give any guarantee that it will work for you.
-  * This is not a turnkey business solution, but a collector program and several auxiliary scripts. However, with the collector you can generate almost arbitrary reports, build charts, dashboards in Grafana and run scripts when the traffic exceeds the limits.
+  * The collector was developed for medium and large networks, with different user groups that need different reports. For this purpose, "monitoring objects" are used. A monitoring object can be a network, a set of networks, an autonomous system, a geo-object or arbitrary network traffic that can be extracted from Netflow/IPFIX/sFlow.
+  * Using the collector, you can generate various reports, build charts, dashboards in Grafana, perform some actions when the traffic speed exceeds thresholds or falls below thresholds.
   * We use the collector to monitor our networks. We are using Netflow v9 and IPFIX, so the collector supports them.
   * Netflow v5 and sFlow are also supported.
-  * Unlike many modern collectors, we **don't use** Apache Kafka, Elastic stack or anything like that. The main processing take place inside the collector itself
-  * The documentation contains examples of building simple reports. To build more complex ones, you need at least basic knowledge of SQL
-  * Collector processes data in two ways: aggregates it over periods (for reports and charts), and uses moving averages to quickly respond to bursts
-  * Both methods can be used individually or together. For example, if a moving average detects a threshold being exceeded, you can run a custom script and immediately enable extended statistics collection
-  * Collector is not very demanding on resources. It can process data and build reports even on Orange Pi (analogous to Raspberry Pi) with 4 GB of memory
-  * Collector kernel is written in C
-  * The collector has only been tested under 64-bit Linux (x64, AArch64 and [Elbrus](https://en.wikipedia.org/wiki/Elbrus_2000))
-  * We are using PostgreSQL as a storage for time series. The data aggregated by the selected Netflow fields is exported there. Aggregation occurs within the collector
-  * Not a very large set of Netflow fields is supported out of the box, but you can add almost any field. Fields with types "integer" (various sizes) and "address" (IPv4 and IPv6) are currently supported
+  * The documentation contains examples of building simple reports. To build more complex ones, you need at least basic knowledge of SQL.
+  * The collector uses text configuration files. This allows you to write simple configs manually, and for complex configurations with a large number of objects, you can generate configs using scripts.
+  * The collector processes data in two ways: it aggregates it over periods (fixed-size time windows to produce reports and graphs), and it uses moving averages to quickly react to spikes.
+  * Both methods can be used individually or together. For example, if a moving average detects a threshold being exceeded, you can run a custom script and immediately enable extended statistics collection.
+  * We use moving averages to detect volumetric DoS/DDoS attacks. When thresholds are reached, BGP announcements are created (FlowSpec filtering, rate-limit, redirection to cleaning servers or Blackhole) and users receive a notification in the messenger.
+  * Collector is not very demanding on resources. It can process data and build reports even on Orange Pi (analogous to Raspberry Pi) with 4 GB of memory. On small networks it can run in a VM with one CPU and 1GB of RAM.
+  * The collector has only been tested under 64-bit Linux (x64, AArch64 and [Elbrus](https://en.wikipedia.org/wiki/Elbrus_2000)).
+  * We use PostgreSQL as a storage for time series data. Aggregated data by selected Netflow fields is exported there. The collector can export **not all** data to the DBMS, it can aggregate and export only top-N entities, and aggregate the rest into one row. This is a useful feature for large monitoring objects - you can regulate the amount of data that is written to the DBMS and use cheaper, slower disks.
+  * A basic set of Netflow/IPFIX fields are supported out of the box, but you can add almost any field you need.
   * The project has a very liberal ISC license. We have no plans to make commercial or semi-commercial versions. This means that we cannot make any predictions about the future of the project. But on the other hand:
   * There are no hidden or artificial restrictions
 
@@ -83,6 +81,10 @@ Scaling to multiple cores is described below in the documentation
     * [Traffic classification](EXTRA.md#traffic-classification)
     * [sFlow](EXTRA.md#sflow)
     * [Additional data analysis using sFlow: DNS and SNI](EXTRA.md#additional-data-analysis-using-sflow-dns-and-sni)
+    * [Nested/Hierarchical Monitoring Objects](EXTRA.md#)
+    * [Interfaces classification](EXTRA.md#)
+    * [Traffic drops below threshold](EXTRA.md#)
+    * [Changing moving average thresholds without restarting the collector](EXTRA.md#)
 
   * [Full description of configuration files](CONFIG.md)
     * [Main configuration file `xenoeye.conf`](CONFIG.md#main-configuration-file-xenoeyeconf)

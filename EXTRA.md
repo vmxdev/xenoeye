@@ -6,6 +6,12 @@
   * [xegeoq utility](#xegeoq-utility)
   * [Visualizing GeoIP data and AS names with Grafana](#visualizing-geoip-data-and-as-names-with-grafana)
   * [Traffic classification](#traffic-classification)
+  * [sFlow](#sflow)
+  * [Additional data analysis using sFlow: DNS and SNI](#additional-data-analysis-using-sflow-dns-and-sni)
+  * [Nested/Hierarchical Monitoring Objects](#)
+  * [Interfaces classification](#)
+  * [Traffic drops below threshold]()
+  * [Changing moving average thresholds without restarting the collector](#)
 
 
 ### GeoIP
@@ -594,3 +600,73 @@ A query to the DBMS to obtain domain names and their addresses may look somethin
 ```
 
 To obtain domain names from SNI, the size of the captured packets must be large enough.
+
+
+### Nested/Hierarchical Monitoring Objects
+
+Monitoring objects can be hierarchical/nested. The file system hierarchy is used for this. In the directory where `mo.conf` is located, create a subdirectory and in it the file `mo.conf`, this will be a nested object. Nested monitoring objects are processed starting from the "top" one.
+
+For example, you can create an object of some network, and inside it create a sub-object "udp" with the filter `"proto 17"` - this will be an object with udp-traffic of only this network.
+
+Nested monitoring objects can be useful when there are many objects: they simplify configuration and can be processed more efficiently than a flat list.
+
+
+
+### Interfaces classification
+
+Sometimes network engineers want to account for traffic from only some interfaces and ignore or treat the rest in a special way.
+
+This can be done using filters in the MO, or you can use the "interface classification" mechanism in the collector.
+
+In the `devices.conf` configuration file, in the router section, there are two parameters - "mark" and "skip-unmarked":
+``` json
+	{
+		"ip": "1.2.3.4",
+
+		"mark": [
+			"src ifidx 1000063 or 1000070 or 1000071",
+			"dst ifidx 1000063 or 1000070 or 1000071"
+		],
+		"skip-unmarked": true
+	}
+```
+
+Traffic on ports 1000063, 1000070, 1000071 will be marked as follows: if flow goes through one of the ports (`src ifidx`/`dst ifidx`), virtual field `dev-mark` is set to `1`. If two ports are in the list, `dev-mark` is set to `2`. If it does not go through any of the ports, `dev-mark == 0`.
+
+When `skip-unmarked == true` and `dev-mark == 0`, the flow is discarded and not taken into account.
+
+If you think that traffic with `dev-mark == 2` is abnormal and want to analyze it separately, you can create a separate monitoring object with the filter `"dev-mark 2"`.
+
+
+### Traffic drops below threshold
+
+The collector can use moving averages to track not only traffic spikes, but also drops below a threshold. This can be used to indirectly monitor individual hosts or services (DNS/HTTP, etc.). If a service's traffic has dropped, it's likely that it's in trouble, and it makes sense to notify the user.
+
+In the description of the monitoring object `mo.conf`:
+``` json
+	"mavg": [
+		{
+			"name": "pps",
+			"time": "30",
+			"dump": "5",
+			"fields": ["packets"],
+			"underlimit": [
+					{
+						"name": "level1",
+						"default": [1000],
+						"back2norm-time": 120,
+						"action-script": "/var/lib/xenoeye/scripts/underlimit.sh",
+						"back2norm-script": "/var/lib/xenoeye/scripts/underlimit-over.sh"
+					}
+			]
+		}
+	]
+```
+
+### Changing moving average thresholds without restarting the collector
+
+When the collector receives a -HUP signal, it looks at the modification time of the `mo.conf` files. If the date is different from the initial one, the config is reread. But only the threshold data is applied.
+
+The mechanism can be used both manually and automatically. For example, thresholds can be changed by a script that periodically recalculates and sets new thresholds for anomalies and DoS/DDoS attacks.
+
+Some analyzers use the time of day and day of the week to calculate autothresholds. If your threshold recalculation script also uses this information, thresholds can be changed several times a day.
