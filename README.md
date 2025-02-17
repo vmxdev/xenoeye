@@ -50,6 +50,44 @@ These numbers are best read in a pessimistic mood:
 Scaling to multiple cores is described below in the documentation
 
 
+## LXC container
+
+The v25.02 release comes with an LXC container image [xe2502.tar.xz](https://github.com/vmxdev/xenoeye/releases/download/v25.02-Novokuznetsk/xe2502.tar.xz). This is a **privileged** container and is configured to use the **host network**, use this configuration with extreme caution. The container contains a collector with several pre-configured monitoring objects, PostgreSQL and Grafana.
+
+Brief usage instructions:
+``` sh
+# install lxc
+$ sudo apt install lxc
+
+# unpack the container image
+$ sudo tar Jxf xe2502.tar.xz -C /var/lib/lxc
+
+# run container
+$ sudo lxc-start --name xe2502
+
+# run container shell
+$ sudo lxc-attach --name xe2502
+```
+
+Inside the container, edit the file `/etc/xenoeye/xenoeye.conf`
+
+If you are capturing `*flow` with pcap, add capabilities:
+``` sh
+# setcap "cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+pe" /usr/local/bin/xenoeye
+```
+
+Edit the file `/var/lib/xenoeye/iplists/mynet`, write your networks there (IPv4 and IPv6), and delete unnecessary ones.
+
+Restart the service
+``` sh
+# service xenoeye restart
+```
+
+Navigate your browser to `http://server-address:3000`, Grafana should open. Login/password admin/admin.
+
+Grafana comes with several pre-configured dashboards (Overview, AS/GeoIP, Routers, DoS/DDoS) separately for IPv4 and IPv6 addresses. The documentation below describes how to add other reports and configure moving averages.
+
+
 ## Documentation
 
   * [Step-by-step instructions for installing and configuring the collector](STEP-BY-STEP.md)
