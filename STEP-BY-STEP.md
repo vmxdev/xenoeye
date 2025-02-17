@@ -81,7 +81,7 @@ All default paths can be changed, they are set in the configuration file `xenoey
 
 The collector can receive Netflow in two ways - using traditional socket interface or capture using pcap.
 
-The second way is more suitable for tests. If you have, for example, .pcap files with Netflow traffic, you can play them on the loopback interface using tcpreplay (`tcpreplay -i lo dump.pcap`) and send the data to the collector in this way.
+Sometimes, especially in large networks, several `*flow`-collectors are used and the equipment does not allow exporting `*flow` to another device. In this case, you can feed the collector a mirror/SPAN of `*flow`-traffic, or duplicate it using samplicator-utilities, collector will be able to receive it from the interface using pcap capture.
  
 The "capture" section of the main configuration file `xenoeye.conf` is responsible for capturing Netflow. It lists the sockets on which the collector will listen and pcap interfaces with BPF filters.
  
@@ -141,7 +141,19 @@ The collector uses a simple load balancing model: each entry in the "capture" se
 
 You can run the collector on multiple UDP ports and send Neflow to each port from different routers.
 
+If you capture `*flow` traffic using pcap, you can also distribute the load by specifying different routers in the section:
+
+``` json
+"capture": [
+	{"pcap" : {"interface": "eth0", "filter": "udp and host 1.2.3.4"}},
+	{"pcap" : {"interface": "eth0", "filter": "udp and host 1.2.3.5"}},
+	...
+]
+```
+
 The operating system will distribute worker threads to different CPUs as needed.
+
+This method of load distribution may seem too "manual", many collectors try to load the CPU automatically and evenly. However, with a sharp increase in traffic (for example, during DoS/DDoS attacks), systems with uniform distribution can choke **entirely** and distort the values for all routers. While this setup will only put a lot of stress on some CPUs (which handle traffic from the routers under attack), the rest of the routers will not be affected.
 
 
 ### Sampling rate
