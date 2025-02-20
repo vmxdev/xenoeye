@@ -1,0 +1,14 @@
+[Unit]
+Description=xenoeye
+After=network.target
+
+[Service]
+User=xe
+Group=xe
+Type=simple
+Restart=always
+ExecStart=/usr/local/bin/xenoeye
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target
