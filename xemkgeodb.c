@@ -29,6 +29,26 @@
 #define GEOIP_SIGN_IPAPI "ip_version,start_ip,end_ip,continent,country_code,"\
 	"country,state,city,zip,timezone,latitude,longitude,accuracy"
 
+#define GEOIP_SIGN_RKN_LOC "geoname_id,locale_code,continent_code,"\
+	"continent_name,country_iso_code,country_name,subdivision_1_iso_code,"\
+	"subdivision_1_name,subdivision_2_iso_code,subdivision_2_name,"\
+	"city_name,metro_code,time_zone,is_in_european_union"
+
+#define GEOIP_SIGN_RKN_DATA "network,geoname_id,registered_country_geoname_id,"\
+	"represented_country_geoname_id,is_anonymous_proxy,"\
+	"is_satellite_provider,postal_code,latitude,longitude,accuracy_radius,"\
+	"is_anycast"
+
+struct rkn_loc
+{
+	int id;
+	char continent_code[3];
+	char country_code[3];
+	char country[128];
+	char state[128];
+	char city[128];
+};
+
 static int verbose = 0;
 
 static int
@@ -333,36 +353,16 @@ process_line_ipapi(struct btrie_node_geo *geodb4, size_t *geodb_size4,
 	return 1;
 }
 
-
-static int
-geoip_add_file(struct btrie_node_geo *geodb4, size_t *geodb_size4,
-	struct btrie_node_geo *geodb6, size_t *geodb_size6,
-	const char *path)
+static void
+geoip_add_file_ipapi(const char *path, FILE *f,
+	struct btrie_node_geo *geodb4, size_t *geodb_size4,
+	struct btrie_node_geo *geodb6, size_t *geodb_size6)
 {
-	FILE *f;
 	char line[4096];
 	char *line_ptr;
 	size_t line_num = 2;
 
-	f = fopen(path, "r");
-	if (!f) {
-		LOG("geoip: can't open file '%s': %s", path, strerror(errno));
-		return 0;
-	}
-
-	/* skip first line */
-	fgets(line, sizeof(line), f);
-	if (feof(f)) {
-		LOG("geoip: file '%s' too short", path);
-		return 0;
-	}
-
-	if (strcmp(string_trim(line), GEOIP_SIGN_IPAPI) != 0) {
-		LOG("geoip: file '%s': unknown format", path);
-		goto fail_format;
-	}
-
-	LOG("geoip: loading file '%s'", path);
+	LOG("geoip: loading ipapi file '%s'", path);
 	for (;;) {
 		char err[256];
 
@@ -388,12 +388,284 @@ geoip_add_file(struct btrie_node_geo *geodb4, size_t *geodb_size4,
 		}
 	}
 
-	LOG("geoip: file '%s' added, %lu lines", path, line_num);
+	LOG("geoip: ipapi file '%s' added, %lu lines", path, line_num);
+}
 
-fail_format:
-	fclose(f);
+/* RKN database */
+static int
+process_line_rkn_loc(struct rkn_loc *lc, char *line, char *err)
+{
+	char *lptr = line;
+
+	char id[10];
+	char locale[10];
+	char continent_name[20];
+	char unused[256];
+	size_t i;
+
+	memset(lc, 0, sizeof(struct rkn_loc));
+
+#define CHECK_PARSE_ERROR(X, F)                           \
+	if (X[0] == '\0') {                               \
+		sprintf(err, "Can't parse field '%s'", F);\
+		return 0; }
+
+	csv_next(&lptr, id);
+	CHECK_PARSE_ERROR(id, "geoname_id");
+	lc->id = atoi(id);
+	if (lc->id < 0) {
+		sprintf(err, "incorrect geoid '%s'", id);
+		return 0;
+	}
+
+	csv_next(&lptr, locale);
+	CHECK_PARSE_ERROR(locale, "locale_code");
+
+	csv_next(&lptr, lc->continent_code);
+	CHECK_PARSE_ERROR(lc->continent_code, "continent_code");
+
+	csv_next(&lptr, continent_name);
+	CHECK_PARSE_ERROR(continent_name, "continent_name");
+
+	csv_next(&lptr, lc->country_code);
+	CHECK_PARSE_ERROR(lc->country_code, "country_iso_code");
+
+	csv_next(&lptr, lc->country);
+	CHECK_PARSE_ERROR(lc->country, "country_name");
+
+	csv_next(&lptr, unused); /* subdivision_1_iso_code */
+	csv_next(&lptr, lc->state);
+	csv_next(&lptr, unused); /* subdivision_2_iso_code*/
+	csv_next(&lptr, unused); /* subdivision_2_name */
+
+	csv_next(&lptr, lc->city);
+	CHECK_PARSE_ERROR(lc->city, "city_name");
+#undef CHECK_PARSE_ERROR
+
+	for (i=0; i<strlen(lc->continent_code); i++) {
+		lc->continent_code[i] = tolower(lc->continent_code[i]);
+	}
+
+	for (i=0; i<strlen(lc->country_code); i++) {
+		lc->country_code[i] = tolower(lc->country_code[i]);
+	}
 
 	return 1;
+}
+
+static void
+geoip_add_rkn_loc(const char *path, FILE *f, struct rkn_loc **lcs, size_t *nl)
+{
+	char line[4096];
+	char *line_ptr;
+	size_t line_num = 2;
+
+	LOG("geoip: loading RKN locations file '%s'", path);
+	for (;;) {
+		struct rkn_loc lc;
+		char err[256];
+
+		fgets(line, sizeof(line), f);
+		if (feof(f)) {
+			break;
+		}
+
+		line_ptr = string_trim(line);
+		if (!process_line_rkn_loc(&lc, line_ptr, err)) {
+			LOG("geoip: file '%s', line #%lu: %s", path,
+				line_num, err);
+		} else {
+			/* append new location */
+			struct rkn_loc *tmp = realloc(*lcs,
+				sizeof(struct rkn_loc) * (*nl + 1));
+			if (!tmp) {
+				LOG("realloc() failed: %s", strerror(errno));
+				return;
+			}
+			tmp[*nl] = lc;
+			*lcs = tmp;
+			(*nl)++;
+		}
+		line_num++;
+	}
+
+	LOG("geoip: RKN locations file '%s' loaded, %lu lines", path, line_num);
+}
+
+static int
+process_line_rkn(struct rkn_loc *lc, size_t nlc,
+	struct btrie_node_geo *geodb4, size_t *geodb_size4,
+	struct btrie_node_geo *geodb6, size_t *geodb_size6,
+	char *line, char *err)
+{
+	char *lptr = line;
+	char *slash;
+
+	struct geoip_info g;
+
+	int geoid;
+	char addr[100];
+	char unused[256];
+	char id[10];
+
+	uint32_t ipv4;
+	xe_ip ipv6;
+
+	size_t i;
+	int found = 0;
+	int mask = -1;
+
+	memset(&g, 0, sizeof(g));
+
+	csv_next(&lptr, addr);
+
+	csv_next(&lptr, id);
+	geoid = atoi(id);
+	if (geoid < 0) {
+		sprintf(err, "incorrect geoid '%s'", id);
+		return 0;
+	}
+
+	csv_next(&lptr, unused); /* registered_country_geoname_id */
+	csv_next(&lptr, unused); /* represented_country_geoname_id */
+	csv_next(&lptr, unused); /* is_anonymous_proxy */
+	csv_next(&lptr, unused); /* is_satellite_provider */
+	csv_next(&lptr, g.ZIP);  /* postal_code */
+	csv_next(&lptr, g.LAT);
+	csv_next(&lptr, g.LONG);
+
+	for (i=0; i<nlc; i++) {
+		if (lc[i].id == geoid) {
+			/* found */
+			strcpy(g.CONTINENT, lc->continent_code);
+			strcpy(g.COUNTRY_CODE, lc->country_code);
+			strcpy(g.COUNTRY, lc->country);
+			strcpy(g.STATE, lc->state);
+			strcpy(g.CITY, lc->city);
+			found = 1;
+		}
+	}
+
+	if (!found) {
+		sprintf(err, "unknown geoid '%s'", id);
+		return 0;
+	}
+
+	slash = strchr(addr, '/');
+	if (slash) {
+		*slash = '\0';
+		slash++;
+		mask = atoi(slash);
+	}
+
+	if (inet_pton(AF_INET6, addr, &ipv6) == 1) {
+		if (mask < 0) {
+			mask = 128;
+		}
+		geodb_add6(geodb6, geodb_size6, ipv6, mask, &g);
+	} else {
+		/* IPv4? */
+		if (inet_pton(AF_INET, addr, &ipv4) != 1) {
+			sprintf(err, "Can't parse address '%s'", addr);
+			return 0;
+		}
+		if (mask < 0) {
+			mask = 32;
+		}
+		geodb_add4(geodb4, geodb_size4, ipv4, mask, &g);
+	}
+
+	return 1;
+}
+
+
+static void
+geoip_add_rkn_blocks(const char *path, FILE *f, struct rkn_loc *lc, size_t nlc,
+	struct btrie_node_geo *geodb4, size_t *geodb_size4,
+	struct btrie_node_geo *geodb6, size_t *geodb_size6)
+{
+	char line[4096];
+	char *line_ptr;
+	size_t line_num = 2;
+
+	LOG("geoip: loading RKN file '%s'", path);
+	for (;;) {
+		char err[256];
+
+		fgets(line, sizeof(line), f);
+		if (feof(f)) {
+			break;
+		}
+
+		line_ptr = string_trim(line);
+		if (!process_line_rkn(lc, nlc, geodb4, geodb_size4,
+			geodb6, geodb_size6, line_ptr, err)) {
+
+			LOG("geoip: file '%s', line #%lu: %s", path,
+				line_num, err);
+		}
+
+		line_num++;
+		if (verbose) {
+			if ((line_num % 100000) == 0) {
+				LOG("geoip: file '%s', %lu lines loaded",
+					path, line_num);
+			}
+		}
+	}
+
+	LOG("geoip: RKN file '%s' added, %lu lines", path, line_num);
+}
+
+
+static int
+geoip_add_file(struct rkn_loc **rkn_lc, size_t *n_rkn_lc,
+	struct btrie_node_geo *geodb4, size_t *geodb_size4,
+	struct btrie_node_geo *geodb6, size_t *geodb_size6,
+	const char *path)
+{
+	FILE *f;
+	char line[4096];
+	int ret = 0;
+
+	f = fopen(path, "r");
+	if (!f) {
+		LOG("geoip: can't open file '%s': %s", path, strerror(errno));
+		return 0;
+	}
+
+	/* read first line */
+	fgets(line, sizeof(line), f);
+	if (feof(f)) {
+		LOG("geoip: file '%s' too short", path);
+		goto fail;
+	}
+
+	if (strcmp(string_trim(line), GEOIP_SIGN_IPAPI) == 0) {
+		geoip_add_file_ipapi(path, f, geodb4, geodb_size4,
+			geodb6, geodb_size6);
+	} else if (strcmp(string_trim(line), GEOIP_SIGN_RKN_LOC) == 0) {
+		/* RKN locations */
+		geoip_add_rkn_loc(path, f, rkn_lc, n_rkn_lc);
+	} else if (strcmp(string_trim(line), GEOIP_SIGN_RKN_DATA) == 0) {
+		/* RKN blocks */
+		if (!rkn_lc) {
+			LOG("geoip: RKN location file must be before "
+				"the blocks file");
+			goto fail;
+		}
+
+		geoip_add_rkn_blocks(path, f, *rkn_lc, *n_rkn_lc,
+			geodb4, geodb_size4, geodb6, geodb_size6);
+	} else {
+		LOG("geoip: file '%s': unknown format", path);
+	}
+
+	ret = 1;
+fail:
+	fclose(f);
+
+	return ret;
 }
 
 static int
@@ -560,6 +832,10 @@ main(int argc, char *argv[])
 	size_t db4_size, db6_size;
 	char path4[PATH_MAX + 32], path6[PATH_MAX + 32];
 
+	/* RKN db locations */
+	struct rkn_loc *rkn_lc = NULL;
+	size_t n_rkn_lc = 0;
+
 	openlog(NULL, LOG_PERROR, LOG_USER);
 
 	while ((opt = getopt(argc, argv, "ho:s:t:v")) != -1) {
@@ -632,8 +908,8 @@ main(int argc, char *argv[])
 
 		filename = argv[i];
 		if (strcmp(type, "geo") == 0) {
-			geoip_add_file(db4, &db4_size, db6, &db6_size,
-				filename);
+			geoip_add_file(&rkn_lc, &n_rkn_lc,
+				db4, &db4_size, db6, &db6_size, filename);
 		} else {
 			as_add_file(db4, &db4_size, db6, &db6_size, filename);
 		}
@@ -649,6 +925,8 @@ main(int argc, char *argv[])
 		truncate(path4, db4_size * sizeof(struct btrie_node_as));
 		truncate(path6, db6_size * sizeof(struct btrie_node_as));
 	}
+
+	free(rkn_lc);
 
 	return EXIT_SUCCESS;
 }
