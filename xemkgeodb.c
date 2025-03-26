@@ -39,6 +39,9 @@
 	"is_satellite_provider,postal_code,latitude,longitude,accuracy_radius,"\
 	"is_anycast"
 
+#define AS_SIGN_RKN "network,autonomous_system_number,"\
+	"autonomous_system_organization"
+
 struct rkn_loc
 {
 	int id;
@@ -715,6 +718,97 @@ process_line_as(struct btrie_node_as *asdb4, size_t *asdb_size4,
 	return 1;
 }
 
+static int
+process_line_as_rkn(struct btrie_node_as *asdb4, size_t *asdb_size4,
+	struct btrie_node_as *asdb6, size_t *asdb_size6,
+	char *line, char *err)
+{
+	char *lptr = line;
+
+	struct as_info a;
+	char addr[100];
+	char asn[10];
+	struct in_addr ip;
+	xe_ip ipv6;
+
+	char *slash;
+	int mask;
+
+	memset(&a, 0, sizeof(a));
+
+	csv_next(&lptr, addr);
+
+	slash = strchr(addr, '/');
+	if (!slash) {
+		sprintf(err, "net '%s' has not mask", addr);
+		return 0;
+	}
+	*slash = '\0';
+	slash++;
+	mask = atoi(slash);
+	if (mask <= 0) {
+		sprintf(err, "inkorrect mask '%s'", slash);
+		return 0;
+	}
+
+	csv_next(&lptr, asn);
+	csv_next(&lptr, a.asd);
+
+	a.asn = htobe32(atoi(asn));
+
+	if (inet_pton(AF_INET6, addr, &ipv6) == 0) {
+		/* can't parse as IPv6, so it's probably IPv4 */
+		if (inet_aton(addr, &ip) == 0) {
+			sprintf(err, "can't parse address '%s'", addr);
+			return 0;
+		}
+		asdb_add4(asdb4, asdb_size4, ip.s_addr, mask, &a);
+	} else {
+		/* IPv6 */
+		asdb_add6(asdb6, asdb_size6, ipv6, mask, &a);
+	}
+
+	return 1;
+}
+
+static int
+as_add_file_rkn(FILE *f, const char *path,
+	struct btrie_node_as *asdb4, size_t *asdb_size4,
+	struct btrie_node_as *asdb6, size_t *asdb_size6)
+{
+	char line[4096];
+	size_t line_num = 2;
+	char *line_ptr;
+
+	for (;;) {
+		char err[256];
+		fgets(line, sizeof(line), f);
+		if (feof(f)) {
+			break;
+		}
+
+		line_ptr = string_trim(line);
+		if (!process_line_as_rkn(asdb4, asdb_size4,
+			asdb6, asdb_size6,
+			line_ptr, err)) {
+
+			LOG("as: RKN file '%s', line #%lu: %s",
+				path, line_num, err);
+		}
+
+		line_num++;
+		if (verbose) {
+			if ((line_num % 100000) == 0) {
+				LOG("as: RKN file '%s', %lu lines loaded",
+					path, line_num);
+			}
+		}
+
+	}
+	LOG("as: RKN file '%s' added, %lu lines", path, line_num);
+	fclose(f);
+	return 1;
+}
 
 static int
 as_add_file(struct btrie_node_as *asdb4, size_t *asdb_size4,
@@ -725,6 +819,7 @@ as_add_file(struct btrie_node_as *asdb4, size_t *asdb_size4,
 	char line[4096];
 	size_t line_num = 1;
 	char *line_ptr;
+	int ret = 0;
 
 	f = fopen(path, "r");
 	if (!f) {
@@ -733,12 +828,20 @@ as_add_file(struct btrie_node_as *asdb4, size_t *asdb_size4,
 	}
 
 	LOG("as: loading file '%s'", path);
+	/* read first line */
+	fgets(line, sizeof(line), f);
+	if (feof(f)) {
+		LOG("as: file '%s' too short", path);
+		goto fail;
+	}
+
+	if (strcmp(string_trim(line), AS_SIGN_RKN) == 0) {
+		return as_add_file_rkn(f, path, asdb4, asdb_size4,
+			asdb6, asdb_size6);
+	}
+
 	for (;;) {
 		char err[256];
-		fgets(line, sizeof(line), f);
-		if (feof(f)) {
-			break;
-		}
 
 		line_ptr = string_trim(line);
 		if (!process_line_as(asdb4, asdb_size4,
@@ -756,13 +859,20 @@ as_add_file(struct btrie_node_as *asdb4, size_t *asdb_size4,
 					path, line_num);
 			}
 		}
+
+		fgets(line, sizeof(line), f);
+		if (feof(f)) {
+			break;
+		}
 	}
 
 	LOG("as: file '%s' added, %lu lines", path, line_num);
+	ret = 1;
 
+fail:
 	fclose(f);
 
-	return 1;
+	return ret;
 }
 
 
