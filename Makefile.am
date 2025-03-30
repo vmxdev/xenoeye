@@ -22,7 +22,7 @@ xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	ip-btrie.h \
 	geoip.h geoip.c
 
-xemkgeodb_SOURCES = xemkgeodb.c geoip.h ip-btrie.h
+xemkgeodb_SOURCES = xemkgeodb.c geoip.h ip-btrie.h tkvdb/tkvdb.c tkvdb/tkvdb.h
 
 xegeoq_SOURCES = xegeoq.c geoip.h ip-btrie.h
 
