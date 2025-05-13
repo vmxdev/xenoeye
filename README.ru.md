@@ -84,6 +84,11 @@ $ sudo lxc-attach --name xe2502
 В Графане преднастроено несколько дашбордов (Overview, AS/GeoIP, Routers, DoS/DDoS) отдельно для IPv4 и IPv6 адресов. Ниже в документации написано, как добавлять другие отчеты и настраивать скользящие средние.
 
 
+## Proxmox-шаблон
+
+Также доступен шаблон для Proxmox: [proxmox-xe2502.tar.xz](https://github.com/vmxdev/xenoeye/releases/download/v25.02-Novokuznetsk/proxmox-xe2502.tar.xz)
+
+
 ## Документация
 
   * [Пошаговая инструкция по установке и настойке](STEP-BY-STEP.ru.md)

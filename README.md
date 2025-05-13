@@ -88,6 +88,11 @@ Navigate your browser to `http://server-address:3000`, Grafana should open. Logi
 Grafana comes with several pre-configured dashboards (Overview, AS/GeoIP, Routers, DoS/DDoS) separately for IPv4 and IPv6 addresses. The documentation below describes how to add other reports and configure moving averages.
 
 
+## Proxmox-template
+
+A template for Proxmox is also available: [proxmox-xe2502.tar.xz](https://github.com/vmxdev/xenoeye/releases/download/v25.02-Novokuznetsk/proxmox-xe2502.tar.xz)
+
+
 ## Documentation
 
   * [Step-by-step instructions for installing and configuring the collector](STEP-BY-STEP.md)
