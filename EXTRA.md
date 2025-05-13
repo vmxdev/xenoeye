@@ -20,11 +20,11 @@ A quick general note: despite the fact that geo-information is often used for va
 Geo-bases are not always accurate, they do not cover all addresses, and network attacks often use fake IP addresses.
 Use GeoIP with reasonable caution.
 
-The collector is designed to use GeoIP databases in the https://ipapi.is/geolocation.html format
+The collector is designed to use GeoIP databases in the format https://ipapi.is/geolocation.html or GeoIP databases of RKN (MaxMind-like databases)
 
 For GeoIP to work, you need to download this data, convert it into an internal format and place it in a special directory for the collector.
 
-How to do this, step by step:
+How to do this, step by step for ipapi:
 
 Receive and unpack CSV data files:
 
@@ -43,6 +43,12 @@ Build databases in internal format from CSV files. To do this, use the `xemkgeod
 $ mkdir geodb
 $ ./xemkgeodb -o geodb -v -t geo geo/geolocationDatabaseIPv4.csv geo/geolocationDatabaseIPv6.csv
 ```
+
+For RKN databases:
+``` sh
+$ ./xemkgeodb -o geodb -v -t geo RU-GeoIP-City-Locations-en.csv RU-GeoIP-City-Blocks-IPv4.csv RU-GeoIP-City-Blocks-IPv6.csv
+```
+The order of the files in the command line is important! The first file should be with Locations, then IPv4 and IPv6, in any order.
 
 After this, the files `geo4.db` and `geo6.db` should appear in the `geodb` directory.
 
@@ -200,9 +206,14 @@ Convert to internal format:
 $ ./xemkgeodb -o geodb -t as geo/asn-ipv4.csv geo/asn-ipv6.csv
 ```
 
+For RKN databases:
+``` sh
+$ ./xemkgeodb -o geodb -v -t as RU-GeoIP-ASN-Blocks-IPv4.csv RU-GeoIP-ASN-Blocks-IPv6.csv
+```
+
 If everything went without errors, copy the databases to the collector directory:
 ``` sh
-$ cp geodb/as* /var/lib/xenoeye/geoip/
+$ mv geodb/as* /var/lib/xenoeye/geoip/
 ```
 
 After restarting the collector (or sending the -HUP signal to the collector process), the database can be used.

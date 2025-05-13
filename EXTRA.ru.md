@@ -20,11 +20,11 @@
 Гео-базы не всегда точны, они не покрывают все адреса, при сетевых атаках часто используют поддельные IP адреса.
 Используйте GeoIP с разумной осторожностью.
 
-Коллектор рассчитан на использоание GeoIP-баз в формате https://ipapi.is/geolocation.html
+Коллектор рассчитан на использоание GeoIP-баз в формате https://ipapi.is/geolocation.html или на GeoIP-базы РКН (MaxMind-подобные базы).
 
 Для работы GeoIP нужно скачать эти данные, сконвертировать их во внутренний формат и и поместить в специальный каталог для коллектора.
 
-Как это сделать, по пунктам:
+Как это сделать, по пунктам для ipapi:
 
 Получаем и распаковываем CSV-файлы с данными:
 
@@ -43,6 +43,14 @@ $ cd ..
 $ mkdir geodb
 $ ./xemkgeodb -o geodb -v -t geo geo/geolocationDatabaseIPv4.csv geo/geolocationDatabaseIPv6.csv
 ```
+
+Для баз РКН:
+
+``` sh
+$ ./xemkgeodb -o geodb -v -t geo RU-GeoIP-City-Locations-en.csv RU-GeoIP-City-Blocks-IPv4.csv RU-GeoIP-City-Blocks-IPv6.csv
+```
+Порядок файлов в командной строке важен! Первым должен идти файл с Locations, потом уже IPv4 и IPv6, они в произвольном порядке.
+
 
 После этого в каталоге `geodb` должны появиться файлы `geo4.db` и `geo6.db`.
 
@@ -201,9 +209,14 @@ $ cd ..
 $ ./xemkgeodb -o geodb -t as geo/asn-ipv4.csv geo/asn-ipv6.csv
 ```
 
+Для баз РКН:
+``` sh
+$ ./xemkgeodb -o geodb -v -t as RU-GeoIP-ASN-Blocks-IPv4.csv RU-GeoIP-ASN-Blocks-IPv6.csv
+```
+
 Если все прошло без ошибок, скопировать базы в каталог коллектора:
 ``` sh
-$ cp geodb/as* /var/lib/xenoeye/geoip/
+$ mv geodb/as* /var/lib/xenoeye/geoip/
 ```
 
 После перезапуска коллектора (или если послать процессу коллектора сигнал -HUP), базой можно будет пользоваться.
