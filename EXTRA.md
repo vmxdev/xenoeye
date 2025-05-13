@@ -52,7 +52,7 @@ You need to place these files in a special collector directory. It is set in the
 ```
 
 ``` sh
-$ cp geodb/geo* /var/lib/xenoeye/geoip/
+$ mv geodb/geo* /var/lib/xenoeye/geoip/
 ```
 
 When the collector is restarted (or if a `-HUP` signal is sent to the collector process), it will load these databases and the GeoIP functions will begin to work.
@@ -80,12 +80,12 @@ For example, in order to create a monitoring object that will contain traffic en
 `ingress_ru/mo.conf`:
 ``` 
 {
-	"filter": "dst host our-net and country(src host) 'ru'"
+	"filter": "dst host our-net and country_code(src host) 'ru'"
 	/* ... */
 }
 ```
 
-The collector will convert the `country(src host)` of each flow into a two-letter country code and compare it with `ru`
+The collector will convert the `country_code(src host)` of each flow into a two-letter country code and compare it with `ru`
 
 In order to export geo-information to a DBMS, you need to use the function from the list above as a field.
 

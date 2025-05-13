@@ -53,7 +53,7 @@ $ ./xemkgeodb -o geodb -v -t geo geo/geolocationDatabaseIPv4.csv geo/geolocation
 ```
 
 ``` sh
-$ cp geodb/geo* /var/lib/xenoeye/geoip/
+$ mv geodb/geo* /var/lib/xenoeye/geoip/
 ```
 
 При перезапуске коллектора (или если послать процессу коллектора сигнал `-HUP`) он загрузит эти базы данных и начнут работать функции GeoIP.
@@ -81,12 +81,12 @@ $ cp geodb/geo* /var/lib/xenoeye/geoip/
 `ingress_ru/mo.conf`:
 ``` 
 {
-	"filter": "dst host our-net and country(src host) 'ru'"
+	"filter": "dst host our-net and country_code(src host) 'ru'"
 	/* ... */
 }
 ```
 
-Коллектор будет преобразовывать `country(src host)` каждого флова в двухбуквенный код страны и сравнивать его с `ru`
+Коллектор будет преобразовывать `country_code(src host)` каждого флова в двухбуквенный код страны и сравнивать его с `ru`
 
 Для того, чтобы экспортировать гео-информацию в СУБД, нужно в качестве поля использовать функцию из списка выше.
 
