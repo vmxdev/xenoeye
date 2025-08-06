@@ -636,6 +636,7 @@ geoip_add_file(tkvdb_tr *rkn_lc,
 {
 	FILE *f;
 	char line[4096];
+	char *trimmed_line;
 	int ret = 0;
 
 	f = fopen(path, "r");
@@ -651,13 +652,15 @@ geoip_add_file(tkvdb_tr *rkn_lc,
 		goto fail;
 	}
 
-	if (strcmp(string_trim(line), GEOIP_SIGN_IPAPI) == 0) {
+	trimmed_line = string_trim(line);
+	if (strstr(trimmed_line, GEOIP_SIGN_IPAPI) == trimmed_line) {
+		/* started with GEOIP_SIGN_IPAPI */
 		geoip_add_file_ipapi(path, f, geodb4, geodb_size4,
 			geodb6, geodb_size6);
-	} else if (strcmp(string_trim(line), GEOIP_SIGN_RKN_LOC) == 0) {
+	} else if (strcmp(trimmed_line, GEOIP_SIGN_RKN_LOC) == 0) {
 		/* RKN locations */
 		geoip_add_rkn_loc(path, f, rkn_lc);
-	} else if (strcmp(string_trim(line), GEOIP_SIGN_RKN_DATA) == 0) {
+	} else if (strcmp(trimmed_line, GEOIP_SIGN_RKN_DATA) == 0) {
 		/* RKN blocks */
 		if (!rkn_lc) {
 			LOG("geoip: RKN location file must be before "
