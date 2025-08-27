@@ -12,7 +12,7 @@
   * [Interfaces classification](#interfaces-classification)
   * [Traffic drops below threshold](#traffic-drops-below-threshold)
   * [Changing moving average thresholds without restarting the collector](#changing-moving-average-thresholds-without-restarting-the-collector)
-  * [Exporting data to ClickHouse](#)
+  * [Exporting data to ClickHouse](#exporting-data-to-clickhouse)
 
 
 ### GeoIP
