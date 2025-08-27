@@ -208,13 +208,13 @@ fwm_config(struct aajson *a, aajson_val *value,
 
 static int
 fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
-	const char *exp_dir)
+	const char *exp_dir, enum DB_TYPE db_type, const char *ch_codec)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
 	FILE *f;
 	time_t t;
-	char path[PATH_MAX * 2];
+	char path[PATH_MAX * 3];
 	size_t i;
 	int first_field, first_line;
 	int n;
@@ -250,7 +250,15 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 
 	/* generate CREATE TABLE statement */
 	fprintf(f, "create table if not exists \"%s\" (\n", table_name);
-	fprintf(f, "  time TIMESTAMPTZ,\n");
+	if (db_type == DB_PG) {
+		fprintf(f, "  time TIMESTAMPTZ,\n");
+	} else {
+		fprintf(f, "  time DateTime");
+		if (*ch_codec) {
+			fprintf(f, "  codec(%s)", ch_codec);
+		}
+		fprintf(f, ",\n");
+	}
 
 	first_field = 1;
 	for (i=0; i<fwm->fieldset.n; i++) {
@@ -262,23 +270,45 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 			first_field = 0;
 		}
 
-		if ((fld->type == FILTER_BASIC_ADDR4)
-			|| (fld->type == FILTER_BASIC_ADDR6)) {
+		if (db_type == DB_PG) {
+			if ((fld->type == FILTER_BASIC_ADDR4)
+				|| (fld->type == FILTER_BASIC_ADDR6)) {
 
-			fprintf(f, "  %s INET", fld->sql_name);
-		} else if (fld->type == FILTER_BASIC_STRING) {
-			fprintf(f, "  %s TEXT", fld->sql_name);
+				fprintf(f, "  %s INET", fld->sql_name);
+			} else if (fld->type == FILTER_BASIC_STRING) {
+				fprintf(f, "  %s TEXT", fld->sql_name);
+			} else {
+				fprintf(f, "  %s BIGINT", fld->sql_name);
+			}
 		} else {
-			fprintf(f, "  %s BIGINT", fld->sql_name);
+			if (fld->type == FILTER_BASIC_ADDR4) {
+				fprintf(f, "  %s Nullable(IPv4)", fld->sql_name);
+			} else if (fld->type == FILTER_BASIC_ADDR6) {
+				fprintf(f, "  %s Nullable(IPv6)", fld->sql_name);
+			} else if (fld->type == FILTER_BASIC_STRING) {
+				fprintf(f, "  %s Nullable(String)", fld->sql_name);
+			} else {
+				fprintf(f, "  %s UInt64", fld->sql_name);
+			}
+
+			if (*ch_codec) {
+				fprintf(f, "  codec(%s)", ch_codec);
+			}
 		}
 	}
-	fprintf(f, ");\n\n");
+	if (db_type == DB_PG) {
+		fprintf(f, ");\n\n");
+	} else {
+		fprintf(f, ") ENGINE = MergeTree() primary key time;\n\n");
+	}
 
 	/* index */
-	if (!fwm->dont_create_index) {
-		fprintf(f, "create index if not exists "
-			"\"%s_idx\" on \"%s\"(time);\n\n",
-			table_name, table_name);
+	if (db_type == DB_PG) {
+		if (!fwm->dont_create_index) {
+			fprintf(f, "create index if not exists "
+				"\"%s_idx\" on \"%s\"(time);\n\n",
+				table_name, table_name);
+		}
 	}
 
 	n = 0;
@@ -292,11 +322,20 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 		uint8_t data_mut[512];
 
 		if (!first_line) {
-			fprintf(f, ",\n");
+			fprintf(f, ",");
+			if (db_type == DB_PG) {
+				fprintf(f, "\n");
+			}
 		} else {
 			first_line = 0;
 		}
-		fprintf(f, "  ( to_timestamp(%llu), ", (long long unsigned)t);
+		if (db_type == DB_PG) {
+			fprintf(f, "  ( to_timestamp(%llu), ",
+				(long long unsigned)t);
+		} else {
+			fprintf(f, "  ( fromUnixTimestamp(%llu), ",
+				(long long unsigned)t);
+		}
 		first_field = 1;
 		/* parse key */
 		for (i=0; i<fwm->fieldset.n; i++) {
@@ -388,8 +427,14 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 		}
 		/* print others */
 		fprintf(f, "insert into \"%s\" ", table_name);
-		fprintf(f, "values ( to_timestamp(%llu), ",
-			(long long unsigned)t);
+
+		if (db_type == DB_PG) {
+			fprintf(f, "values ( to_timestamp(%llu), ",
+				(long long unsigned)t);
+		} else {
+			fprintf(f, "values ( fromUnixTimestamp(%llu), ",
+				(long long unsigned)t);
+		}
 
 		first_field = 1;
 		j = 0;
@@ -428,7 +473,8 @@ cursor_fail:
 
 static int
 fwm_sort_and_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
-	const char *exp_dir, int *is_not_empty)
+	const char *exp_dir, int *is_not_empty, enum DB_TYPE db_type,
+	const char *ch_codec)
 {
 	int ret = 0;
 	tkvdb_cursor *c;
@@ -507,7 +553,8 @@ fwm_sort_and_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 		}
 	} while (c->next(c) == TKVDB_OK);
 
-	fwm_dump(fwm, tr_merge, mo_name, exp_dir);
+	fwm_dump(fwm, tr_merge, mo_name, exp_dir, db_type, ch_codec);
+
 	tr_merge->free(tr_merge);
 
 	ret = 1;
@@ -578,8 +625,8 @@ empty:
 }
 
 static int
-fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
-	const char *exp_dir, int *is_not_empty)
+fwm_merge_and_dump(struct xe_data *globl, struct mo_fwm *fwm,
+	const char *mo_name, int *is_not_empty)
 {
 	size_t i;
 	tkvdb_tr *tr_merge;
@@ -593,7 +640,7 @@ fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 	tr_merge->begin(tr_merge);
 
 	/* merge data from all threads */
-	for (i=0; i<nthreads; i++) {
+	for (i=0; i<globl->nthreads; i++) {
 		tkvdb_tr *tr;
 
 		tr = atomic_load_explicit(&fwm->thread_data[i].tr,
@@ -613,7 +660,8 @@ fwm_merge_and_dump(struct mo_fwm *fwm, size_t nthreads, const char *mo_name,
 		fwm_merge_tr(fwm, tr_merge, tr);
 	}
 
-	fwm_sort_and_dump(fwm, tr_merge, mo_name, exp_dir, is_not_empty);
+	fwm_sort_and_dump(fwm, tr_merge, mo_name, globl->exp_dir, is_not_empty,
+		globl->db_type, globl->ch_codec);
 
 	tr_merge->free(tr_merge);
 
@@ -633,8 +681,7 @@ fwm_merge_rec(struct xe_data *globl, struct monit_object *mos, size_t n_mo,
 
 			if ((fwm->last_export / fwm->time) != (t / fwm->time)) {
 				/* time to export */
-				if (fwm_merge_and_dump(fwm, globl->nthreads,
-					mo->name, globl->exp_dir,
+				if (fwm_merge_and_dump(globl, fwm, mo->name,
 					is_not_empty)) {
 
 					fwm->last_export = t;

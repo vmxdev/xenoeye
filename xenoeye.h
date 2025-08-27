@@ -11,6 +11,7 @@
 #include "monit-objects.h"
 
 /*#define FLOWS_CNT*/
+#define CLICKHOUSE_CODEC_MAXSIZE 16
 
 struct flow_info;
 struct filter_expr;
@@ -25,6 +26,12 @@ enum FLOW_TYPE
 {
 	FLOW_TYPE_NETFLOW,
 	FLOW_TYPE_SFLOW
+};
+
+enum DB_TYPE
+{
+	DB_PG,
+	DB_CH
 };
 
 struct capture
@@ -103,6 +110,10 @@ struct xe_data
 
 	/* path to DB export script */
 	char db_exporter_path[PATH_MAX];
+
+	/* type of DBMS */
+	enum DB_TYPE db_type;
+	char ch_codec[CLICKHOUSE_CODEC_MAXSIZE];
 
 	/* notify geoip thread about reload */
 	atomic_int reload_geoip;

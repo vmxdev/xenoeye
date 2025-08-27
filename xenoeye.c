@@ -310,6 +310,22 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		strcpy(data->db_exporter_path, value->str);
 	}
 
+	/* database type */
+	if (STRCMP(a, 1, "db-type") == 0) {
+		if (strcmp(value->str, "pg") == 0) {
+			data->db_type = DB_PG;
+		} else if (strcmp(value->str, "ch") == 0) {
+			data->db_type = DB_CH;
+		} else {
+			LOG("Unknown database type '%s'", value->str);
+			return 0;
+		}
+	}
+
+	/* clickhouse codec */
+	if (STRCMP(a, 1, "ch-codec") == 0) {
+		strcpy(data->ch_codec, value->str);
+	}
 
 	if (a->path_stack_pos < 2) {
 		return 1;
@@ -422,6 +438,9 @@ main(int argc, char *argv[])
 
 	/* reload geoip/as db at start */
 	atomic_init(&data.reload_geoip, 1);
+
+	/* default db type */
+	data.db_type = DB_PG;
 
 	if (!config_parse(&data, conffile ? conffile : DEFAULT_CONFIG_FILE)) {
 		return EXIT_FAILURE;
