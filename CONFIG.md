@@ -1,7 +1,7 @@
 # Full description of configuration files
 
   * [Main configuration file `xenoeye.conf`](#main-configuration-file-xenoeyeconf)
-  * [Device configuration (sampling rate and interface classification) `devices.conf`](#)
+  * [Device configuration (sampling rate and interface classification) `devices.conf`](#device-configuration-sampling-rate-and-interface-classification-devicesconf)
   * [Description of the monitoring object `mo.conf`](#description-of-the-monitoring-object-moconf)
   * [Files with thresholds](#files-with-thresholds)
   * [IP Lists](#ip-lists)

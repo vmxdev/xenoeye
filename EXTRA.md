@@ -12,6 +12,7 @@
   * [Interfaces classification](#interfaces-classification)
   * [Traffic drops below threshold](#traffic-drops-below-threshold)
   * [Changing moving average thresholds without restarting the collector](#changing-moving-average-thresholds-without-restarting-the-collector)
+  * [Exporting data to ClickHouse](#)
 
 
 ### GeoIP
@@ -681,3 +682,12 @@ When the collector receives a -HUP signal, it looks at the modification time of 
 The mechanism can be used both manually and automatically. For example, thresholds can be changed by a script that periodically recalculates and sets new thresholds for anomalies and DoS/DDoS attacks.
 
 Some analyzers use the time of day and day of the week to calculate autothresholds. If your threshold recalculation script also uses this information, thresholds can be changed several times a day.
+
+
+### Exporting data to ClickHouse
+
+To export data to ClickHouse, edit the `xenoeye.conf` configuration file.
+
+If the `"db-type": "ch"` in config, the collector will generate data as SQL scripts for ClickHouse.
+
+Change the database name in the `/var/lib/xenoeye/scripts/xe-dbexport-ch.sh` script if necessary (the database named `xe` is specified there) and restart the collector.

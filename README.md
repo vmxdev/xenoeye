@@ -129,10 +129,11 @@ A template for Proxmox is also available: [proxmox-xe2502.tar.xz](https://github
     * [Interfaces classification](EXTRA.md#interfaces-classification)
     * [Traffic drops below threshold](EXTRA.md#traffic-drops-below-threshold)
     * [Changing moving average thresholds without restarting the collector](EXTRA.md#changing-moving-average-thresholds-without-restarting-the-collector)
+    * [Exporting data to ClickHouse](EXTRA.md#)
 
   * [Full description of configuration files](CONFIG.md)
     * [Main configuration file `xenoeye.conf`](CONFIG.md#main-configuration-file-xenoeyeconf)
-    * [Setting the sampling rates `devices.conf`](CONFIG.md#setting-the-sampling-rates-devicesconf)
+    * [Device configuration (sampling rate and interface classification) `devices.conf`](CONFIG.md#device-configuration-sampling-rate-and-interface-classification-devicesconf)
     * [Description of the monitoring object `mo.conf`](CONFIG.md#description-of-the-monitoring-object-moconf)
     * [Files with thresholds](CONFIG.md#files-with-thresholds)
     * [IP Lists](CONFIG.md#ip-lists)
