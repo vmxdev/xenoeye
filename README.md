@@ -1,5 +1,5 @@
 # xenoeye
-Lightweight Netflow/IPFIX collector
+Lightweight Netflow/IPFIX/sFlow collector and analyzer
 
 [`README.ru.md`](README.ru.md) - документация на русском
 
@@ -26,6 +26,7 @@ With this collector you can
   * Collector is not very demanding on resources. It can process data and build reports even on Orange Pi (analogous to Raspberry Pi) with 4 GB of memory. On small networks it can run in a VM with one CPU and 1GB of RAM.
   * The collector has only been tested under 64-bit Linux (x64, AArch64 and [Elbrus](https://en.wikipedia.org/wiki/Elbrus_2000)).
   * We use PostgreSQL as a storage for time series data. Aggregated data by selected Netflow fields is exported there. The collector can export **not all** data to the DBMS, it can aggregate and export only top-N entities, and aggregate the rest into one row. This is a useful feature for large monitoring objects - you can regulate the amount of data that is written to the DBMS and use cheaper, slower disks.
+  * In addition to PostgreSQL, the collector has experimental support for storing data in ClickHouse
   * A basic set of Netflow/IPFIX fields are supported out of the box, but you can add almost any field you need.
   * The project has a very liberal ISC license. We have no plans to make commercial or semi-commercial versions. This means that we cannot make any predictions about the future of the project. But on the other hand:
   * There are no hidden or artificial restrictions

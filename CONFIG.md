@@ -1,7 +1,7 @@
 # Full description of configuration files
 
   * [Main configuration file `xenoeye.conf`](#main-configuration-file-xenoeyeconf)
-  * [Setting the sampling rates `devices.conf`](#setting-the-sampling-rates-devicesconf)
+  * [Device configuration (sampling rate and interface classification) `devices.conf`](#)
   * [Description of the monitoring object `mo.conf`](#description-of-the-monitoring-object-moconf)
   * [Files with thresholds](#files-with-thresholds)
   * [IP Lists](#ip-lists)
@@ -44,7 +44,15 @@ The file consists of the following sections:
 
 	"devices": "/etc/xenoeye/devices.conf",
 
-	"mo-dir": "/var/lib/xenoeye/mo"
+	"mo-dir": "/var/lib/xenoeye/mo",
+
+	"geodb": "/var/lib/xenoeye/geoip",
+
+	"db-type": "pg",
+
+	"db-export": "/var/lib/xenoeye/scripts/xe-dbexport-pg.sh",
+
+	"ch-codec": ""
 }
 ```
 
@@ -98,17 +106,48 @@ Point to a file with a sampling frequency and a directory with monitoring object
 Path to GeoIP/AS databases, "`/var/lib/xenoeye/geoip/`" by default
 
 
-### Setting the sampling rates `devices.conf`
+#### `db-type` key
 
-The collector (at least for now) does not read the sample rate data from the option template. To set the frequency, you need to write it to the `devices.conf` file.
+The type of database to which the data will be exported. Acceptable values are `"pg"` for export to PostgreSQL and `"ch"` for ClickHouse. By default, `"db-type": "pg"`
+
+
+#### `db-export` key
+
+Path to the script that runs to export data to the database.
+
+The collector comes with two scripts:
+  * `/var/lib/xenoeye/scripts/xe-dbexport-pg.sh` - for export to PostgreSQL
+  * `/var/lib/xenoeye/scripts/xe-dbexport-ch.sh` - for export to ClickHouse
+
+
+#### `ch-codec` key
+
+When exporting data to ClickHouse, this value will be used when creating tables. For example, if you specify `"ch-codec": "ZSTD(20)"`, then the fields in the tables will be created with the `CODEC(ZSTD(20))` specifier.
+
+For more information about codecs, see the ClickHouse documentation: [https://clickhouse.com/docs/data-compression/compression-in-clickhouse](https://clickhouse.com/docs/data-compression/compression-in-clickhouse)
+
+The default is `"ch-codec": ""`, table fields are created without explicitly specifying the codec.
+
+
+### Device configuration (sampling rate and interface classification) `devices.conf`
+
+The `devices.conf` file is a file describing the properties of individual devices.
 
 File example:
+
 ```
 [
 	{
 		"ip": "127.0.0.1",
 		"id": 0,
-		"sampling-rate": 1
+
+		"sampling-rate": 1,
+
+		"mark": [
+			"src ifidx 1000010 or 1000011 or 1000015",
+			"dst ifidx 1000010 or 1000011 or 1000015"
+		],
+		"skip-unmarked": true
 	},
 	{
 		"ip": "1.2.3.4",
@@ -120,7 +159,42 @@ File example:
 
 `ip` - device address, `id` - device identifier. If you enable debug flow printing, then the IP, ID, and sample rate of the device will be printed at the end of each flow.
 
+
+#### Setting the sampling rate
+
+The collector (at least for now) does not read the sample rate data from the option template for Netflow v9 and IPFIX. To set the frequency, you need to write it to the `devices.conf` file.
+
+```
+[
+	{
+		"ip": "127.0.0.1",
+		"id": 0,
+
+		"sampling-rate": 1
+	}
+	/* ... */
+]
+```
+
 The default sampling rate is 1.
+
+
+#### Interfaces classification
+
+The `devices.conf` file can also specify traffic marking and decide that some flows (usually flows from certain interfaces) should not be processed further in the system.
+
+```
+	{
+		"ip": "1.2.3.4",
+
+		"mark": [
+			"src ifidx 1000010 or 1000011 or 1000015",
+			"dst ifidx 1000010 or 1000011 or 1000015"
+		],
+		"skip-unmarked": true
+	}
+	/* ... */
+```
 
 
 ### Description of the monitoring object `mo.conf`

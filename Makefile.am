@@ -41,7 +41,7 @@ TESTS = $(check_PROGRAMS)
 dist_sysconf_DATA = xenoeye.conf devices.conf
 
 # DB export script
-libexec_SCRIPTS = scripts/xe-dbexport-pg.sh
+libexec_SCRIPTS = scripts/xe-dbexport-pg.sh scripts/xe-dbexport-ch.sh
 
 
 # data directories
