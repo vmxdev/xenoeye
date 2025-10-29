@@ -190,6 +190,23 @@ config_field_append(char *s, struct mo_mavg *window)
 	return 1;
 }
 
+static void
+check_if_script_exists(const char *script)
+{
+	struct stat st;
+
+	if (stat(script, &st) != 0) {
+		LOG("warning: can't stat() script '%s': %s", script,
+			strerror(errno));
+		return;
+	}
+
+	if (!(st.st_mode & S_IXUSR)) {
+		LOG("warning: script '%s' is not executable", script);
+		return;
+	}
+}
+
 #define STRCMP(A, I, S) strcmp(A->path_stack[I].data.path_item, S)
 
 /* parse config sections 'overlimit' and 'underlimit' */
@@ -244,8 +261,10 @@ mavg_config_limit(struct aajson *a, aajson_val *value,
 		l->def[idx] = strtod(value->str, NULL);
 	} else if (STRCMP(a, 5, "action-script") == 0) {
 		strcpy(l->action_script, value->str);
+		check_if_script_exists(l->action_script);
 	} else if (STRCMP(a, 5, "back2norm-script") == 0) {
 		strcpy(l->back2norm_script, value->str);
+		check_if_script_exists(l->back2norm_script);
 	} else if (STRCMP(a, 5, "back2norm-time") == 0) {
 		int back2norm_time = atoi(value->str);
 
