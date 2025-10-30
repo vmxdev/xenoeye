@@ -152,7 +152,7 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 		s->global->monit_objects, s->global->nmonit_objects);
 
 #ifdef FLOWS_CNT
-	atomic_fetch_add_explicit(&data->nflows, 1, memory_order_relaxed);
+	atomic_fetch_add_explicit(&s->global->nflows, 1, memory_order_relaxed);
 #endif
 	return 1;
 }

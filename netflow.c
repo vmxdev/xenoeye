@@ -307,7 +307,7 @@ parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id,
 				globl->monit_objects, globl->nmonit_objects);
 
 #ifdef FLOWS_CNT
-		atomic_fetch_add_explicit(&data->nflows, 1,
+		atomic_fetch_add_explicit(&globl->nflows, 1,
 			memory_order_relaxed);
 #endif
 	}
@@ -592,7 +592,7 @@ parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
 			globl->monit_objects, globl->nmonit_objects);
 
 #ifdef FLOWS_CNT
-		atomic_fetch_add_explicit(&data->nflows, 1,
+		atomic_fetch_add_explicit(&globl->nflows, 1,
 			memory_order_relaxed);
 #endif
 	}
@@ -752,7 +752,7 @@ NF5_FIELDS
 			globl->monit_objects, globl->nmonit_objects);
 
 #ifdef FLOWS_CNT
-		atomic_fetch_add_explicit(&data->nflows, 1,
+		atomic_fetch_add_explicit(&globl->nflows, 1,
 			memory_order_relaxed);
 #endif
 	}
