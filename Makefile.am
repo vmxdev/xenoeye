@@ -38,13 +38,12 @@ test_filters_SOURCES = tests/test_filters.c \
 TESTS = $(check_PROGRAMS)
 
 # config files
-dist_sysconf_DATA = xenoeye.conf devices.conf
+configs = xenoeye.conf devices.conf
 
 # DB export script
 libexec_SCRIPTS = scripts/xe-dbexport-pg.sh scripts/xe-dbexport-ch.sh
 
-
-# data directories
+# data directories and config files
 install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/mo"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/exp"
@@ -53,3 +52,11 @@ install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/notifications"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/clsf"
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/geoip"
+	$(MKDIR_P) "$(DESTDIR)$(sysconfdir)"
+	@for cfg in $(configs); do \
+		if test -f $(DESTDIR)$(sysconfdir)/$$cfg; then \
+			echo "$(DESTDIR)$(sysconfdir)/$$cfg already exists; overwrite manually"; \
+		else \
+			$(INSTALL_DATA) $$cfg "$(DESTDIR)$(sysconfdir)/$$cfg"; \
+		fi \
+	done
