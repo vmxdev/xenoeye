@@ -54,6 +54,7 @@ install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(localstatedir)/xenoeye/geoip"
 	$(MKDIR_P) "$(DESTDIR)$(sysconfdir)"
 	@for cfg in $(configs); do \
+		$(INSTALL_DATA) $$cfg "$(DESTDIR)$(sysconfdir)/$$cfg.sample"; \
 		if test -f $(DESTDIR)$(sysconfdir)/$$cfg; then \
 			echo "$(DESTDIR)$(sysconfdir)/$$cfg already exists; overwrite manually"; \
 		else \
