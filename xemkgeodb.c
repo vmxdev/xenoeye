@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <arpa/inet.h>
+#include <endian.h>
 
 #include "tkvdb.h"
 

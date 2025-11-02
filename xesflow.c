@@ -73,14 +73,14 @@ do {                                                              \
 
 #define ON_UDP(D, V)                                              \
 do {                                                              \
-	LOG("\t\t\tUDP src port: %d", be16toh(V->source));        \
-	LOG("\t\t\tUDP dst port: %d", be16toh(V->dest));          \
+	LOG("\t\t\tUDP src port: %d", be16toh(V->uh_sport));      \
+	LOG("\t\t\tUDP dst port: %d", be16toh(V->uh_dport));      \
 } while (0)
 
 #define ON_TCP(D, V)                                              \
 do {                                                              \
-	LOG("\t\t\tTCP src port: %d", be16toh(V->source));        \
-	LOG("\t\t\tTCP dst port: %d", be16toh(V->dest));          \
+	LOG("\t\t\tTCP src port: %d", be16toh(V->th_sport));      \
+	LOG("\t\t\tTCP dst port: %d", be16toh(V->th_dport));      \
 	LOG("\t\t\tTCP flags: 0x%0x", V->th_flags);               \
 } while (0)
 

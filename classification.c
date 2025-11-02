@@ -24,6 +24,8 @@
 #include <netdb.h>
 #include <dirent.h>
 
+#include "config.h"
+
 #include "utils.h"
 #include "monit-objects.h"
 #include "monit-objects-common.h"
@@ -31,6 +33,29 @@
 #include "flow-info.h"
 
 #define TMP_STR_LEN 1024
+
+#ifndef HAVE_GETPROTOBYNUMBER_R
+/* musl don't have a getprotobynumber_r */
+static pthread_mutex_t getprotobynumber_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int getprotobynumber_r(int proto, struct protoent *result_buf,
+	char buf[], size_t buflen,
+	struct protoent **result)
+{
+	(void)result_buf;
+	(void)buflen;
+	(void)result;
+	struct protoent *pe;
+
+	pthread_mutex_lock(&getprotobynumber_lock);
+	pe = getprotobynumber(proto);
+	strcpy(buf, pe->p_name);
+	pthread_mutex_unlock(&getprotobynumber_lock);
+
+	return 1;
+}
+
+#endif
 
 int
 classification_fields_init(size_t nthreads, struct mo_classification *clsf)

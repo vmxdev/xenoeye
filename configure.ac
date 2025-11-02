@@ -32,6 +32,10 @@ AC_SEARCH_LIBS([log], [m], [], [
   AC_MSG_ERROR([unable to find the log() function])
 ])
 
+#musl don't have a getprotobynumber_r function
+AC_CHECK_FUNC([getprotobynumber_r], [AC_DEFINE([HAVE_GETPROTOBYNUMBER_R], [1],
+                               [Define if getprotobynumber_r exists.])])
+
 # pthreads
 
 AX_PTHREAD([
