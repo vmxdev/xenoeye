@@ -11,8 +11,8 @@
 
 struct vlan_hdr
 {
-	__be16  h_vlan_TCI;
-	__be16  h_vlan_encapsulated_proto;
+	uint16_t  h_vlan_TCI;
+	uint16_t  h_vlan_encapsulated_proto;
 };
 
 enum RP_PARSER_STATE

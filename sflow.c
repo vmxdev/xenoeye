@@ -57,13 +57,13 @@ do {                              \
 	COPY_TO_FLOW(D, protocol, &nexthdr, 1);
 
 #define ON_TCP(D, V)                                    \
-	COPY_TO_FLOW(D, l4_src_port, &V->source, 2);    \
-	COPY_TO_FLOW(D, l4_dst_port, &V->dest, 2);      \
+	COPY_TO_FLOW(D, l4_src_port, &V->th_sport, 2);  \
+	COPY_TO_FLOW(D, l4_dst_port, &V->th_dport, 2);  \
 	COPY_TO_FLOW(D, tcp_flags, &V->th_flags, 1);
 
 #define ON_UDP(D, V)                                    \
-	COPY_TO_FLOW(D, l4_src_port, &V->source, 2);    \
-	COPY_TO_FLOW(D, l4_dst_port, &V->dest, 2);
+	COPY_TO_FLOW(D, l4_src_port, &V->uh_sport, 2);  \
+	COPY_TO_FLOW(D, l4_dst_port, &V->uh_dport, 2);
 
 #define ON_ICMP(D, V)                                   \
 	COPY_TO_FLOW(D, icmp_type, &V->type, 1);
