@@ -28,8 +28,6 @@
 #include <endian.h>
 #include <alloca.h>
 
-/*#include <linux/if_ether.h>*/
-
 #include "utils.h"
 #include "xenoeye.h"
 #include "netflow.h"
