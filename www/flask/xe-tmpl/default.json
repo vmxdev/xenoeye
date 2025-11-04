@@ -1,0 +1,67 @@
+[
+	{
+		"section": "Reports",
+		"r":
+		[
+			{
+				"name": "Overview",
+				"charts": [
+					{
+						"name": "Total",
+						"type": "ttl",
+						"query": "select extract(epoch from time)::integer as time, packets/15.0, octets/15.0 from ingress_all where time > now() - interval '$tr seconds' order by time asc"
+					},
+					{
+						"name": "IP Protocols",
+						"type": "v",
+						"cap": "proto",
+						"query": "select extract(epoch from time)::integer as time, packets/15.0, octets/15.0, proto from ingress_proto where time > now() - interval '$tr seconds' order by time asc"
+					},
+					{
+						"name": "Anomalies",
+						"type": "tbl",
+						"query": "select * from anomalies where time > now() - interval '$tr seconds' order by time asc"
+					}
+				]
+				
+			}
+			,
+			{
+				"name": "AS/GeoIP",
+				"charts": [
+					{
+						"name": "Countries",
+						"type": "v",
+						"cap": "",
+						"query": "select extract(epoch from time)::integer as time, packets/15.0, 0, country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ in (select country_src_host_ from (select sum(packets) as pkts, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is not null group by country_src_host_ order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ not in (select country_src_host_ from (select sum(packets) as pkts, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is not null group by country_src_host_ order by pkts desc limit 20) as top_all)) as others_all group by time, country_src_host_ union all select time, packets, 'Others' as country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is null) as m) as a order by time asc, packets desc"
+					},
+					{
+						"name": "IP Protocols",
+						"type": "v",
+						"cap": "proto",
+						"query": "select extract(epoch from time)::integer as time, packets/15.0, octets/15.0, proto from ingress_proto where time > now() - interval '$tr seconds' order by time asc"
+					}
+				]
+			}
+		]
+	}
+	,
+	{
+		"section": "DoS/DDoS Attacks",
+		"r":
+		[
+			{
+				"name": "IP Fragments"
+			}
+			,
+			{
+				"name": "DNS Amplification"
+			}
+			,
+			{
+				"name": "NTP Amplification"
+			}
+		]
+	}
+]
+

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <link href="{{ url_for('static', filename='bootstrap.min.css') }}" rel="stylesheet">
+
+</head>
+<body>
+
+<div class="modal" tabindex="-1" id="login" aria-hidden="true" aria-labelledby="login-text" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="login-text">This site requires authentication</h5>
+      </div>
+      <div class="modal-body">
+
+<form action="login" method="post">
+  <div class="mb-3">
+    <label for="exampleInputEmail1" class="form-label">Login</label>
+    <input type="text" class="form-control" id="exampleInputEmail1" name="username">
+  </div>
+  <div class="mb-3">
+    <label for="exampleInputPassword1" class="form-label">Password</label>
+    <input type="password" class="form-control" id="exampleInputPassword1" name="password">
+  </div>
+  <div class="mb-3 form-check">
+    <input type="checkbox" class="form-check-input" id="exampleCheck1">
+    <label class="form-check-label" for="exampleCheck1">Remember me</label>
+  </div>
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">Login</button>
+      </div>
+</form>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!--
+-->
+
+<!--
+    <nav>
+        <ul>
+            <li><a href="/login">Login</a></li>
+            <li><a href="/register">Create account</a></li>
+        </ul>
+    </nav>
+    <h1>Login to your account</h1>
+    
+
+    <form action="login" method="post">
+        <label for="username">Username:</label>
+        <input type="text" name="username" required />
+        <label for="password">Password:</label>
+        <input type="password" name="password" required />
+        <button type="submit">Login</button>
+    </form>
+-->
+<script src="{{ url_for('static', filename='bootstrap.min.js') }}"></script>
+<script>
+    window.onload = () => {
+      const myModal = new bootstrap.Modal('#login');
+      myModal.show();
+    }
+</script>
+</body>
+</html>
