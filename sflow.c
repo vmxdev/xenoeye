@@ -124,16 +124,10 @@ process_mo_sflow_rec(struct sfdata *s, uint8_t *end, struct monit_object *mos,
 }
 
 static inline int
-sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
+sf5_parsed(struct sfdata *s, uint8_t *p, uint32_t header_len)
 {
 	uint8_t *end = p + header_len;
 
-	if (rawpacket_parse(p, end, t, s->flow)
-		< RP_PARSER_STATE_NO_IP) {
-
-		/* Skip non-IP samples */
-		return 1;
-	}
 	/* check interfaces */
 	if (!device_rules_check(s->flow, s->fpi)) {
 		/* no error */
@@ -155,6 +149,20 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 	atomic_fetch_add_explicit(&s->global->nflows, 1, memory_order_relaxed);
 #endif
 	return 1;
+}
+
+static inline int
+sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
+{
+	uint8_t *end = p + header_len;
+
+	if (rawpacket_parse(p, end, t, s->flow)
+		< RP_PARSER_STATE_NO_IP) {
+
+		/* Skip non-IP samples */
+		return 1;
+	}
+	return sf5_parsed(s, p, header_len);
 }
 
 /* disable logging */

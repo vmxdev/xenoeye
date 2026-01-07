@@ -4,6 +4,7 @@
 
 #include "xenoeye.h"
 #include "sflow.h"
+#include "flow-info.h"
 
 static void sflow_parse_payload(uint8_t *end, uint8_t *p);
 
@@ -109,6 +110,42 @@ sflow_parse_payload(uint8_t *end, uint8_t *p)
 	if (xe_dns(p, end, NULL, NULL)) {
 		return;
 	}
+}
+
+static inline int
+sf5_parsed(struct sfdata *s, uint8_t *p, uint32_t header_len)
+{
+	char st[INET_ADDRSTRLEN + 1];
+	uint16_t port;
+
+	(void)p;
+	(void)header_len;
+
+	inet_ntop(AF_INET, &s->flow->ip4_src_addr, st, INET_ADDRSTRLEN);
+	LOG("\t\t\tIPv4 src: %s", st);
+	inet_ntop(AF_INET, &s->flow->ip4_dst_addr, st, INET_ADDRSTRLEN);
+	LOG("\t\t\tIPv4 dst: %s", st);
+	LOG("\t\t\tTOS: 0x%0x", s->flow->src_tos[0]);
+	LOG("\t\t\tIP protocol: %d", s->flow->protocol[0]);
+
+	if (s->flow->protocol[0] == 1) {
+		LOG("\t\t\tICMP type: %d", s->flow->icmp_type[0]);
+	} else if (s->flow->protocol[0] == 6) {
+		memcpy(&port, s->flow->l4_src_port, sizeof(uint16_t));
+		LOG("\t\t\tTCP src port: %d", be16toh(port));
+
+		memcpy(&port, s->flow->l4_dst_port, sizeof(uint16_t));
+		LOG("\t\t\tTCP dst port: %d", be16toh(port));
+		LOG("\t\t\tTCP flags: 0x%0x", s->flow->tcp_flags[0]);
+	} else if (s->flow->protocol[0] == 17) {
+		memcpy(&port, s->flow->l4_src_port, sizeof(uint16_t));
+		LOG("\t\t\tUDP src port: %d", be16toh(port));
+
+		memcpy(&port, s->flow->l4_dst_port, sizeof(uint16_t));
+		LOG("\t\t\tUDP dst port: %d", be16toh(port));
+	}
+
+	return 1;
 }
 
 static inline int

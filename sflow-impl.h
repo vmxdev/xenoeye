@@ -20,6 +20,7 @@ enum SF5_SAMPLE_TAG
 enum SF5_FLOW_TAG
 {
 	SF5_FLOW_HEADER = 1,
+	SF5_FLOW_IP_V4 = 3,
 	SF5_FLOW_EX_SWITCH = 1001
 };
 
@@ -29,6 +30,21 @@ enum SF5_HEADER_TYPE
 	SF5_HEADER_IPv4 = 11,
 	SF5_HEADER_IPv6 = 12
 };
+
+struct sflow_ip_v4
+{
+	uint32_t len;
+	uint8_t protocol[4];
+
+	uint32_t ip4_src_addr[1];
+	uint32_t ip4_dst_addr[1];
+
+	uint8_t l4_src_port[4];
+	uint8_t l4_dst_port[4];
+
+	uint8_t tcp_flags[4];
+	uint8_t src_tos[4];
+} __attribute__((packed));
 
 #define ALIGN_4(X) (((X % 4) == 0)? X : X + (4 - (X % 4)))
 
@@ -202,6 +218,50 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end, int exp)
 
 			READ32_H(out_priority, *p, end);
 			LOG("\t\t\t(ignored)Out priority: %u", out_priority);
+		} else if (tag == SF5_FLOW_IP_V4) {
+			struct sflow_ip_v4 ip4;
+			/* packet len */
+			READ_SF_BYTES(&s->flow->in_bytes[4], sizeof(uint32_t),
+				*p, end);
+			s->flow->has_in_bytes = 1;
+			s->flow->in_bytes_size = sizeof(uint64_t);
+			LOG("\t\t\tpacket size: %lu",
+				be64toh(*((uint64_t *)s->flow->in_bytes)));
+
+			/* 1 packet */
+			s->flow->in_pkts[7] = 1;
+			s->flow->has_in_pkts = 1;
+			s->flow->in_pkts_size = sizeof(uint64_t);
+
+#define READ_FIELD(F, FROM, SIZE)\
+do { \
+	READ_SF_BYTES(&ip4.F, sizeof(uint32_t), *p, end);\
+	memcpy(s->flow->F, &ip4.F[FROM], SIZE); \
+	s->flow->has_##F = 1; \
+	s->flow->F##_size = SIZE; \
+} while (0)
+			READ_FIELD(protocol, 3, 1);
+			READ_FIELD(ip4_src_addr, 0, sizeof(uint32_t));
+			READ_FIELD(ip4_dst_addr, 0, sizeof(uint32_t));
+
+			READ_FIELD(l4_src_port, 2, sizeof(uint16_t));
+			READ_FIELD(l4_dst_port, 2, sizeof(uint16_t));
+
+
+			READ_FIELD(tcp_flags, 3, 1);
+			READ_FIELD(src_tos, 3, 1);
+#undef READ_FIELD
+			if (s->flow->protocol[0] == 1) {
+				/* ICMP type is in dst_port */
+				/* see notes in sflowtool's sflowtool.c */
+				s->flow->icmp_type[0] = ip4.l4_dst_port[1];
+				s->flow->has_icmp_type = 1;
+				s->flow->icmp_type_size = 1;
+			}
+
+			if (!sf5_parsed(s, *p, sizeof(struct sflow_ip_v4))) {
+				return 0;
+			}
 		} else {
 			/* unknown tag */
 			LOG("\t\tUnknown tag %u", tag);
