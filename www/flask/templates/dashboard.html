@@ -149,6 +149,261 @@
     <script src="{{ url_for('static', filename='bootstrap.min.js') }}"></script>
     <script src="{{ url_for('static', filename='plotly.min.js') }}"></script>
     <script>
+function xe_chart_gen_color(stringInput) {
+	let stringUniqueHash = [...stringInput].reduce((acc, char) => {
+		return char.charCodeAt(0) + ((acc << 5) - acc);
+	}, 0);
+	return `hsl(${stringUniqueHash % 360}, 95%, ${stringUniqueHash % 100}%)`;
+}
+
+function xe_chart_ts_grid(chart, params) {
+	let ns = "http://www.w3.org/2000/svg";
+
+	/* horizontal grid */
+	let n_lines = 7;
+
+	let y = 100.0 - params.gap_bottom;
+	let dh = (y - params.gap_top) / n_lines;
+
+	let val_h = 0;
+	let dval_h = params.max_val / n_lines;
+
+	const text_started_at = 5;
+
+	for (let i=0; i<(n_lines + 1); i++) {
+		y_p = y.toString() + '%';
+		const rect = document.createElementNS(ns, 'line');
+		rect.setAttribute('x1', (params.gap_left - text_started_at + 2).toString() + '%');
+		rect.setAttribute('y1', y_p);
+		rect.setAttribute('x2', '100%');
+		rect.setAttribute('y2', y_p);
+		rect.setAttribute('style', 'stroke:rgba(200,200,200,0.5);stroke-width:1');
+		chart.svg.appendChild(rect);
+
+		const cap = document.createElementNS(ns, 'text');
+		cap.setAttribute('x', text_started_at + '%');
+		cap.setAttribute('y', y_p);
+		cap.setAttribute('textLength', '3%');
+		cap.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+		cap.setAttribute('style', 'white-space: pre');
+		//cap.setAttribute('style', 'font-family:monospace');
+		//cap.setAttribute('text-anchor', 'end');
+		cap.setAttribute('dominant-baseline', 'middle');
+		cap.setAttribute('text-anchor', 'middle');
+
+		let val_str = "";
+		if (params.pps_bps == 2) {
+			const byteValueNumberFormatter = Intl.NumberFormat("en", {
+				notation: "compact",
+				style: "unit",
+				unit: "bit",
+				unitDisplay: "narrow",
+			});
+			val_str = byteValueNumberFormatter.format(val_h * 8);
+		} else {
+			const byteValueNumberFormatter = Intl.NumberFormat("en", {
+				notation: "compact",
+				style: "decimal",
+				unitDisplay: "narrow",
+			});
+			val_str = byteValueNumberFormatter.format(val_h);
+		}
+
+		let val_str_pad = (val_str.toString()).padStart(6, ' ');
+		const txt = document.createTextNode(val_str_pad);
+		cap.appendChild(txt);
+		chart.svg.appendChild(cap);
+		y -= dh;
+		val_h += dval_h;
+	}
+
+	/* vertical grid */
+	n_lines = 7;
+	let x = params.gap_left;//(100.0 * (i + 1) / n_lines).toString() + '%';
+	let date_len = 5;
+	let time_len = 3;
+	let dx = (100 - params.gap_left - date_len / 2) / n_lines;
+	for (let i=0; i<(n_lines+1); i++) {
+		let x_p = x.toString() + '%';
+		const rect = document.createElementNS(ns, 'line');
+		rect.setAttribute('x1', x_p);
+		rect.setAttribute('y1', '0%');
+		rect.setAttribute('x2', x_p);
+		rect.setAttribute('y2', '93%');
+		rect.setAttribute('style', 'stroke:rgba(200,200,200,0.5);stroke-width:1');
+		chart.svg.appendChild(rect);
+
+		let ep = params.ep_min + (params.ep_max - params.ep_min) * i / n_lines;
+		let ep_d = new Date(ep * 1000);
+		const cap = document.createElementNS(ns, 'text');
+		cap.setAttribute('x', x_p);
+		cap.setAttribute('y', '97%');
+		cap.setAttribute('textLength', date_len + '%');
+		cap.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+		cap.setAttribute('style', 'white-space: pre');
+		cap.setAttribute('dominant-baseline', 'middle');
+		cap.setAttribute('text-anchor', 'middle');
+
+		let val = ep_d.toLocaleDateString();
+		const txt_date = document.createTextNode(val);
+		cap.appendChild(txt_date);
+
+		const cap1 = document.createElementNS(ns, 'text');
+		cap1.setAttribute('x', x_p);
+		cap1.setAttribute('y', '93%');
+		cap1.setAttribute('textLength', time_len + '%');
+		cap1.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+		cap1.setAttribute('style', 'white-space: pre');
+		cap1.setAttribute('dominant-baseline', 'middle');
+		cap1.setAttribute('text-anchor', 'middle');
+
+		val = ep_d.toLocaleTimeString();
+		const txt_time = document.createTextNode(val);
+		cap1.appendChild(txt_time);
+
+		chart.svg.appendChild(cap);
+		chart.svg.appendChild(cap1);
+		x += dx;
+	}
+
+}
+
+
+function xe_chart_ts_redraw(chart) {
+	let ns = "http://www.w3.org/2000/svg";
+
+	/* prepare data */
+	let t_map = new Map();
+	let p_map = new Map();
+
+	let max_val = 0.0;
+	let ep_min = Number.MAX_SAFE_INTEGER;
+	let ep_max = 0;
+
+	let ep_min_dist = Number.MAX_SAFE_INTEGER;
+	let ep_prev = 0;
+	for (let i=0; i<chart.data.length; i++) {
+		let ep = chart.data[i][0];
+		let val = chart.data[i][chart.pps_bps]; // bps/pps
+		let param = chart.data[i][3];
+
+		if (ep < ep_min) {
+			ep_min = ep;
+		}
+		if (ep > ep_max) {
+			ep_max = ep;
+		}
+		if (ep_prev == 0) {
+			ep_prev = ep;
+		} else if (ep_prev != ep) {
+			let dist = Math.abs(ep - ep_prev);
+			if (ep_min_dist > dist) {
+				ep_min_dist = dist;
+			}
+		}
+
+		if (chart.exclude.has(param.toString())) {
+			/* skip */
+			continue;
+		}
+
+		if (t_map.has(ep)) {
+			if (t_map.get(ep).m.has(param)) {
+				let v = t_map.get(ep).m.get(param);
+				v += val;
+				t_map.get(ep).m.set(param, v);
+			} else {
+				t_map.get(ep).m.set(param, val);
+			}
+
+			t_map.get(ep).sum += val;
+		} else {
+			let item = {sum: val, m: new Map()};
+			item.m.set(param, val);
+			t_map.set(ep, item);
+		}
+
+		if (t_map.get(ep).sum > max_val) {
+			max_val = t_map.get(ep).sum;
+		}
+
+		if (p_map.has(param)) {
+			if (val < p_map.get(param).min) {
+				p_map.get(param).min = val;
+			}
+			if (val > p_map.get(param).max) {
+				p_map.get(param).max = val;
+			}
+			p_map.get(param).sum += val;
+		} else {
+			let item = {min: val, max: val, sum: val};
+			p_map.set(param, item);
+		}
+	}
+
+	/* sort */
+	t_map.forEach(function(value, key) {
+		value.sorted = new Map([...value.m.entries()].sort());
+	});
+
+	/* remove all */
+	while (chart.svg.firstChild !== null) {
+		chart.svg.removeChild(chart.svg.firstChild);
+	}
+
+	let gap_bottom = 10.0;
+	let gap_top = 3.0;
+	let gap_left = 10.0;
+
+	xe_chart_ts_grid(chart,
+		{max_val: max_val,
+		ep_min: ep_min,
+		ep_max: ep_max,
+		gap_top: gap_top,
+		gap_bottom: gap_bottom,
+		gap_left: gap_left,
+		pps_bps: chart.pps_bps});
+
+	let ep_w = ep_max - ep_min;
+
+	let h_range = 100.0 - gap_bottom - gap_top;
+	let w_range = 100.0 - gap_left;
+
+	let bar_w = (w_range - 4.0) * ep_min_dist / ep_w; /* bar width in percents */
+
+	t_map.forEach(function(value, ep) {
+		let k = (ep - ep_min) / ep_w;
+		let x_shift = -k * bar_w;
+		let x = w_range * k + gap_left + x_shift;
+		let y = 0;
+ 
+		value.sorted.forEach(function(n, param) {
+			let h = h_range * n / max_val;
+
+			const rect = document.createElementNS(ns, 'rect');
+			rect.setAttribute('x', x.toString() + '%');
+			rect.setAttribute('y', ((100.0 - gap_bottom) - (y + h)).toString() + '%');
+			rect.setAttribute('width', bar_w.toString() + '%');
+			rect.setAttribute('height', h.toString() + '%');
+			rect.setAttribute('fill', xe_chart_gen_color(param.toString()));
+			chart.svg.appendChild(rect);
+
+			y += h;
+		});
+	});
+
+	return {p_map: p_map, t_map: t_map};
+}
+
+function xe_chart_ts_update(s, cb) {
+	if (!cb.checked) {
+		s.exclude.add(cb.dataset.param);
+	} else {
+		s.exclude.delete(cb.dataset.param);
+	}
+	xe_chart_ts_redraw(s);
+}
+
 {% for ch in g.r.charts %}
 {% if ch["type"] == "ttl" %}
 fetch('/lk/r.data?mo={{ g.curr_mo.mo_name }}&s={{ g.curr_section }}&r={{ g.curr_rep }}&c={{ loop.index0 }}')
@@ -264,8 +519,107 @@ fetch('/lk/r.data?mo={{ g.curr_mo.mo_name }}&s={{ g.curr_section }}&r={{ g.curr_
 		spinner.style.visibility = 'hidden';
 });
 {% endif %}
+{% if ch["type"] == "svg" %}
+fetch('/lk/r.data?mo={{ g.curr_mo.mo_name }}&s={{ g.curr_section }}&r={{ g.curr_rep }}&c={{ loop.index0 }}')
+  .then((response) => response.json())
+  .then((data) => {
+		//window.xe_chart_data{{ loop.index0 }} = data;
+		window.xe_chart{{ loop.index0 }} = {};
+		window.xe_chart{{ loop.index0 }}.data = data;
+
+		let ns = "http://www.w3.org/2000/svg";
+		window.xe_chart{{ loop.index0 }}.svg = document.createElementNS(ns, "svg");
+		const w = 1000, h = 400;
+		window.xe_chart{{ loop.index0 }}.svg.setAttributeNS(null, 'width', '100%');
+		//svg.setAttributeNS(null, 'height', '100%');
+		window.xe_chart{{ loop.index0 }}.svg.setAttributeNS(null, 'height', h);
+
+		let elem = document.getElementById("gd{{ loop.index0 }}");
+		elem.appendChild(window.xe_chart{{ loop.index0 }}.svg);
+
+		/* */
+		window.xe_chart{{ loop.index0 }}.exclude = new Set();
+
+		window.xe_chart{{ loop.index0 }}.pps_bps = 2;
+		let maps = xe_chart_ts_redraw(window.xe_chart{{ loop.index0 }});
+
+		bps_pps_switch = `
+			<div>
+				<input type="radio" class="btn-check" name="pbps{{ loop.index0 }}" id="bps{{ loop.index0 }}" autocomplete="off" checked
+					onclick="window.xe_chart{{ loop.index0 }}.pps_bps = 2; xe_chart_ts_redraw(window.xe_chart{{ loop.index0 }});">
+				<label class="btn btn-outline-success" for="bps{{ loop.index0 }}">BPS</label>
+				<input type="radio" class="btn-check" name="pbps{{ loop.index0 }}" id="pps{{ loop.index0 }}" autocomplete="off"
+					onclick="window.xe_chart{{ loop.index0 }}.pps_bps = 1; xe_chart_ts_redraw(window.xe_chart{{ loop.index0 }});">
+				<label class="btn btn-outline-success" for="pps{{ loop.index0 }}">PPS</label>
+			</div>`;
+
+		elem.insertAdjacentHTML('beforebegin', bps_pps_switch);
+
+		tab_head = `
+			<table class="table">
+				<thead>
+					<tr>
+						<th scope="col">~</th>
+						<th scope="col">avg</th>
+						<th scope="col">max</th>
+						<th scope="col">min</th>
+					</tr>
+				</thead>
+				<tbody>	`;
+
+		let tab_body = '';
+		let p_map_sorted = new Map([...maps.p_map.entries()].sort());
+		let cnt = 0;
+		p_map_sorted.forEach(function(value, key) {
+			let id = "param{{ loop.index0 }}" + cnt;
+			let color = xe_chart_gen_color(key.toString());
+			tab_body += `
+				<tr>
+				<th scope="row">
+				<div class="form-check">
+					<input class="form-check-input" type="checkbox" value="" data-param="` + key + `"id="` + id + `" onclick="xe_chart_ts_update(window.xe_chart{{ loop.index0 }}, this);" checked>
+					<label class="form-check-label" for="` + id + `" style="color:` + color + `">
+						` + key + `
+					</label>
+				</div>
+				</th>
+				<td>` + +(value.sum / maps.t_map.size).toFixed(4) + `</td>
+				<td>` + +value.max.toFixed(2) + `</td>
+				<td>` + +value.min.toFixed(2) + `</td>
+				</tr>`;
+			cnt++;
+		});
+
+		let tab_foot = '</tbody></table>';
+
+		elem.insertAdjacentHTML('afterend', tab_head + tab_body + tab_foot);
+
+		let spinner = document.getElementById("gd{{ loop.index0 }}-load");
+		spinner.style.visibility = 'hidden';
+  })
+  .catch(console.error);
+{% endif %}
 {% endfor %}
     </script>
 
+<!--
+
+  temp = document.getElementById("container");
+  if (temp) {
+    temp.remove();
+  }
+  let container = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  container.setAttribute("id", "container");
+  svg.appendChild(container);
+
+function eccentricityChanged(){
+  let svg = document.getElementById('diagram');
+  // remove all child nodes of the svg element
+  while (svg.firstChild !== null) {
+    svg.removeChild(svg.firstChild);
+  }
+  // ...
+}
+-->
   </body>
 </html>

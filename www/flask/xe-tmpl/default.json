@@ -13,7 +13,7 @@
 					},
 					{
 						"name": "IP Protocols",
-						"type": "v",
+						"type": "svg",
 						"cap": "proto",
 						"query": "select extract(epoch from time)::integer as time, packets/15.0, octets/15.0, proto from ingress_proto where time > now() - interval '$tr seconds' order by time asc"
 					},
