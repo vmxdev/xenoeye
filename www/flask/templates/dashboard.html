@@ -386,7 +386,10 @@ function xe_chart_ts_redraw(chart) {
 		let datetime_str = ' (' + (new Date(ep * 1000)).toLocaleString() + ')';
  
 		value.sorted.forEach(function(n, param) {
-			let h = h_range * n / chart.max_val;
+			let h = 0.0;
+			if (chart.max_val > 0) {
+				h = h_range * n / chart.max_val;
+			}
 
 			const rect = document.createElementNS(ns, 'rect');
 			rect.setAttribute('x', x.toString() + '%');
@@ -601,8 +604,11 @@ fetch('/lk/r.data?mo={{ g.curr_mo.mo_name }}&s={{ g.curr_section }}&r={{ g.curr_
 		xe_chart_ts_make_maps(window.xe_chart{{ loop.index0 }}, true);
 		xe_chart_ts_redraw(window.xe_chart{{ loop.index0 }});
 
-		bps_pps_switch = `
-			<div>
+		let title = `
+			<h4 class="text-center">{{ ch["name"] }}</h4>
+			`;
+		let bps_pps_switch = `
+			<div class="mb-4">
 				<input type="radio" class="btn-check" name="pbps{{ loop.index0 }}" id="bps{{ loop.index0 }}" autocomplete="off" checked
 					onclick="xe_chart_ts_ppsbps_switch(window.xe_chart{{ loop.index0 }}, {{ loop.index0 }}, 2);">
 				<label class="btn btn-outline-success" for="bps{{ loop.index0 }}">BPS</label>
@@ -611,7 +617,7 @@ fetch('/lk/r.data?mo={{ g.curr_mo.mo_name }}&s={{ g.curr_section }}&r={{ g.curr_
 				<label class="btn btn-outline-success" for="pps{{ loop.index0 }}">PPS</label>
 			</div>`;
 
-		elem.insertAdjacentHTML('beforebegin', bps_pps_switch);
+		elem.insertAdjacentHTML('beforebegin', title + bps_pps_switch);
 
 		tab_head = `
 			<table class="table table-sm" id="tbl_c{{ loop.index0 }}">
