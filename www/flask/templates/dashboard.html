@@ -639,25 +639,5 @@ fetch('/lk/r.data?mo={{ g.curr_mo.mo_name }}&s={{ g.curr_section }}&r={{ g.curr_
 {% endif %}
 {% endfor %}
     </script>
-
-<!--
-
-  temp = document.getElementById("container");
-  if (temp) {
-    temp.remove();
-  }
-  let container = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  container.setAttribute("id", "container");
-  svg.appendChild(container);
-
-function eccentricityChanged(){
-  let svg = document.getElementById('diagram');
-  // remove all child nodes of the svg element
-  while (svg.firstChild !== null) {
-    svg.removeChild(svg.firstChild);
-  }
-  // ...
-}
--->
   </body>
 </html>
