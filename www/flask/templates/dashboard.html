@@ -427,11 +427,36 @@ function xe_chart_ts_ppsbps_switch(chart, idx, ppsbps) {
 	xe_chart_ts_redraw(chart);
 
 	xe_chart_ts_make_maps(chart, false);
-	xe_chart_table_redraw(chart, idx);
+	xe_chart_tables_redraw(chart, idx);
 }
 
-function xe_chart_table_redraw(chart, idx) {
-	let tab_body = '';
+function xe_chart_tables_redraw(chart, idx) {
+	let n_tables = 4;
+
+	let n_rows = Math.trunc(chart.p_map.size / n_tables);
+	if ((chart.p_map.size % n_tables) > 0) {
+		n_rows++;
+	}
+
+	let tab_head = `
+		<div class="col">
+		<table class="table table-sm table-hover table-bordered">
+			<thead>
+				<tr>
+					<th scope="col">~</th>
+					<th scope="col">avg</th>
+					<th scope="col">max</th>
+					<th scope="col">min</th>
+				</tr>
+			</thead>
+			<tbody>	`;
+
+	let tab_foot = `</tbody>
+		</table>
+		</div>
+		`;
+	let html = tab_head;
+
 	let p_map_sorted = new Map([...chart.p_map.entries()].sort());
 	let cnt = 0;
 	p_map_sorted.forEach(function(value, param) {
@@ -440,15 +465,14 @@ function xe_chart_table_redraw(chart, idx) {
 		let evt = "xe_chart_ts_update(window.xe_chart" + idx + ", this);";
 		let checked = "checked";
 		if (chart.exclude.has(param.toString())) {
-			/* skip */
 			checked = "";
 		}
-		tab_body += `
+		tab_row = `
 			<tr>
 			<th scope="row">
 			<div class="form-check">
 				<input class="form-check-input" type="checkbox" value="" data-param="` + param + `"id="` + id + `" onclick="` + evt + `" ${checked}>
-				<label class="form-check-label" for="` + id + `" style="color:` + color + `">
+				<label class="form-check-label" for="` + id + `" style="color:${color}">
 					` + param + `
 				</label>
 			</div>
@@ -457,12 +481,20 @@ function xe_chart_table_redraw(chart, idx) {
 			<td>` + xe_chart_format_v(chart.pps_bps, value.max) + `</td>
 			<td>` + xe_chart_format_v(chart.pps_bps, value.min) + `</td>
 			</tr>`;
+
+		html += tab_row;
 		cnt++;
+
+		if (cnt == p_map_sorted.size) {
+			html += tab_foot;
+		} else if ((cnt % n_rows) == 0) {
+			html += tab_foot;
+			html += tab_head;
+		}
 	});
 
-	const table = document.getElementById('tbl_c' + idx);
-	const tbody = table.querySelector('tbody');
-	tbody.innerHTML = tab_body;
+	const d = document.getElementById('cap' + idx);
+	d.innerHTML = html;
 }
 
 {% for ch in g.r.charts %}
@@ -619,24 +651,15 @@ fetch('/lk/r.data?mo={{ g.curr_mo.mo_name }}&s={{ g.curr_section }}&r={{ g.curr_
 
 		elem.insertAdjacentHTML('beforebegin', title + bps_pps_switch);
 
-		tab_head = `
-			<table class="table table-sm" id="tbl_c{{ loop.index0 }}">
-				<thead>
-					<tr>
-						<th scope="col">~</th>
-						<th scope="col">avg</th>
-						<th scope="col">max</th>
-						<th scope="col">min</th>
-					</tr>
-				</thead>
-				<tbody>	`;
+		let cap_head = `
+			<div class="container">
+				<div class="row" id="cap{{ loop.index0 }}">
+			`;
+		let cap_foot = '</div></div>';
 
-		let tab_body = '';
-		let tab_foot = '</tbody></table>';
+		elem.insertAdjacentHTML('afterend', cap_head + cap_foot);
 
-		elem.insertAdjacentHTML('afterend', tab_head + tab_body + tab_foot);
-
-		xe_chart_table_redraw(window.xe_chart{{ loop.index0 }}, {{ loop.index0 }});
+		xe_chart_tables_redraw(window.xe_chart{{ loop.index0 }}, {{ loop.index0 }});
 
 		let spinner = document.getElementById("gd{{ loop.index0 }}-load");
 		spinner.style.visibility = 'hidden';
