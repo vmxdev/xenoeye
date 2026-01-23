@@ -136,6 +136,7 @@ FOR_LIST_OF_CLASSES
 		LOG("%s", flow_str);
 	} else {
 		fprintf(debug->fout, "%s\n", flow_str);
+		fflush(debug->fout);
 	}
 }
 

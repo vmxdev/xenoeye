@@ -189,6 +189,7 @@ static void
 print_netflow_v9_flowset(struct nf_parse_data *pd, char *debug_flow_str)
 {
 	int i;
+	uint8_t *fptr = pd->tmpfptr;
 
 	debug_flow_str[0] = '\0';
 	for (i=0; i<pd->template_field_count; i++) {
@@ -197,12 +198,12 @@ print_netflow_v9_flowset(struct nf_parse_data *pd, char *debug_flow_str)
 		flength = ntohs(pd->tmpl_9->typelen[i].length);
 		ftype = ntohs(pd->tmpl_9->typelen[i].type);
 
-		flow_debug_add_field(flength, ftype, pd->tmpfptr,
+		flow_debug_add_field(flength, ftype, fptr,
 			debug_flow_str);
 
-		pd->tmpfptr += flength;
+		fptr += flength;
 
-		if ((pd->tmpfptr - (*(pd->ptr))) >= pd->length) {
+		if ((fptr - (*(pd->ptr))) >= pd->length) {
 			break;
 		}
 	}
@@ -470,6 +471,7 @@ print_ipfix_flowset(struct nf_parse_data *pd,
 	char *debug_flow_str)
 {
 	int i;
+	uint8_t *fptr = pd->tmpfptr;
 
 	debug_flow_str[0] = '\0';
 	for (i=0; i<pd->template_field_count; i++) {
@@ -478,12 +480,12 @@ print_ipfix_flowset(struct nf_parse_data *pd,
 		flength = ntohs(pd->tmpl_ipfix->elements[i].length);
 		ftype = ntohs(pd->tmpl_ipfix->elements[i].id);
 
-		flow_debug_add_field(flength, ftype, pd->tmpfptr,
+		flow_debug_add_field(flength, ftype, fptr,
 			debug_flow_str);
 
-		pd->tmpfptr += flength;
+		fptr += flength;
 
-		if ((pd->tmpfptr - (*(pd->ptr))) >= pd->length) {
+		if ((fptr - (*(pd->ptr))) >= pd->length) {
 			break;
 		}
 	}
