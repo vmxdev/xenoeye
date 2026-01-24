@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2021-2024, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2021-2026, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -206,6 +206,24 @@ fwm_config(struct aajson *a, aajson_val *value,
 }
 
 
+static void
+print_field_sql(enum DB_TYPE db_type, struct field *fld, FILE *f,
+	uint8_t *data)
+{
+	if (fld->type != FILTER_BASIC_MAC) {
+		monit_object_field_print(fld, f, data, 1);
+		return;
+	}
+
+	if (db_type == DB_PG) {
+		monit_object_field_print(fld, f, data, 1);
+	} else {
+		fprintf(f, " MACStringToNum(");
+		monit_object_field_print(fld, f, data, 1);
+		fprintf(f, " ) ");
+	}
+}
+
 static int
 fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 	const char *exp_dir, enum DB_TYPE db_type, const char *ch_codec)
@@ -275,6 +293,8 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 				|| (fld->type == FILTER_BASIC_ADDR6)) {
 
 				fprintf(f, "  %s INET", fld->sql_name);
+			} else if (fld->type == FILTER_BASIC_MAC) {
+				fprintf(f, "  %s macaddr", fld->sql_name);
 			} else if (fld->type == FILTER_BASIC_STRING) {
 				fprintf(f, "  %s TEXT", fld->sql_name);
 			} else {
@@ -285,6 +305,8 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 				fprintf(f, "  %s Nullable(IPv4)", fld->sql_name);
 			} else if (fld->type == FILTER_BASIC_ADDR6) {
 				fprintf(f, "  %s Nullable(IPv6)", fld->sql_name);
+			} else if (fld->type == FILTER_BASIC_MAC) {
+				fprintf(f, "  %s Nullable(UInt64)", fld->sql_name);
 			} else if (fld->type == FILTER_BASIC_STRING) {
 				fprintf(f, "  %s Nullable(String)", fld->sql_name);
 			} else {
@@ -368,11 +390,11 @@ fwm_dump(struct mo_fwm *fwm, tkvdb_tr *tr, const char *mo_name,
 						data_mut[j] = ~*data;
 						data++;
 					}
-					monit_object_field_print(fld, f,
-						data_mut, 1);
+					print_field_sql(db_type, fld, f,
+						data_mut);
 				} else {
-					monit_object_field_print(fld, f,
-						data, 1);
+					print_field_sql(db_type, fld, f,
+						data);
 					data += fld->size;
 				}
 			}

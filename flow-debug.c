@@ -58,6 +58,10 @@ flow_field_print_##FLDID(char *str, int flength, uint8_t *fptr)               \
 			sprintf(str, "%s: %u", DESC,                          \
 				ntohl(*((uint32_t *)fptr)));                  \
 		}                                                             \
+	} else if ((flength == 6) && (FLDTYPE == NF_FIELD_MAC)) {             \
+		sprintf(str, "%s: %02x:%02x:%02x:%02x:%02x:%02x", DESC,       \
+			*(fptr + 0), *(fptr + 1), *(fptr + 2),                \
+			*(fptr + 3), *(fptr + 4), *(fptr + 5));               \
 	} else if ((flength == 8) && (FLDTYPE == NF_FIELD_INT)) {             \
 		sprintf(str, "%s: %lu", DESC,                                 \
 			be64toh(*((uint64_t *)fptr)));                        \
@@ -163,6 +167,12 @@ sflow_debug_print(struct flow_info *flow, char *resstr)
 				sprintf(str, "%s: %u", DESC,                  \
 					be32toh(*((uint32_t *)fptr)));        \
 			}                                                     \
+		} else if ((flow->NAME##_size == 6)                           \
+			&& (FLDTYPE == NF_FIELD_MAC)) {                       \
+			sprintf(str, "%s: %02x:%02x:%02x:%02x:%02x:%02x",     \
+				DESC,                                         \
+				*(fptr + 0), *(fptr + 1), *(fptr + 2),        \
+				*(fptr + 3), *(fptr + 4), *(fptr + 5));       \
 		} else if ((flow->NAME##_size == 8)                           \
 			&& (FLDTYPE == NF_FIELD_INT)) {                       \
 			sprintf(str, "%s: %lu", DESC,                         \

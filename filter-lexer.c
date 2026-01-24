@@ -255,6 +255,13 @@ read_token(struct filter_input *q)
 
 		q->current_token.data.str[q->current_token.str_len] = '\0';
 
+		if (mac_addr_read(q->current_token.data.str,
+			&q->current_token.data.mac)) {
+
+			q->current_token.id = MAC;
+			return;
+		}
+
 		if (!read_str_token(q->current_token.data.str,
 			&q->current_token.id)) {
 

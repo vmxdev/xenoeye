@@ -28,6 +28,13 @@ do {                                                           \
 		_buf, __FILE__, __LINE__, __func__);           \
 } while (0)
 
+#define MAC_ADDR_SIZE 6
+
+struct mac_addr
+{
+	uint8_t e[MAC_ADDR_SIZE];
+} __attribute__((packed));
+
 static inline char *
 string_trim(char *str)
 {
@@ -123,6 +130,7 @@ csv_next(char **line, char *val)
 char *tcp_flags_to_str(uint8_t tf);
 void port_to_str(char *res, uint16_t port);
 void ports_pair_to_str(char *res, uint16_t port1, uint16_t port2);
+int mac_addr_read(const char *s, struct mac_addr *r);
 
 typedef __int128_t xe_ip;
 

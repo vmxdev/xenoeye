@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Vladimir Misyurov
+ * Copyright (c) 2025-2026, Vladimir Misyurov
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -208,6 +208,8 @@ filter_add_to_basic_filter(struct filter_input *f,
 	} else if (tok->id == INT_RANGE) {
 		fb->data[fb->n].data.range.low = tok->data.range.low;
 		fb->data[fb->n].data.range.high = tok->data.range.high;
+	} else if (tok->id == MAC) {
+		fb->data[fb->n].data.mac = tok->data.mac;
 	} else if (tok->id == STRING) {
 		fb->data[fb->n].data.str = strdup(tok->data.str);
 	} else {
@@ -520,6 +522,62 @@ filter_basic_match_range(struct filter_basic *fb, struct flow_info *flow)
 			}
 			if ((r2 >= fb->data[i].data.range.low)
 				&& (r2 <= fb->data[i].data.range.high)) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int
+filter_basic_match_mac(struct filter_basic *fb, struct flow_info *flow)
+{
+	size_t i;
+
+	struct mac_addr m1, m2;
+	void *tmp;
+
+	switch (fb->name) {
+#define FIELD(NAME, STR, TYPE, SRC, DST)                                     \
+		case FILTER_BASIC_NAME_##NAME:                               \
+			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
+				tmp = flow->SRC;                             \
+				memcpy(&m1, tmp, MAC_ADDR_SIZE);             \
+			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
+				tmp = flow->DST;                             \
+				memcpy(&m1, tmp, MAC_ADDR_SIZE);             \
+			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
+				tmp = flow->SRC;                             \
+				memcpy(&m1, tmp, MAC_ADDR_SIZE);             \
+				tmp = flow->DST;                             \
+				memcpy(&m2, tmp, MAC_ADDR_SIZE);             \
+			} else {                                             \
+				return 0;                                    \
+			}                                                    \
+			break;
+#include "filter.def"
+		default:
+			return 0;
+	}
+
+	for (i=0; i<fb->n; i++) {
+		if (fb->direction == FILTER_BASIC_DIR_BOTH) {
+			if (memcmp(&fb->data[i].data.mac, &m1, MAC_ADDR_SIZE)
+				== 0) {
+
+				return 1;
+			}
+
+			if (memcmp(&fb->data[i].data.mac, &m2, MAC_ADDR_SIZE)
+				== 0) {
+
+				return 1;
+			}
+		} else {
+			if (memcmp(&fb->data[i].data.mac, &m1, MAC_ADDR_SIZE)
+				== 0) {
+
 				return 1;
 			}
 		}
@@ -863,6 +921,8 @@ FOR_LIST_OF_GEOIP_FIELDS
 		ret = filter_basic_match_addr6(fb, flow);
 	} else if (fb->type == FILTER_BASIC_RANGE) {
 		ret = filter_basic_match_range(fb, flow);
+	} else if (fb->type == FILTER_BASIC_MAC) {
+		ret = filter_basic_match_mac(fb, flow);
 	} else if (fb->type == FILTER_BASIC_STRING) {
 		ret = filter_basic_match_string(fb, flow);
 	} else {
@@ -1116,6 +1176,16 @@ FOR_LIST_OF_GEOIP_FIELDS
 		for (i=0; i<fb->n; i++) {
 			fprintf(f, " %d-%d", fb->data[i].data.range.low,
 				fb->data[i].data.range.high);
+		}
+	} else if (fb->type == FILTER_BASIC_MAC) {
+		for (i=0; i<fb->n; i++) {
+			fprintf(f, " %02x:%02x:%02x:%02x:%02x:%02x",
+				fb->data[i].data.mac.e[0],
+				fb->data[i].data.mac.e[1],
+				fb->data[i].data.mac.e[2],
+				fb->data[i].data.mac.e[3],
+				fb->data[i].data.mac.e[4],
+				fb->data[i].data.mac.e[5]);
 		}
 	} else if (fb->type == FILTER_BASIC_STRING) {
 		for (i=0; i<fb->n; i++) {

@@ -45,6 +45,7 @@ enum TOKEN_ID
 {
 	ID,
 	INT_RANGE,
+	MAC,
 	STRING,
 
 	LPAREN,
@@ -95,6 +96,7 @@ struct token
 		char str[TOKEN_MAX_SIZE];
 		struct int_range range;
 		struct ip_addr_and_mask ip;
+		struct mac_addr mac;
 	} data;
 };
 
@@ -112,6 +114,7 @@ struct filter_basic_data
 		struct ip_addr_and_mask ip;
 		struct iplist *addr_list;
 		char *str;
+		struct mac_addr mac;
 	} data;
 };
 
@@ -120,6 +123,7 @@ enum FILTER_BASIC_TYPE
 	FILTER_BASIC_ADDR4,
 	FILTER_BASIC_ADDR6,
 	FILTER_BASIC_RANGE,
+	FILTER_BASIC_MAC,
 	FILTER_BASIC_STRING
 };
 

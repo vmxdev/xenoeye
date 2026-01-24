@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2024, Vladimir Misyurov
+ * Copyright (c) 2024-2026, Vladimir Misyurov
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -58,6 +58,14 @@ mavg_limits_parse_line(struct mo_mavg *window, char *line, uint8_t *key,
 				if (res != 1) {
 					LOG("Can't convert '%s' to "
 						"IPv6 address", token);
+					return 0;
+				}
+			} else if (fld->type == FILTER_BASIC_MAC) {
+				res = mac_addr_read(token,
+					(struct mac_addr *)key);
+				if (!res) {
+					LOG("Can't convert '%s' to "
+						"MAC address", token);
 					return 0;
 				}
 			} else if (fld->type == FILTER_BASIC_STRING) {

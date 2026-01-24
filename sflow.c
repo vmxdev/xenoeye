@@ -32,6 +32,10 @@ do {                              \
 
 #define USER_TYPE struct flow_info *
 
+#define ON_ETH(D, V)                                          \
+	COPY_TO_FLOW(D, dst_mac, &V->h_dest, MAC_ADDR_SIZE);  \
+	COPY_TO_FLOW(D, src_mac, &V->h_source, MAC_ADDR_SIZE);
+
 #define ON_VLAN1(D, V)                                  \
 	COPY_TO_FLOW(D, src_vlan, &V->h_vlan_TCI, 2);   \
 	COPY_TO_FLOW(D, dst_vlan, &V->h_vlan_TCI, 2);

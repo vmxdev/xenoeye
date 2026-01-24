@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2020-2025, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2020-2026, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -554,6 +554,8 @@ monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 	char *escptr;
 	size_t i;
 
+	char mac_str[MAC_ADDR_SIZE * 3];
+
 	switch (fld->type) {
 		case FILTER_BASIC_ADDR4:
 			inet_ntop(AF_INET, data, s, INET_ADDRSTRLEN);
@@ -612,6 +614,25 @@ monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 					break;
 				default:
 					break;
+			}
+			break;
+
+		case FILTER_BASIC_MAC:
+			mac_str[0] = '\0';
+
+			for (i=0; i<MAC_ADDR_SIZE; i++) {
+				char h[3];
+				sprintf(h, "%02x", data[i]);
+				if (i != 0) {
+					strcat(mac_str, ":");
+				}
+				strcat(mac_str, h);
+			}
+
+			if (print_spaces) {
+				sprintf(str, " '%s' ", mac_str);
+			} else {
+				sprintf(str, "%s", mac_str);
 			}
 			break;
 

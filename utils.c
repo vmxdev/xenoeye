@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2024, Vladimir Misyurov
+ * Copyright (c) 2024-2026, Vladimir Misyurov
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -74,5 +74,51 @@ ports_pair_to_str(char *res, uint16_t port1, uint16_t port2)
 			return;
 		}
 	}
+}
+
+static int
+mac_hex_to_int(const char c)
+{
+	if ((c >= 'a') && (c <= 'f')) {
+		return c - 'a' + 10;
+	}
+
+	if ((c >= 'A') && (c <= 'F')) {
+		return c - 'A' + 10;
+	}
+
+	if ((c >= '0') && (c <= '9')) {
+		return c - '0';
+	}
+
+	return 0;
+}
+
+int
+mac_addr_read(const char *s, struct mac_addr *r)
+{
+	struct mac_addr mac;
+	int i;
+	size_t req_len = MAC_ADDR_SIZE * 3 - 1;
+
+	if (strlen(s) != req_len) {
+		return 0;
+	}
+
+	for (i=0; i<MAC_ADDR_SIZE; i++) {
+		int h1, h2;
+		char delim = s[i * 3 + 2];
+		if ((delim != ':') && (delim != '\0')) {
+			return 0;
+		}
+
+		h1 = mac_hex_to_int(s[i * 3 + 0]);
+		h2 = mac_hex_to_int(s[i * 3 + 1]);
+		mac.e[i] = (h1 << 4) | h2;
+	}
+
+	memcpy(r, &mac, MAC_ADDR_SIZE);
+
+	return 1;
 }
 

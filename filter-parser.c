@@ -48,9 +48,10 @@ id(struct filter_input *f, struct filter_expr *e, enum FILTER_BASIC_TYPE type)
 {
 	if ((f->current_token.id != ID)
 		&& (f->current_token.id != INT_RANGE)
+		&& (f->current_token.id != MAC)
 		&& (f->current_token.id != STRING)) {
 
-		mkerror(f, "Expected ID, INT, INT_RANGE or STRING");
+		mkerror(f, "Expected ID, INT, INT_RANGE, MAC or STRING");
 		return 0;
 	}
 
@@ -66,6 +67,7 @@ id(struct filter_input *f, struct filter_expr *e, enum FILTER_BASIC_TYPE type)
 
 		if ((f->current_token.id == ID)
 			|| (f->current_token.id == INT_RANGE)
+			|| (f->current_token.id == MAC)
 			|| (f->current_token.id == STRING)) {
 
 			filter_add_to_basic_filter(f, e, &f->current_token,
