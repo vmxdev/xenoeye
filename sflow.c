@@ -40,8 +40,9 @@ do {                              \
 	COPY_TO_FLOW(D, src_vlan, &V->h_vlan_TCI, 2);   \
 	COPY_TO_FLOW(D, dst_vlan, &V->h_vlan_TCI, 2);
 
-#define ON_VLAN2(D, V)                                  \
-	COPY_TO_FLOW(D, dot1q_vlan, &V->h_vlan_TCI, 2);
+#define ON_VLAN2(D, V)                                        \
+	COPY_TO_FLOW(D, src_dot1q_cvlan, &V->h_vlan_TCI, 2);  \
+	COPY_TO_FLOW(D, dst_dot1q_cvlan, &V->h_vlan_TCI, 2);
 
 #define ON_IP(D, V)                                     \
 	COPY_TO_FLOW(D, ip4_src_addr, &V->saddr, 4);    \
