@@ -1,6 +1,6 @@
 AM_CPPFLAGS = -I$(srcdir)/tkvdb
 
-bin_PROGRAMS = xenoeye xemkgeodb xegeoq xesflow
+bin_PROGRAMS = xenoeye xemkgeodb xegeoq xesflow xemoclone
 xenoeye_SOURCES = xenoeye.c xenoeye.h xe-debug.h \
 	utils.h utils.c utils-data.inc netflow.h netflow.c \
 	netflow-templates.c netflow-templates.h \
@@ -27,6 +27,8 @@ xemkgeodb_SOURCES = xemkgeodb.c geoip.h ip-btrie.h tkvdb/tkvdb.c tkvdb/tkvdb.h
 xegeoq_SOURCES = xegeoq.c geoip.h ip-btrie.h
 
 xesflow_SOURCES = xesflow.c rawparse.h sflow.h sflow-impl.h xe-sni.h xe-dns.h
+
+xemoclone_SOURCES = xemoclone.c utils.h
 
 
 # checks
