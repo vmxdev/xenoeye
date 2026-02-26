@@ -9,18 +9,30 @@
 					{
 						"name": "Total",
 						"type": "ttl",
-						"query": "select extract(epoch from time)::integer as time, packets/15.0, octets/15.0 from ingress_all where time > now() - interval '$tr seconds' order by time asc"
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, octets/15.0 from \"$moingress_total\" where time > now() - interval $tr second order by time asc"
 					},
 					{
 						"name": "IP Protocols",
 						"type": "v",
 						"cap": "proto",
-						"query": "select extract(epoch from time)::integer as time, packets/15.0, octets/15.0, proto from ingress_proto where time > now() - interval '$tr seconds' order by time asc"
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, octets/15.0, iana_protocols.name from \"$moingress_proto\" join iana_protocols on \"$moingress_proto\".proto=iana_protocols.num where time > now() - interval $tr second order by time asc"
+					},
+					{
+						"name": "IP dst",
+						"type": "v",
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_daddr\" where time > now() - interval '$tr seconds' and dst_host in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_daddr\" where time > now() - interval '$tr seconds' and dst_host not in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all)) as others_all group by time, dst_host union all select time, packets, 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_daddr\" where time > now() - interval '$tr seconds' and dst_host is null) as m) as a order by time desc, packets desc"
+					},
+					{
+						"name": "IP src",
+						"type": "v",
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, src_host from (select time, packets, IPv4NumToString(src_host) as src_host from \"$moingress_saddr\" where time > now() - interval '$tr seconds' and src_host in (select src_host from (select sum(packets) as pkts, IPv4NumToString(src_host) as src_host from \"$moingress_saddr\" where time > now() - interval '$tr seconds' and src_host is not null group by src_host order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as src_host from (select time, packets, IPv4NumToString(src_host) as src_host from \"$moingress_saddr\" where time > now() - interval '$tr seconds' and src_host not in (select src_host from (select sum(packets) as pkts, IPv4NumToString(src_host) as src_host from \"$moingress_saddr\" where time > now() - interval '$tr seconds' and src_host is not null group by src_host order by pkts desc limit 20) as top_all)) as others_all group by time, src_host union all select time, packets, 'Others' as src_host from (select time, packets, IPv4NumToString(src_host) as src_host from \"$moingress_saddr\" where time > now() - interval '$tr seconds' and src_host is null) as m) as a order by time desc, packets desc"
 					},
 					{
 						"name": "Anomalies",
 						"type": "tbl",
-						"query": "select * from anomalies where time > now() - interval '$tr seconds' order by time asc"
+						"query": "select * from anomalies where time_start > now() - interval $tr second order by time_start asc"
 					}
 				]
 				
@@ -33,13 +45,13 @@
 						"name": "Countries",
 						"type": "v",
 						"cap": "",
-						"query": "select extract(epoch from time)::integer as time, packets/15.0, 0, country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ in (select country_src_host_ from (select sum(packets) as pkts, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is not null group by country_src_host_ order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ not in (select country_src_host_ from (select sum(packets) as pkts, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is not null group by country_src_host_ order by pkts desc limit 20) as top_all)) as others_all group by time, country_src_host_ union all select time, packets, 'Others' as country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is null) as m) as a order by time asc, packets desc"
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ in (select country_src_host_ from (select sum(packets) as pkts, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is not null group by country_src_host_ order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ not in (select country_src_host_ from (select sum(packets) as pkts, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is not null group by country_src_host_ order by pkts desc limit 20) as top_all)) as others_all group by time, country_src_host_ union all select time, packets, 'Others' as country_src_host_ from (select time, packets, country_src_host_ from \"$moingress_country\" where time > now() - interval '$tr seconds' and country_src_host_ is null) as m) as a order by time desc, packets desc"
 					},
 					{
-						"name": "IP Protocols",
+						"name": "AS",
 						"type": "v",
-						"cap": "proto",
-						"query": "select extract(epoch from time)::integer as time, packets/15.0, octets/15.0, proto from ingress_proto where time > now() - interval '$tr seconds' order by time asc"
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, asd_src_host_ from (select time, packets, asd_src_host_ from \"$moingress_as\" where time > now() - interval '$tr seconds' and asd_src_host_ in (select asd_src_host_ from (select sum(packets) as pkts, asd_src_host_ from \"$moingress_as\" where time > now() - interval '$tr seconds' and asd_src_host_ is not null group by asd_src_host_ order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as asd_src_host_ from (select time, packets, asd_src_host_ from \"$moingress_as\" where time > now() - interval '$tr seconds' and asd_src_host_ not in (select asd_src_host_ from (select sum(packets) as pkts, asd_src_host_ from \"$moingress_as\" where time > now() - interval '$tr seconds' and asd_src_host_ is not null group by asd_src_host_ order by pkts desc limit 20) as top_all)) as others_all group by time, asd_src_host_ union all select time, packets, 'Others' as asd_src_host_ from (select time, packets, asd_src_host_ from \"$moingress_as\" where time > now() - interval '$tr seconds' and asd_src_host_ is null) as m) as a order by time desc, packets desc"
 					}
 				]
 			}
@@ -51,15 +63,66 @@
 		"r":
 		[
 			{
-				"name": "IP Fragments"
+				"name": "IP Fragments",
+				"charts": [
+					{
+						"name": "Total",
+						"type": "ttl",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, octets/15.0 from \"$moingress_frag_total\" where time > now() - interval $tr second order by time asc"
+					},
+					{
+						"name": "IP dst",
+						"type": "v",
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_frag_daddr\" where time > now() - interval '$tr seconds' and dst_host in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_frag_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_frag_daddr\" where time > now() - interval '$tr seconds' and dst_host not in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_frag_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all)) as others_all group by time, dst_host union all select time, packets, 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_frag_daddr\" where time > now() - interval '$tr seconds' and dst_host is null) as m) as a order by time desc, packets desc"
+					}
+				]
 			}
 			,
 			{
-				"name": "DNS Amplification"
+				"name": "DNS Amplification",
+				"charts": [
+					{
+						"name": "Total",
+						"type": "ttl",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, octets/15.0 from \"$moingress_udp_dns-amp_total\" where time > now() - interval $tr second order by time asc"
+					},
+					{
+						"name": "IP dst",
+						"type": "v",
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_dns-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_dns-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_dns-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host not in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_dns-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all)) as others_all group by time, dst_host union all select time, packets, 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_dns-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host is null) as m) as a order by time desc, packets desc"
+					},
+					{
+						"name": "UDP dst port",
+						"type": "v",
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, dst_port from (select time, packets, toString(dst_port) as dst_port from \"$moingress_udp_dns-amp_dport\" where time > now() - interval '$tr seconds' and dst_port in (select dst_port from (select sum(packets) as pkts, toString(dst_port) as dst_port from \"$moingress_udp_dns-amp_dport\" where time > now() - interval '$tr seconds' and dst_port is not null group by dst_port order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as dst_port from (select time, packets, toString(dst_port) as dst_port from \"$moingress_udp_dns-amp_dport\" where time > now() - interval '$tr seconds' and dst_port not in (select dst_port from (select sum(packets) as pkts, toString(dst_port) as dst_port from \"$moingress_udp_dns-amp_dport\" where time > now() - interval '$tr seconds' and dst_port is not null group by dst_port order by pkts desc limit 20) as top_all)) as others_all group by time, dst_port union all select time, packets, 'Others' as dst_port from (select time, packets, toString(dst_port) as dst_port from \"$moingress_udp_dns-amp_dport\" where time > now() - interval '$tr seconds' and dst_port is null) as m) as a order by time desc, packets desc"
+					}
+				]
 			}
 			,
 			{
-				"name": "NTP Amplification"
+				"name": "NTP Amplification",
+				"charts": [
+					{
+						"name": "Total",
+						"type": "ttl",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, octets/15.0 from \"$moingress_udp_ntp-amp_total\" where time > now() - interval $tr second order by time asc"
+					},
+					{
+						"name": "IP dst",
+						"type": "v",
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_ntp-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_ntp-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_ntp-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host not in (select dst_host from (select sum(packets) as pkts, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_ntp-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host is not null group by dst_host order by pkts desc limit 20) as top_all)) as others_all group by time, dst_host union all select time, packets, 'Others' as dst_host from (select time, packets, IPv4NumToString(dst_host) as dst_host from \"$moingress_udp_ntp-amp_daddr\" where time > now() - interval '$tr seconds' and dst_host is null) as m) as a order by time desc, packets desc"
+					},
+					{
+						"name": "UDP dst port",
+						"type": "v",
+						"cap": "",
+						"query": "select toUnixTimestamp(time) as time, packets/15.0, 0, dst_port from (select time, packets, toString(dst_port) as dst_port from \"$moingress_udp_ntp-amp_dport\" where time > now() - interval '$tr seconds' and dst_port in (select dst_port from (select sum(packets) as pkts, toString(dst_port) as dst_port from \"$moingress_udp_ntp-amp_dport\" where time > now() - interval '$tr seconds' and dst_port is not null group by dst_port order by pkts desc limit 20) as top_all) union all select time, sum(packets), 'Others' as dst_port from (select time, packets, toString(dst_port) as dst_port from \"$moingress_udp_ntp-amp_dport\" where time > now() - interval '$tr seconds' and dst_port not in (select dst_port from (select sum(packets) as pkts, toString(dst_port) as dst_port from \"$moingress_udp_ntp-amp_dport\" where time > now() - interval '$tr seconds' and dst_port is not null group by dst_port order by pkts desc limit 20) as top_all)) as others_all group by time, dst_port union all select time, packets, 'Others' as dst_port from (select time, packets, toString(dst_port) as dst_port from \"$moingress_udp_ntp-amp_dport\" where time > now() - interval '$tr seconds' and dst_port is null) as m) as a order by time desc, packets desc"
+					}
+				]
 			}
 		]
 	}

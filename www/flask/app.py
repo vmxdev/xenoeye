@@ -1,14 +1,29 @@
+#DB_TYPE='pg'
+DB_TYPE='ch'
+
 from flask import Flask, render_template, request, redirect, url_for, jsonify, g
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import select
 import json
-import psycopg2
-from psycopg2.extensions import quote_ident
+if DB_TYPE == 'pg':
+    import psycopg2
+    from psycopg2.extensions import quote_ident
+if DB_TYPE == 'ch':
+    import clickhouse_connect
 
 PG_CONNSTR = "postgresql://xenoeye:password@localhost/xenoeyedb"
-app = Flask(__name__)
+CLICKHOUSE_HOSTNAME = 'localhost'
+CLICKHOUSE_USER = 'default'
+CLICKHOUSE_PASSWORD = ''
+CLICKHOUSE_DB = 'xe'
+
+REP_AGGR_TIME = 30
+REP_AGGR_ROWS = 1000
+
+
+app = Flask(__name__, static_folder = '/lks')
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///db.sqlite"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = "supersecretkey"
@@ -69,6 +84,17 @@ def dashboard():
         g.user['error'] = 'Incorrect monitoring object ' + mo
         return render_template("dashboard-err.html", username=current_user.username)
 
+    #time range
+    arg_tr = request.args.get('tr')
+    if not arg_tr:
+        arg_tr = "21600" # 6 hours
+
+    arg_tr = int(arg_tr)
+    if arg_tr <= 0:
+        arg_tr = 21600
+
+    g.tr = arg_tr
+
     #load template
     template_name = g.curr_mo.tmpl
     if template_name == '':
@@ -91,6 +117,67 @@ def dashboard():
     g.r = g.nav[g.curr_section]["r"][g.curr_rep]
 
     return render_template("dashboard.html", username=current_user.username)
+
+
+@app.route("/lk/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    g.user = {}
+    g.user['displayname'] = current_user.displayname
+    g.user['description'] = current_user.description
+
+    #get list of allowed MO's
+    g.mo = Permissions.query.filter_by(user_id = current_user.id).all()
+    if len(g.mo) == 0:
+        #no MO's
+        g.user['error'] = 'No monitoring objects found for this user'
+        return render_template("dashboard-err.html", username=current_user.username)
+
+    mo = request.args.get('mo')
+    if not mo:
+        g.curr_mo = g.mo[0]
+    else:
+        for m in g.mo:
+            if m.mo_name == mo:
+                g.curr_mo = m
+
+    if not hasattr(g, 'curr_mo'):
+        g.user['error'] = 'Incorrect monitoring object ' + mo
+        return render_template("dashboard-err.html", username=current_user.username)
+
+    template_name = g.curr_mo.tmpl
+    if template_name == '':
+        template_name = 'default'
+
+    with open('xe-tmpl/' + template_name + '.json') as f:
+        g.nav = json.load(f)
+
+
+    if request.method == "POST":
+        user = Users.query.filter_by(id = current_user.id).first()
+        displayname = request.form.get("username")
+        if not displayname:
+            displayname = ''
+        description = request.form.get("userdesc")
+        if not description:
+            description = ''
+        setattr(user, 'displayname', displayname)
+        setattr(user, 'description', description)
+        g.err = 'no'
+
+        pass1 = request.form.get("pass1")
+        if pass1:
+            pass2 = request.form.get("pass2")
+            if pass1 == pass2:
+                setattr(user, 'password', generate_password_hash(pass1))
+            else:
+                g.err = 'pass'
+
+        db.session.commit()
+        g.user['displayname'] = displayname
+        g.user['description'] = description
+
+    return render_template("profile.html", username=current_user.username)
 
 @app.route("/lk/login", methods=["GET", "POST"])
 def login():
@@ -167,21 +254,33 @@ def r_data():
         tmpl = json.load(f)
 
     ch = tmpl[section]["r"][rep]["charts"][chart]
-
-    conn = psycopg2.connect(PG_CONNSTR)
-    cur = conn.cursor()
-
     query = ch["query"]
 
     query = query.replace("$mo", mo)
     query = query.replace("$tr", str(arg_tr))
+    #scale
+    if "tm" in ch:
+        tm = int(ch["tm"])
+    else:
+        tm = REP_AGGR_TIME
 
-    cur.execute(query)
+    sc = (int(int(arg_tr/REP_AGGR_ROWS) / tm) + 1) * tm * 1.0
+    query = query.replace("$sc", str(sc))
 
-    r = cur.fetchall()
+    if DB_TYPE == 'pg':
+        conn = psycopg2.connect(PG_CONNSTR)
+        cur = conn.cursor()
+        cur.execute(query)
 
-    cur.close() 
-    conn.close()
+        r = cur.fetchall()
+
+        cur.close() 
+        conn.close()
+
+    if DB_TYPE == 'ch':
+        client = clickhouse_connect.get_client(host=CLICKHOUSE_HOSTNAME, username=CLICKHOUSE_USER, password=CLICKHOUSE_PASSWORD, database=CLICKHOUSE_DB)
+        res = client.query(query)
+        r = res.result_rows
 
     return jsonify(r)
 
