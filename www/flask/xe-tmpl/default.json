@@ -13,7 +13,7 @@
 					},
 					{
 						"name": "IP Protocols",
-						"type": "v",
+						"type": "svg",
 						"cap": "proto",
 						"query": "select toUnixTimestamp(time) as time, packets/15.0, octets/15.0, iana_protocols.name from \"$moingress_proto\" join iana_protocols on \"$moingress_proto\".proto=iana_protocols.num where time > now() - interval $tr second order by time asc"
 					},
