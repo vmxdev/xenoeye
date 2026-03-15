@@ -639,12 +639,14 @@ monit_object_field_print_str(struct field *fld, char *str, uint8_t *data,
 		case FILTER_BASIC_STRING:
 			escptr = esc;
 			for (i=0; data[i] != 0; i++) {
-				if (data[i] == '\'') {
-					*escptr = '\'';
-					*(escptr + 1) = '\'';
-					escptr++;
+				char c = data[i];
+				if (iscntrl(c) || (c == '\'') || (c == '\\')
+					|| (isspace(c) && (c != ' '))) {
+
+					sprintf(escptr, "\\x%02x", c);
+					escptr += 4;
 				} else {
-					*escptr = data[i];
+					*escptr = c;
 				}
 				escptr++;
 			}

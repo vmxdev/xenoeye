@@ -37,12 +37,28 @@ flow_field_print_bytes(char *str, int flength, char *desc, uint8_t *fptr)
 	}
 }
 
+static void
+flow_field_print_string(char *str, int flength, char *desc, uint8_t *fptr)
+{
+	int i;
+
+	sprintf(str, "%s: '", desc);
+	for (i=0; i<flength; i++) {
+		sprintf(str + strlen(str), "%c", *(fptr + i));
+	}
+	sprintf(str + strlen(str), "'");
+}
+
 #define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
 static void                                                                   \
 flow_field_print_##FLDID(char *str, int flength, uint8_t *fptr)               \
 {                                                                             \
 	if (FLDTYPE == NF_FIELD_BYTES) {                                      \
 		flow_field_print_bytes(str, flength, DESC, fptr);             \
+		return;                                                       \
+	}                                                                     \
+	if (FLDTYPE == NF_FIELD_STRING) {                                     \
+		flow_field_print_string(str, flength, DESC, fptr);            \
 		return;                                                       \
 	}                                                                     \
 	if (flength == 1) {                                                   \
@@ -83,7 +99,7 @@ void
 flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 	char *debug_flow_str)
 {
-	char flow_str[128];
+	char flow_str[256];
 
 	if (debug_flow_str[0]) {
 		strcat(debug_flow_str, "; ");

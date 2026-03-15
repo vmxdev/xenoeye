@@ -228,7 +228,7 @@ process_mo_nf9_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 			flow);
 
 		if (mo->debug.print_flows) {
-			char debug_flow_str[1024];
+			char debug_flow_str[2048];
 
 			print_netflow_v9_flowset(pd, debug_flow_str);
 
@@ -297,7 +297,7 @@ parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id,
 
 		/* debug print */
 		if (globl->debug.print_flows) {
-			char debug_flow_str[1024];
+			char debug_flow_str[2048];
 
 			print_netflow_v9_flowset(&pd, debug_flow_str);
 
@@ -364,6 +364,24 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
 	return 1;
 }
 
+static void
+ipfix_adjust_flength(int *flength, uint8_t *fptr, int *flengthadj)
+{
+	*flengthadj = 0;
+	if (*flength == VAR_LEN_FIELD_LEN) {
+		uint8_t short_len = fptr[0];
+		if (short_len != 255) {
+			*flength = short_len;
+			*flengthadj = 1;
+		} else {
+			uint16_t len2;
+			memcpy(&len2, fptr + 1, sizeof(len2));
+			*flength = ntohs(len2);
+			*flengthadj = 3;
+		}
+	}
+}
+
 /*
  * each item (both ipfix_inf_element_iana and ipfix_inf_element_enterprise)
  * in template converted to ipfix_inf_element_enterprise
@@ -393,7 +411,7 @@ ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 				LOG("IPFIX template: packet too short");
 				return 0;
 			}
-			tmpl->elements[i].id = ent->id;
+			tmpl->elements[i].id = htons(ntohs(ent->id) & 0x7fff);
 			tmpl->elements[i].length = ent->length;
 			tmpl->elements[i].number = ent->number;
 			*ptr += sizeof(struct ipfix_inf_element_enterprise);
@@ -475,15 +493,17 @@ print_ipfix_flowset(struct nf_parse_data *pd,
 
 	debug_flow_str[0] = '\0';
 	for (i=0; i<pd->template_field_count; i++) {
-		int flength, ftype;
+		int flength, ftype, flengthadj;
 
 		flength = ntohs(pd->tmpl_ipfix->elements[i].length);
 		ftype = ntohs(pd->tmpl_ipfix->elements[i].id);
 
-		flow_debug_add_field(flength, ftype, fptr,
+		ipfix_adjust_flength(&flength, fptr, &flengthadj);
+
+		flow_debug_add_field(flength, ftype, fptr + flengthadj,
 			debug_flow_str);
 
-		fptr += flength;
+		fptr += flength + flengthadj;
 
 		if ((fptr - (*(pd->ptr))) >= pd->length) {
 			break;
@@ -509,7 +529,7 @@ process_mo_ipfix_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 			flow);
 
 		if (mo->debug.print_flows) {
-			char debug_flow_str[1024];
+			char debug_flow_str[2048];
 
 			print_ipfix_flowset(pd, debug_flow_str);
 
@@ -561,14 +581,17 @@ parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
 		pd.tmpfptr = fptr;
 
 		for (i=0; i<pd.template_field_count; i++) {
-			int flength, ftype;
+			int flength, ftype, flengthadj;
 
 			flength = ntohs(pd.tmpl_ipfix->elements[i].length);
 			ftype = ntohs(pd.tmpl_ipfix->elements[i].id);
 
-			flow_parse_functions[ftype](&flow, flength, fptr);
+			ipfix_adjust_flength(&flength, fptr, &flengthadj);
 
-			fptr += flength;
+			flow_parse_functions[ftype](&flow, flength,
+				fptr + flengthadj);
+
+			fptr += flength + flengthadj;
 
 			if ((fptr - (*ptr)) >= length) {
 				stop = 1;
@@ -582,7 +605,7 @@ parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
 		}
 
 		if (globl->debug.print_flows) {
-			char debug_flow_str[1024];
+			char debug_flow_str[2048];
 
 			print_ipfix_flowset(&pd, debug_flow_str);
 
@@ -686,7 +709,7 @@ process_mo_nf5_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 			flow);
 
 		if (mo->debug.print_flows) {
-			char debug_flow_str[1024];
+			char debug_flow_str[2048];
 
 			print_netflow_v5_flowset(flow, debug_flow_str);
 
@@ -744,7 +767,7 @@ NF5_FIELDS
 
 		/* debug print */
 		if (globl->debug.print_flows) {
-			char debug_flow_str[1024];
+			char debug_flow_str[2048];
 
 			print_netflow_v5_flowset(&flow, debug_flow_str);
 			flow_print_str(&globl->debug, &flow, debug_flow_str, 0);

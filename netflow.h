@@ -13,6 +13,8 @@
 
 #define MAX_FLOW_VAL_LEN 32
 
+#define VAR_LEN_FIELD_LEN 65535
+
 enum NF_FIELD_TYPE
 {
 	NF_FIELD_IP_ADDR,
