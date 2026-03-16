@@ -227,6 +227,7 @@ pcapture_start(struct xe_data *data, struct capture *cap, size_t thread_idx,
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct bpf_program fp;
 	int thread_err;
+	int rc;
 
 	params = malloc(sizeof(struct capture_thread_params));
 	if (!params) {
@@ -238,12 +239,58 @@ pcapture_start(struct xe_data *data, struct capture *cap, size_t thread_idx,
 	params->cap = cap;
 	params->type = type;
 
+#if 0
 	cap->pcap_handle = pcap_open_live(cap->iface, BUFSIZ, 1, 1000, errbuf);
 	if (cap->pcap_handle == NULL) {
 		LOG("Couldn't open device %s: %s", cap->iface, errbuf);
 
 		goto fail_pcap_open;
 	}
+#else
+	cap->pcap_handle = pcap_create(cap->iface, errbuf);
+	if (cap->pcap_handle == NULL) {
+		LOG("Couldn't open device %s: %s", cap->iface, errbuf);
+		return 0;
+	}
+
+	rc = pcap_set_snaplen(cap->pcap_handle, BUFSIZ);
+	if (rc < 0) {
+		LOG("pcap_set_snaplen() failed on %s", cap->iface);
+		goto fail_pcap_open;
+	}
+
+	rc = pcap_set_promisc(cap->pcap_handle, 1);
+	if (rc < 0) {
+		LOG("pcap_set_promisc() failed on %s", cap->iface);
+		goto fail_pcap_open;
+	}
+
+	rc = pcap_set_timeout(cap->pcap_handle, 1000);
+	if (rc < 0) {
+		LOG("pcap_set_timeout() failed on %s", cap->iface);
+		goto fail_pcap_open;
+	}
+
+	/* change buffer size */
+	if (data->rcvbufsize_m != 0) {
+		int bufsize = data->rcvbufsize_m * 1024 * 1024;
+		rc = pcap_set_buffer_size(cap->pcap_handle, bufsize);
+
+		if (rc != 0) {
+			LOG("Can't change pcap buffer size,"
+				" pcap_set_buffer_size(%d) failed", bufsize);
+		} else {
+			LOG("pcap buffer size is set to %dM",
+				data->rcvbufsize_m);
+		}
+	}
+
+	rc = pcap_activate(cap->pcap_handle);
+	if (rc < 0) {
+		LOG("pcap_activate() failed on %s", cap->iface);
+		goto fail_pcap_open;
+	}
+#endif
 
 	if (pcap_compile(cap->pcap_handle, &fp, cap->filter,
 			1, PCAP_NETMASK_UNKNOWN) == -1) {

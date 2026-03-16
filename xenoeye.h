@@ -115,6 +115,9 @@ struct xe_data
 	enum DB_TYPE db_type;
 	char ch_codec[CLICKHOUSE_CODEC_MAXSIZE];
 
+	/* receive buffer size in Mbytes */
+	int rcvbufsize_m;
+
 	/* notify geoip thread about reload */
 	atomic_int reload_geoip;
 

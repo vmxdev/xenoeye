@@ -327,6 +327,23 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		strcpy(data->ch_codec, value->str);
 	}
 
+	/* receive buffer size */
+	if (STRCMP(a, 1, "rcvbufsize_m") == 0) {
+		if (value->type == AAJSON_VALUE_NUM) {
+			data->rcvbufsize_m = atoi(value->str);
+			if (data->rcvbufsize_m < 0) {
+				LOG("rcvbufsize_m: intcorrect value '%s'",
+					value->str);
+			}
+			if (data->rcvbufsize_m > (INT_MAX / (1024 * 1024))) {
+				LOG("rcvbufsize_m is too big");
+				data->rcvbufsize_m = 0;
+			}
+		} else {
+			LOG("rcvbufsize_m: expected integer value");
+		}
+	}
+
 	if (a->path_stack_pos < 2) {
 		return 1;
 	}
