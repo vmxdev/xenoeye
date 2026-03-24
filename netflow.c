@@ -387,25 +387,25 @@ ipfix_adjust_flength(int *flength, uint8_t *fptr, int *flengthadj)
  * in template converted to ipfix_inf_element_enterprise
  */
 static int
-ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
+ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t *ptr,
 	unsigned int field_count, int length)
 {
 	unsigned int i;
-	uint8_t *pstart = *ptr;
+	uint8_t *pstart = ptr;
 
 	/* copy template header */
-	memcpy(tmpl, *ptr, sizeof(struct ipfix_template_header));
+	memcpy(tmpl, ptr, sizeof(struct ipfix_template_header));
 
 	/* skip header, seek to data */
-	*ptr += sizeof(struct ipfix_template_header);
+	ptr += sizeof(struct ipfix_template_header);
 
 	for (i=0; i<field_count; i++) {
 		struct ipfix_inf_element_enterprise *ent;
 
-		ent = (struct ipfix_inf_element_enterprise *)(*ptr);
+		ent = (struct ipfix_inf_element_enterprise *)ptr;
 		if ((ntohs(ent->id) >> 15) & 1) {
 			/* enterprise */
-			int l = *ptr - pstart
+			int l = ptr - pstart
 				+ sizeof(struct ipfix_inf_element_enterprise);
 			if (l > length) {
 				LOG("IPFIX template: packet too short");
@@ -414,10 +414,10 @@ ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 			tmpl->elements[i].id = htons(ntohs(ent->id) & 0x7fff);
 			tmpl->elements[i].length = ent->length;
 			tmpl->elements[i].number = ent->number;
-			*ptr += sizeof(struct ipfix_inf_element_enterprise);
+			ptr += sizeof(struct ipfix_inf_element_enterprise);
 		} else {
 			/* iana */
-			int l = *ptr - pstart
+			int l = ptr - pstart
 				+ sizeof(struct ipfix_inf_element_iana);
 			if (l > length) {
 				LOG("IPFIX template: packet too short");
@@ -426,7 +426,7 @@ ipfix_template_convert(struct ipfix_stored_template *tmpl, uint8_t **ptr,
 			tmpl->elements[i].id = ent->id;
 			tmpl->elements[i].length = ent->length;
 			tmpl->elements[i].number = 0;
-			*ptr += sizeof(struct ipfix_inf_element_iana);
+			ptr += sizeof(struct ipfix_inf_element_iana);
 		}
 	}
 	return 1;
@@ -462,7 +462,7 @@ parse_ipfix_template(struct xe_data *data, struct flow_packet_info *fpi,
 		+ sizeof(struct ipfix_inf_element_enterprise) * field_count;
 	tmpl = alloca(template_size);
 
-	if (!ipfix_template_convert(tmpl, ptr, field_count,
+	if (!ipfix_template_convert(tmpl, *ptr, field_count,
 		length - sizeof(struct ipfix_template_header))) {
 
 		return 0;
