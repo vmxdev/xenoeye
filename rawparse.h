@@ -207,7 +207,7 @@ ip:
 			}
 			iph = (struct iphdr *)ptr;
 
-			ihl_len += iph->ihl * 4;
+			ihl_len = iph->ihl * 4;
 			nexthdr = iph->protocol;
 			ptr += ihl_len;
 

@@ -104,7 +104,7 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 		LOG(PREFIX"TLS ext type: %04x, len: %d ", e->type, be16toh(e->len));
 
 		if (e->type == 0x0000) {
-			char server_name[256];
+			char server_name[_POSIX_HOST_NAME_MAX + 1];
 			/* sni */
 			p += sizeof(struct tls_ext);
 			if ((p + sizeof(struct tls_sni)) >= end) {
@@ -114,6 +114,14 @@ xe_sni(uint8_t *p, uint8_t *end, char *domain)
 			struct tls_sni *sni = (struct tls_sni *)p;
 			if (sni->type == 0x00) {
 				uint16_t name_len = be16toh(sni->name_len);
+				if (name_len > _POSIX_HOST_NAME_MAX) {
+					LOG(PREFIX"SNI length is too big"
+						" (%d bytes), "
+						"truncating to %d",
+						name_len, _POSIX_HOST_NAME_MAX);
+					name_len = _POSIX_HOST_NAME_MAX;
+				}
+
 				if ((p + sizeof(struct tls_sni) + name_len - 1) >= end) {
 					LOG(PREFIX"TLS Packet too short");
 					return 0;

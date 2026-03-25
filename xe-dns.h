@@ -22,6 +22,7 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 	int i;
 	char qname[_POSIX_HOST_NAME_MAX + 1];
 	char *nptr = qname;
+	char *qname_end = nptr + _POSIX_HOST_NAME_MAX;
 	int count;
 	uint8_t *base;
 	int first_addr = 1;
@@ -62,10 +63,18 @@ xe_dns(uint8_t *p, uint8_t *end, char *domain, char *ips)
 			for (j=0; j<len; j++) {
 				*nptr = *p;
 				nptr++;
+				if (nptr > qname_end) {
+					LOG(PREFIX"Malformed DNS packet");
+					return 0;
+				}
 				p++;
 			}
 			*nptr = '.';
 			nptr++;
+			if (nptr > qname_end) {
+				LOG(PREFIX"Malformed DNS packet");
+				return 0;
+			}
 		}
 		p += 1 + 4;
 		if (p >= end) {

@@ -53,7 +53,7 @@ struct nf_parse_data
 	int length;
 };
 
-static flow_parse_func_t flow_parse_functions[UINT16_MAX];
+static flow_parse_func_t flow_parse_functions[UINT16_MAX + 1];
 
 /* construct template key, used as key in persistent k-v templates storage */
 static void
@@ -281,13 +281,13 @@ parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id,
 			flength = ntohs(pd.tmpl_9->typelen[i].length);
 			ftype = ntohs(pd.tmpl_9->typelen[i].type);
 
+			if ((fptr + flength - (*ptr)) > length) {
+				break;
+			}
+
 			flow_parse_functions[ftype](&flow, flength, fptr);
 
 			fptr += flength;
-
-			if ((fptr - (*ptr)) >= length) {
-				break;
-			}
 		}
 		/* virtual fields */
 		virtual_fields_init(&flow, fpi);
@@ -826,7 +826,7 @@ netflow_process_init(void)
 {
 	int i;
 
-	for (i=0; i<UINT16_MAX; i++) {
+	for (i=0; i<(UINT16_MAX + 1); i++) {
 		flow_parse_functions[i] = &flow_parse_unknown;
 	}
 
