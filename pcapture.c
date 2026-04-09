@@ -125,12 +125,17 @@ pcap_packet(struct capture_thread_params *params,
 	(void)header;
 	/* define ethernet header */
 	/*ethernet = (struct sniff_ethernet *)(packet);*/
-	
-	/* define/compute ip header offset */
-	ip = (struct sniff_ip *)(packet + SIZE_ETHERNET);
 	if (!packet) {
 		return;
 	}
+	if (header->caplen < (12 /* ether */ + 20 /* ip */ + 8 /* udp */
+		+ 24 /* netflow */)) {
+
+		return;
+	}
+
+	/* define/compute ip header offset */
+	ip = (struct sniff_ip *)(packet + SIZE_ETHERNET);
 	size_ip = IP_HL(ip)*4;
 	if (size_ip < 20) {
 		/*LOG("Invalid IP header length: %u bytes", size_ip);*/
@@ -239,14 +244,6 @@ pcapture_start(struct xe_data *data, struct capture *cap, size_t thread_idx,
 	params->cap = cap;
 	params->type = type;
 
-#if 0
-	cap->pcap_handle = pcap_open_live(cap->iface, BUFSIZ, 1, 1000, errbuf);
-	if (cap->pcap_handle == NULL) {
-		LOG("Couldn't open device %s: %s", cap->iface, errbuf);
-
-		goto fail_pcap_open;
-	}
-#else
 	cap->pcap_handle = pcap_create(cap->iface, errbuf);
 	if (cap->pcap_handle == NULL) {
 		LOG("Couldn't open device %s: %s", cap->iface, errbuf);
@@ -290,7 +287,6 @@ pcapture_start(struct xe_data *data, struct capture *cap, size_t thread_idx,
 		LOG("pcap_activate() failed on %s", cap->iface);
 		goto fail_pcap_open;
 	}
-#endif
 
 	if (pcap_compile(cap->pcap_handle, &fp, cap->filter,
 			1, PCAP_NETMASK_UNKNOWN) == -1) {

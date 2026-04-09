@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022-2025, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2026, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -149,7 +149,7 @@ exec_script(struct mo_mavg *mavg, uint8_t *key, size_t limit_id, char *mo_name,
 	flddata = key;
 	for (i=0; i<mavg->fieldset.n_naggr; i++) {
 		struct field *fld = &mavg->fieldset.naggr[i];
-		arg = alloca(INET6_ADDRSTRLEN + 10);
+		arg = alloca(_POSIX_HOST_NAME_MAX * 4 + 1);
 
 		monit_object_field_print_str(fld, arg, flddata, 0);
 		args[argidx++] = arg;

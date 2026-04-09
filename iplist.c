@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2022, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2022-2026, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <errno.h>
 
 #include "iplist.h"
 
@@ -220,9 +221,11 @@ iplist_try_load(const char *filename, const char *listname)
 	struct iplist *tmp;
 	FILE *f;
 	int line_no = 0;
+	int ret = 0;
 
 	f = fopen(filename, "r");
 	if (!f) {
+		LOG("Can't open '%s': %s", filename, strerror(errno));
 		return 0;
 	}
 
@@ -286,11 +289,11 @@ iplist_try_load(const char *filename, const char *listname)
 	iplists = tmp;
 	n_iplists++;
 
-	return 1;
+	ret = 1;
 
 realloc_fail:
 	fclose(f);
-	return 0;
+	return ret;
 }
 
 int

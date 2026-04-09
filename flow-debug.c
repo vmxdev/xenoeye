@@ -23,8 +23,10 @@
 #include "flow-debug.h"
 #include "flow-info.h"
 
+#define FIELD_STR_MAX 256
+
 typedef void (*flow_fldprnt_func_t)(char *str, int flength, uint8_t *fptr);
-static flow_fldprnt_func_t flow_fldprnt_functions[UINT16_MAX];
+static flow_fldprnt_func_t flow_fldprnt_functions[UINT16_MAX + 1];
 
 static void
 flow_field_print_bytes(char *str, int flength, char *desc, uint8_t *fptr)
@@ -99,7 +101,7 @@ void
 flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 	char *debug_flow_str)
 {
-	char flow_str[256];
+	char flow_str[FIELD_STR_MAX + 1];
 
 	if (debug_flow_str[0]) {
 		strcat(debug_flow_str, "; ");
@@ -111,6 +113,12 @@ flow_debug_add_field(int flength, int ftype, uint8_t *fptr,
 		int i;
 		sprintf(flow_str, "Unknown field %d: ", ftype);
 		for (i=0; i<flength; i++) {
+			if ((strlen(flow_str) + 4) > FIELD_STR_MAX) {
+				/* truncate */
+				sprintf(flow_str + FIELD_STR_MAX - 4,
+					"...");
+				break;
+			}
 			sprintf(flow_str + strlen(flow_str),
 				"0x%02x ", *(fptr + i));
 		}
@@ -250,7 +258,7 @@ void
 flow_debug_init(void)
 {
 	int i;
-	for (i=0; i<UINT16_MAX; i++) {
+	for (i=0; i<(UINT16_MAX + 1); i++) {
 		flow_fldprnt_functions[i] = NULL;
 	}
 
