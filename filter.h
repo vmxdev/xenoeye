@@ -209,6 +209,7 @@ struct function_tfstr
 {
 	/* offset in struct flow_info */
 	unsigned int tf_off;
+	unsigned int tf_size;
 };
 
 struct function_portstr

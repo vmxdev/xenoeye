@@ -191,7 +191,6 @@ function_div(struct filter_input *in, struct filter_expr *e,
 	return id(in, e, FILTER_BASIC_RANGE);
 }
 
-/* min */
 static int
 parse_nonaggr_field(struct filter_input *in, unsigned int *off,
 	unsigned int *size)
@@ -527,7 +526,6 @@ function_as(struct filter_input *in, struct filter_expr *e)
 int
 function_tfstr_parse(struct filter_input *in, struct function_tfstr *tfstr)
 {
-	unsigned int tfsize;
 	if (!accept_(in, TFSTR)) {
 		return 0;
 	}
@@ -538,7 +536,7 @@ function_tfstr_parse(struct filter_input *in, struct function_tfstr *tfstr)
 	}
 
 	/* arg */
-	if (!parse_nonaggr_field(in, &tfstr->tf_off, &tfsize)) {
+	if (!parse_nonaggr_field(in, &tfstr->tf_off, &tfstr->tf_size)) {
 		mkerror(in, "Incorrect field name");
 		return 0;
 	}

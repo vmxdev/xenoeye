@@ -833,7 +833,14 @@ monit_object_func_tfstr(struct field *fld, struct flow_info *flow,
 
 	memset(key, 0, TCP_FLAGS_STR_MAX_SIZE);
 
-	flags = get_nf_val((uintptr_t)flow + fld->func_data.tfstr.tf_off, 1);
+	if (fld->func_data.tfstr.tf_size == 2) {
+		/* FIXME: add AE (Accurate ECN) */
+		flags = get_nf_val((uintptr_t)flow
+			+ fld->func_data.tfstr.tf_off + 1, 1);
+	} else {
+		flags = get_nf_val((uintptr_t)flow
+			+ fld->func_data.tfstr.tf_off, 1);
+	}
 	s = tcp_flags_to_str(flags);
 
 	strcpy((char *)key, s);

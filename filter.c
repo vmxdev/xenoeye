@@ -26,6 +26,17 @@
 #include "flow-info.h"
 #include "geoip.h"
 
+/* max size of fields, used in filter_basic_match_range()  */
+enum FIELDS_SIZEMAX {
+#define FIELD(NAME, DESC, FLDTYPE, FLDID, SIZEMIN, SIZEMAX)                   \
+	FIELD_SIZEMAX_##NAME = SIZEMAX,
+#include "netflow.def"
+
+	FIELD_SIZEMAX_dev_ip6 = 16,
+	FIELD_SIZEMAX_dev_id = 4,
+	FIELD_SIZEMAX_dev_mark = 4
+};
+
 void
 mkerror(struct filter_input *f, char *msg)
 {
@@ -467,38 +478,46 @@ filter_basic_match_range(struct filter_basic *fb, struct flow_info *flow)
 		case FILTER_BASIC_NAME_##NAME:                               \
 			if (fb->direction == FILTER_BASIC_DIR_SRC) {         \
 				tmp = flow->SRC;                             \
-				if (flow->SRC##_size == 1) {                 \
+				if (FIELD_SIZEMAX_##SRC == 1) {              \
 					r1 = *((uint8_t *)tmp);              \
-				} else if (flow->SRC##_size == 2) {          \
-					r1 = ntohs(*((uint16_t *)tmp));      \
-				} else if (flow->SRC##_size == 4) {          \
-					r1 = ntohl(*((uint32_t *)tmp));      \
+				} else if (FIELD_SIZEMAX_##SRC == 2) {       \
+					r1 = be16toh(*((uint16_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##SRC == 4) {       \
+					r1 = be32toh(*((uint32_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##SRC == 8) {       \
+					r1 = be64toh(*((uint32_t *)tmp));    \
 				}                                            \
 			} else if (fb->direction == FILTER_BASIC_DIR_DST) {  \
 				tmp = flow->DST;                             \
-				if (flow->DST##_size == 1) {                 \
+				if (FIELD_SIZEMAX_##DST == 1) {              \
 					r1 = *((uint8_t *)tmp);              \
-				} else if (flow->DST##_size == 2) {          \
-					r1 = ntohs(*((uint16_t *)tmp));      \
-				} else if (flow->DST##_size == 4) {          \
-					r1 = ntohl(*((uint32_t *)tmp));      \
+				} else if (FIELD_SIZEMAX_##DST == 2) {       \
+					r1 = be16toh(*((uint16_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##DST == 4) {       \
+					r1 = be32toh(*((uint32_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##DST == 8) {       \
+					r1 = be64toh(*((uint32_t *)tmp));    \
 				}                                            \
 			} else if (fb->direction == FILTER_BASIC_DIR_BOTH) { \
 				tmp = flow->SRC;                             \
-				if (flow->SRC##_size == 1) {                 \
+				if (FIELD_SIZEMAX_##SRC == 1) {              \
 					r1 = *((uint8_t *)tmp);              \
-				} else if (flow->SRC##_size == 2) {          \
-					r1 = ntohs(*((uint16_t *)tmp));      \
-				} else if (flow->SRC##_size == 4) {          \
-					r1 = ntohl(*((uint32_t *)tmp));      \
+				} else if (FIELD_SIZEMAX_##SRC == 2) {       \
+					r1 = be16toh(*((uint16_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##SRC == 4) {       \
+					r1 = be32toh(*((uint32_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##SRC == 8) {       \
+					r1 = be64toh(*((uint32_t *)tmp));    \
 				}                                            \
 				tmp = flow->DST;                             \
-				if (flow->DST##_size == 1) {                 \
+				if (FIELD_SIZEMAX_##DST == 1) {              \
 					r2 = *((uint8_t *)tmp);              \
-				} else if (flow->DST##_size == 2) {          \
-					r2 = ntohs(*((uint16_t *)tmp));      \
-				} else if (flow->DST##_size == 4) {          \
-					r2 = ntohl(*((uint32_t *)tmp));      \
+				} else if (FIELD_SIZEMAX_##DST == 2) {       \
+					r2 = be16toh(*((uint16_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##DST == 4) {       \
+					r2 = be32toh(*((uint32_t *)tmp));    \
+				} else if (FIELD_SIZEMAX_##DST == 8) {       \
+					r2 = be64toh(*((uint32_t *)tmp));    \
 				}                                            \
 			} else {                                             \
 				return 0;                                    \
@@ -819,7 +838,13 @@ filter_function_tfstr(struct filter_basic *fb, struct flow_info *flow)
 {
 	size_t i;
 	struct function_tfstr *tfstr = fb->func_data.tfstr;
-	uint8_t tf = *((uint8_t *)((uintptr_t)flow + tfstr->tf_off));
+	uint8_t tf;
+	if (tfstr->tf_size == 2) {
+		/* FIXME: add AE (Accurate ECN) */
+		tf = *((uint8_t *)((uintptr_t)flow + tfstr->tf_off + 1));
+	} else {
+		tf = *((uint8_t *)((uintptr_t)flow + tfstr->tf_off));
+	}
 
 	for (i=0; i<fb->n; i++) {
 		char *flg = tcp_flags_to_str(tf);
