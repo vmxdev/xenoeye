@@ -36,6 +36,10 @@
 *.x86_64
 *.hex
 xenoeye
+xegeoq
+xemkgeodb
+xemoclone
+xesflow
 
 # Debug files
 *.dSYM/
@@ -51,3 +55,29 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+Makefile
+Makefile.in
+aclocal.m4
+install-sh
+libtool
+
+# Tests
+test-driver
+tests/.deps/
+
+.deps/
+ar-lib
+autom4te.cache/
+compile
+config.guess
+config.h
+config.h.in
+config.log
+config.status
+config.sub
+configure
+depcomp
+ltmain.sh
+m4/
+missing
+stamp-h1
