@@ -1,19 +1,63 @@
 services:
-  build:
-    build:
-      context: .
-      target: build
-    working_dir: /app
+  pgdb:
+    image: postgres:17
+    secrets:
+      - POSTGRES_PASSWORD
+    user: postgres
     volumes:
-      - .:/app
-    command: /bin/bash
-    stdin_open: true
+      - db-data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - POSTGRES_PASSWORD_FILE=/run/secrets/POSTGRES_PASSWORD
+    env_file:
+      - .env_db
+    networks:
+      - backnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-d", "template1"]
+
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      pgdb:
+        condition: service_healthy
+        restart: true
+    ports:
+      - "3000:3000"
+    networks:
+      - frontnet
+      - backnet
+    volumes:
+      - grafana-data-das:/etc/grafana/provisioning/dashboards
+      - grafana-data-src:/etc/grafana/provisioning/datasources
 
   xenoeye:
-    build:
-      context: .
-      target: prod
-    network_mode: host
-    working_dir: /app
-    command: /bin/bash
-    stdin_open: true
+    image: nerosketch/xenoeye
+    depends_on:
+      pgdb:
+        condition: service_healthy
+        restart: true
+    ports:
+      - "2055:2055/udp"
+    networks:
+      - backnet
+      - frontnet
+    volumes:
+      - ./config:/var/lib/xenoeye
+
+networks:
+  frontnet:
+    driver: bridge
+  backnet:
+    driver: bridge
+    internal: true
+
+secrets:
+  POSTGRES_PASSWORD:
+    file: ./secrets/POSTGRES_PASSWORD
+
+volumes:
+  db-data:
+  grafana-data-das:
+  grafana-data-src:
