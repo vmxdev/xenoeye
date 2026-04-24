@@ -1,7 +1,7 @@
 FROM gcc:bookworm AS build
 RUN apt-get update
-RUN apt-get install -y build-essential gcc tclsh libboost-dev libboost-program-options-dev \
-      libgtest-dev libpcap-dev pkg-config libcap2-bin postgresql-client
+RUN apt-get install -y tclsh libboost-dev libboost-program-options-dev \
+      libgtest-dev libpcap-dev libcap2-bin postgresql-client
 WORKDIR /app
 COPY . .
 RUN autoreconf -i
