@@ -45,6 +45,11 @@ services:
       - frontnet
     volumes:
       - ./config:/var/lib/xenoeye
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - DAC_READ_SEARCH
+      - SYS_PTRACE
 
 networks:
   frontnet:
