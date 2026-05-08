@@ -1,0 +1,19 @@
+services:
+  build:
+    build:
+      context: .
+      target: build
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: /bin/bash
+    stdin_open: true
+
+  xenoeye:
+    build:
+      context: .
+      target: prod
+    network_mode: host
+    working_dir: /app
+    command: /bin/bash
+    stdin_open: true
