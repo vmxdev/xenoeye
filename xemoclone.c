@@ -69,10 +69,11 @@ str_replace(char *s, char *search_for, char *replace_with)
 	strcpy(s, res);
 }
 
-static void
+static int
 line_process(char *line, struct repl_data *rd)
 {
 	size_t i;
+	char *unk_macro;
 
 	str_replace(line, TEMPLATE_MARK, "");
 
@@ -82,6 +83,28 @@ line_process(char *line, struct repl_data *rd)
 		sprintf(skey, "${%s}", rd->rkv[i].key);
 		str_replace(line, skey, rd->rkv[i].val);
 	}
+
+	unk_macro = strstr(line, "${");
+	if (unk_macro) {
+		char m[MAX_LINE_LEN];
+		char *unk_macro_end;
+
+		unk_macro += 2;
+		unk_macro_end = strchr(unk_macro, '}');
+		if (!unk_macro_end) {
+			fprintf(stderr, "WARN: malformed macro\n");
+			return 0;
+		}
+
+		memcpy(m, unk_macro, unk_macro_end - unk_macro);
+		m[unk_macro_end - unk_macro] = '\0';
+		fprintf(stderr, "WARN: macro ${%s} is not in replacements list\n",
+			m);
+
+		return 0;
+	}
+
+	return 1;
 }
 
 
@@ -89,6 +112,7 @@ static void
 conf_process(char *in, char *out, struct repl_data *rd)
 {
 	FILE *i, *o;
+	size_t line_no = 0;
 
 	i = fopen(in, "r");
 	if (!i) {
@@ -112,12 +136,25 @@ conf_process(char *in, char *out, struct repl_data *rd)
 		if (feof(i)) {
 			break;
 		}
+		line_no++;
 
 		if (strstr(line, TEMPLATE_MARK)) {
+			char tmpl_line[MAX_LINE_LEN];
+
+			/* template line */
 			fputs(line, o);
-			line_process(line, rd);
-			fputs(line, o);
-			fgets(line, MAX_LINE_LEN, i);
+
+			strcpy(tmpl_line, line);
+			if (line_process(line, rd)) {
+				fputs(line, o);
+				/* skip line */
+				fgets(line, MAX_LINE_LEN, i);
+			} else {
+				fprintf(stderr, "WARN: file '%s', line %lu, "
+					"skipping template '%s'\n",
+					in, line_no,
+					string_trim(tmpl_line));
+			}
 		} else {
 			fputs(line, o);
 		}
