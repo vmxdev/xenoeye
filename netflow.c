@@ -146,7 +146,7 @@ sampling_rate_init(struct flow_packet_info *fpi)
 
 static int
 parse_netflow_v9_template(struct xe_data *data, struct flow_packet_info *fpi,
-	uint8_t **ptr, int length)
+	uint8_t **ptr, int *length)
 {
 	struct nf9_template_item *tmplitem, *ptmpl;
 	uint16_t template_id, field_count;
@@ -158,12 +158,13 @@ parse_netflow_v9_template(struct xe_data *data, struct flow_packet_info *fpi,
 	field_count = ntohs(ptmpl->field_count);
 
 	template_size = 4 + field_count * 4;
-	if (template_size > length) {
+	if (template_size > *length) {
 		/* packet too short */
-		LOG("Template is too short (size: %d, packet length %d)",
-			template_size, length);
+		LOG("Template is too short (size: %d, length %d)",
+			template_size, *length);
 		return 0;
 	}
+	*length -= template_size;
 
 	/* search for template in database */
 	make_template_key(&tkey, template_id, fpi, 9);
@@ -345,10 +346,18 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
 		ptr += 4;
 
 		if (flowset_id_host == 0) {
-			if (!parse_netflow_v9_template(data, fpi, &ptr,
-				length)) {
-				/* something went wrong in template parser */
-				return 0;
+			for (;;) {
+				/* can be more than 1 template */
+				if (length <
+					(int)sizeof(struct nf9_template_item)) {
+
+					break;
+				}
+				if (!parse_netflow_v9_template(data, fpi, &ptr,
+					&length)) {
+
+					return 0;
+				}
 			}
 		} else if (flowset_id_host == 1) {
 			LOG("options template");
