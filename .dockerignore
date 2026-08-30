@@ -83,3 +83,11 @@ stamp-h1
 secrets/
 .env_*
 config/
+.git/
+.env
+frontend/node_modules/
+frontend/dist/
+backend/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/

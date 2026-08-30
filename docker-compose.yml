@@ -1,68 +1,81 @@
+name: xenoeye
+
 services:
-  pgdb:
-    image: postgres:17
-    secrets:
-      - POSTGRES_PASSWORD
-    user: postgres
-    volumes:
-      - db-data:/var/lib/postgresql/data
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
     environment:
-      - POSTGRES_PASSWORD_FILE=/run/secrets/POSTGRES_PASSWORD
-    env_file:
-      - .env_db
-    networks:
-      - backnet
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready", "-d", "template1"]
-
-  grafana:
-    image: grafana/grafana:latest
-    depends_on:
-      pgdb:
-        condition: service_healthy
-        restart: true
-    ports:
-      - "3000:3000"
-    networks:
-      - frontnet
-      - backnet
+      POSTGRES_DB: ${POSTGRES_DB:-xenoeyedb}
+      POSTGRES_USER: ${POSTGRES_USER:-xenoeye}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
-      - grafana-data-das:/etc/grafana/provisioning/dashboards
-      - grafana-data-src:/etc/grafana/provisioning/datasources
+      - postgres-data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xenoeye} -d ${POSTGRES_DB:-xenoeyedb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
-  xenoeye:
-    image: nerosketch/xenoeye
+  collector:
+    build:
+      context: .
+      target: prod
+    restart: unless-stopped
     depends_on:
-      pgdb:
+      postgres:
         condition: service_healthy
-        restart: true
+    environment:
+      XE_DATABASE_DSN: postgresql://${POSTGRES_USER:-xenoeye}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xenoeyedb}
     ports:
       - "2055:2055/udp"
-    networks:
-      - backnet
-      - frontnet
+      - "6343:6343/udp"
     volumes:
-      - ./config:/var/lib/xenoeye
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-      - DAC_READ_SEARCH
-      - SYS_PTRACE
+      - collector-state:/var/lib/xenoeye
+      - ./deploy/docker/xenoeye.conf:/etc/xenoeye/xenoeye.conf:ro
+      - ./deploy/docker/devices.conf:/etc/xenoeye/devices.conf:ro
+      - ./deploy/docker/mo:/var/lib/xenoeye/mo:ro
+      - ./deploy/docker/iplists:/var/lib/xenoeye/iplists:ro
+    networks: [backend]
+    cap_add: [NET_ADMIN, NET_RAW, DAC_READ_SEARCH, SYS_PTRACE]
+    security_opt: [no-new-privileges:true]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      XE_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-xenoeye}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xenoeyedb}
+      XE_JWT_SECRET: ${XE_JWT_SECRET:?set XE_JWT_SECRET in .env}
+      XE_BOOTSTRAP_ADMIN_EMAIL: ${XE_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
+      XE_BOOTSTRAP_ADMIN_PASSWORD: ${XE_BOOTSTRAP_ADMIN_PASSWORD:?set XE_BOOTSTRAP_ADMIN_PASSWORD in .env}
+      XE_CORS_ORIGINS: ${XE_CORS_ORIGINS:-http://localhost:8080}
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${XE_HTTP_PORT:-8080}:80"
+    networks: [backend]
 
 networks:
-  frontnet:
-    driver: bridge
-  backnet:
-    driver: bridge
-    internal: true
-
-secrets:
-  POSTGRES_PASSWORD:
-    file: ./secrets/POSTGRES_PASSWORD
+  backend:
 
 volumes:
-  db-data:
-  grafana-data-das:
-  grafana-data-src:
+  postgres-data:
+  collector-state:

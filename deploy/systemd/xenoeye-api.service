@@ -1,0 +1,23 @@
+[Unit]
+Description=Xenoeye personal cabinet API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xenoeye-api
+Group=xenoeye-api
+WorkingDirectory=/opt/xenoeye/backend
+EnvironmentFile=/etc/xenoeye-portal/backend.env
+ExecStart=/opt/xenoeye/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/xenoeye/backend
+
+[Install]
+WantedBy=multi-user.target
+

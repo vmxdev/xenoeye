@@ -1,0 +1,6 @@
+import { FormEvent, useState } from 'react'
+import { api } from '../api'
+import { useAuth } from '../auth'
+
+export function Profile(){const{user}=useAuth(),[message,setMessage]=useState('');const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);try{await api.post('/auth/change-password',{current_password:f.get('current'),new_password:f.get('next')});setMessage('Пароль обновлён')}catch{setMessage('Не удалось обновить пароль')}};return <div className="page"><header className="page-head"><div><span className="eyebrow">PERSONAL CABINET</span><h1>Профиль</h1><p>Настройки вашей учётной записи</p></div></header><div className="profile-grid"><section className="panel profile-card"><div className="avatar">{user?.full_name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><h2>{user?.full_name}</h2><p>{user?.email}</p><span className="role">{user?.is_admin?'Администратор':'Аналитик'}</span></section><form className="panel profile-form" onSubmit={submit}><span className="eyebrow">SECURITY</span><h2>Сменить пароль</h2><label>Текущий пароль<input name="current" type="password" required/></label><label>Новый пароль<input name="next" type="password" minLength={10} required/></label>{message&&<p>{message}</p>}<button className="primary-button">Обновить пароль</button></form></div></div>}
+

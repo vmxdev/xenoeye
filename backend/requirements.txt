@@ -1,0 +1,10 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+sqlalchemy==2.0.43
+psycopg[binary]==3.2.9
+pydantic-settings==2.10.1
+PyJWT==2.10.1
+pwdlib[argon2]==0.2.1
+python-multipart==0.0.20
+email-validator==2.2.0
+

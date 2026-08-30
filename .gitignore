@@ -82,3 +82,16 @@ missing
 stamp-h1
 secrets/
 .env_*
+
+# Portal development artifacts
+.env
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts

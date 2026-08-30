@@ -1,0 +1,23 @@
+[Unit]
+Description=Xenoeye NetFlow/IPFIX/sFlow collector
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xenoeye
+Group=xenoeye
+EnvironmentFile=-/etc/xenoeye/collector.env
+ExecStart=/usr/local/bin/xenoeye -c /etc/xenoeye/xenoeye.conf
+Restart=on-failure
+RestartSec=3
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/xenoeye
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,6 +1,12 @@
 # xenoeye
 Lightweight Netflow/IPFIX/sFlow collector and analyzer
 
+## Xenoeye Portal
+
+This fork adds a separate FastAPI back-end and a modern React front-end with personal accounts, role-based access and per-table traffic permissions. The original C collector remains an independent high-performance core.
+
+For architecture, API, UI and Debian 12/13 or Docker installation instructions, see the [Russian portal documentation](docs/INSTALL.ru.md) and [architecture guide](docs/ARCHITECTURE.ru.md).
+
 [`README.ru.md`](README.ru.md) - документация на русском
 
 The documentation is mostly translated automatically using Google translator, so if you see something weird - feel free to let us know.
