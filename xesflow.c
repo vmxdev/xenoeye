@@ -164,6 +164,7 @@ sf5_eth(struct sfdata *s, uint8_t *p, enum RP_TYPE t, uint32_t header_len)
 	return 1;
 }
 
+#define XESFLOW_TOOL
 #include "sflow-impl.h"
 
 #undef USER_TYPE

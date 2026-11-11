@@ -174,8 +174,8 @@ pcap_packet(struct capture_thread_params *params,
 		}
 	} else {
 		/* sflow */
-		sflow_process(params->data, params->thread_idx, &pkt,
-			size_payload);
+		sflow_process(params->data, params->thread_idx,
+			&pkt, size_payload);
 	}
 }
 

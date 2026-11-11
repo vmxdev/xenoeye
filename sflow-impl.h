@@ -1,5 +1,6 @@
 #include <errno.h>
 #include "flow-info.h"
+#include "devices.h"
 
 enum SF5_ADDR_TYPE
 {
@@ -66,12 +67,134 @@ do {                                                 \
 
 
 static inline int
+sf5_flow_tag_header(struct sfdata *s, uint8_t **p, uint8_t *end)
+{
+	uint32_t header_proto;
+	uint32_t stripped, header_len;
+
+	READ32_H(header_proto, *p, end);
+
+	READ_SF_BYTES(&s->flow->in_bytes[4], sizeof(uint32_t),
+		*p, end);
+	s->flow->has_in_bytes = 1;
+	s->flow->in_bytes_size = sizeof(uint64_t);
+
+	s->flow->in_pkts[7] = 1;
+	s->flow->has_in_pkts = 1;
+	s->flow->in_pkts_size = sizeof(uint64_t);
+
+	READ32_H(stripped, *p, end);
+
+	READ32_H(header_len, *p, end);
+
+	LOG("\t\theader protocol: %u", header_proto);
+	LOG("\t\theader len: %u", header_len);
+
+	LOG("\t\tsampled size: %lu",
+		be64toh(*((uint64_t *)s->flow->in_bytes)));
+
+	if (header_proto == SF5_HEADER_ETHERNET_ISO8023) {
+		if (!sf5_eth(s, *p, RP_TYPE_ETHER, header_len)) {
+			return 0;
+		}
+	} else if (header_proto == SF5_HEADER_IPv4) {
+		if (!sf5_eth(s, *p, RP_TYPE_IPv4, header_len)) {
+			return 0;
+		}
+	} else if (header_proto == SF5_HEADER_IPv6) {
+		if (!sf5_eth(s, *p, RP_TYPE_IPv6, header_len)) {
+			return 0;
+		}
+	} else {
+		LOG("\t\tUnknown header protocol %u", header_proto);
+		return 0;
+	}
+
+	*p += ALIGN_4(header_len);
+	return 1;
+}
+
+
+static inline int
+sf5_flow_tag_ex_switch(uint8_t **p, uint8_t *end)
+{
+	uint32_t in_vlan, in_priority, out_vlan, out_priority;
+
+	READ32_H(in_vlan, *p, end);
+	LOG("\t\t\t(ignored)In VLAN: %u", in_vlan);
+
+	READ32_H(in_priority, *p, end);
+	LOG("\t\t\t(ignored)In priority: %u", in_priority);
+
+	READ32_H(out_vlan, *p, end);
+	LOG("\t\t\t(ignored)Out VLAN: %u", out_vlan);
+
+	READ32_H(out_priority, *p, end);
+	LOG("\t\t\t(ignored)Out priority: %u", out_priority);
+
+	return 1;
+}
+
+static inline int
+sf5_flow_tag_ip4(struct sfdata *s, uint8_t **p, uint8_t *end)
+{
+	struct sflow_ip_v4 ip4;
+
+	/* packet len */
+	READ_SF_BYTES(&s->flow->in_bytes[4], sizeof(uint32_t),
+		*p, end);
+	s->flow->has_in_bytes = 1;
+	s->flow->in_bytes_size = sizeof(uint64_t);
+	LOG("\t\t\tpacket size: %lu",
+		be64toh(*((uint64_t *)s->flow->in_bytes)));
+
+	/* 1 packet */
+	s->flow->in_pkts[7] = 1;
+	s->flow->has_in_pkts = 1;
+	s->flow->in_pkts_size = sizeof(uint64_t);
+
+#define READ_FIELD(F, FROM, SIZE)\
+do { \
+	READ_SF_BYTES(&ip4.F, sizeof(uint32_t), *p, end);\
+	memcpy(s->flow->F, &ip4.F[FROM], SIZE); \
+	s->flow->has_##F = 1; \
+	s->flow->F##_size = SIZE; \
+} while (0)
+	READ_FIELD(protocol, 3, 1);
+	READ_FIELD(ip4_src_addr, 0, sizeof(uint32_t));
+	READ_FIELD(ip4_dst_addr, 0, sizeof(uint32_t));
+
+	READ_FIELD(l4_src_port, 2, sizeof(uint16_t));
+	READ_FIELD(l4_dst_port, 2, sizeof(uint16_t));
+
+	READ_FIELD(tcp_flags, 3, 1);
+	READ_FIELD(src_tos, 3, 1);
+#undef READ_FIELD
+
+	if (s->flow->protocol[0] == 1) {
+		/* ICMP type is in dst_port */
+		/* see notes in sflowtool's sflowtool.c */
+		s->flow->icmp_type[0] = ip4.l4_dst_port[1];
+		s->flow->has_icmp_type = 1;
+		s->flow->icmp_type_size = 1;
+	}
+
+	if (!sf5_parsed(s, *p, sizeof(struct sflow_ip_v4))) {
+		return 0;
+	}
+
+	return 1;
+}
+
+
+static inline int
 sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end, int exp)
 {
 	uint32_t l, seq, nel;
 	uint32_t v;
 	uint32_t j;
 	uint32_t ifidx, ifidx_be;
+	int flow_data_filled_tag = 0;
 
 	/* sample length */
 	READ32_H(l, *p, end);
@@ -155,138 +278,59 @@ sf5_flow(struct sfdata *s, uint8_t **p, uint8_t *end, int exp)
 		READ32_H(ell, *p, end);
 		LOG("\t\telement length: %u bytes", ell);
 
+#define SKIP_TAG *p += ell; continue;
+
+		if (s->dev->in_db && (tag == s->dev->sflow_skip_tag)) {
+			SKIP_TAG;
+		}
+
+		if (flow_data_filled_tag) {
+			LOG("\t\t\tData is already filled in from tag %d, "
+				"skipping tag %d", flow_data_filled_tag, tag);
+			SKIP_TAG;
+		}
+
 		if (tag == SF5_FLOW_HEADER) {
-			uint32_t header_proto;
-			uint32_t stripped, header_len;
-
-			READ32_H(header_proto, *p, end);
-
-			READ_SF_BYTES(&s->flow->in_bytes[4], sizeof(uint32_t),
-				*p, end);
-			s->flow->has_in_bytes = 1;
-			s->flow->in_bytes_size = sizeof(uint64_t);
-
-			s->flow->in_pkts[7] = 1;
-			s->flow->has_in_pkts = 1;
-			s->flow->in_pkts_size = sizeof(uint64_t);
-
-			READ32_H(stripped, *p, end);
-
-			READ32_H(header_len, *p, end);
-
-			LOG("\t\theader protocol: %u", header_proto);
-			LOG("\t\theader len: %u", header_len);
-
-			LOG("\t\tsampled size: %lu",
-				be64toh(*((uint64_t *)s->flow->in_bytes)));
-
-			if (header_proto == SF5_HEADER_ETHERNET_ISO8023) {
-				if (!sf5_eth(s, *p, RP_TYPE_ETHER,
-					header_len)) {
-
-					return 0;
-				}
-			} else if (header_proto == SF5_HEADER_IPv4) {
-				if (!sf5_eth(s, *p, RP_TYPE_IPv4,
-					header_len)) {
-
-					return 0;
-				}
-			} else if (header_proto == SF5_HEADER_IPv6) {
-				if (!sf5_eth(s, *p, RP_TYPE_IPv6,
-					header_len)) {
-
-					return 0;
-				}
-			} else {
-				LOG("\t\tUnknown header protocol %u",
-					header_proto);
+			if (!sf5_flow_tag_header(s, p, end)) {
 				return 0;
 			}
-			*p += ALIGN_4(header_len);
-		} else if (tag == SF5_FLOW_EX_SWITCH) {
-			uint32_t in_vlan, in_priority, out_vlan, out_priority;
-
-			READ32_H(in_vlan, *p, end);
-			LOG("\t\t\t(ignored)In VLAN: %u", in_vlan);
-
-			READ32_H(in_priority, *p, end);
-			LOG("\t\t\t(ignored)In priority: %u", in_priority);
-
-			READ32_H(out_vlan, *p, end);
-			LOG("\t\t\t(ignored)Out VLAN: %u", out_vlan);
-
-			READ32_H(out_priority, *p, end);
-			LOG("\t\t\t(ignored)Out priority: %u", out_priority);
+			flow_data_filled_tag = tag;
 		} else if (tag == SF5_FLOW_IP_V4) {
-			struct sflow_ip_v4 ip4;
-			/* packet len */
-			READ_SF_BYTES(&s->flow->in_bytes[4], sizeof(uint32_t),
-				*p, end);
-			s->flow->has_in_bytes = 1;
-			s->flow->in_bytes_size = sizeof(uint64_t);
-			LOG("\t\t\tpacket size: %lu",
-				be64toh(*((uint64_t *)s->flow->in_bytes)));
-
-			/* 1 packet */
-			s->flow->in_pkts[7] = 1;
-			s->flow->has_in_pkts = 1;
-			s->flow->in_pkts_size = sizeof(uint64_t);
-
-#define READ_FIELD(F, FROM, SIZE)\
-do { \
-	READ_SF_BYTES(&ip4.F, sizeof(uint32_t), *p, end);\
-	memcpy(s->flow->F, &ip4.F[FROM], SIZE); \
-	s->flow->has_##F = 1; \
-	s->flow->F##_size = SIZE; \
-} while (0)
-			READ_FIELD(protocol, 3, 1);
-			READ_FIELD(ip4_src_addr, 0, sizeof(uint32_t));
-			READ_FIELD(ip4_dst_addr, 0, sizeof(uint32_t));
-
-			READ_FIELD(l4_src_port, 2, sizeof(uint16_t));
-			READ_FIELD(l4_dst_port, 2, sizeof(uint16_t));
-
-
-			READ_FIELD(tcp_flags, 3, 1);
-			READ_FIELD(src_tos, 3, 1);
-#undef READ_FIELD
-			if (s->flow->protocol[0] == 1) {
-				/* ICMP type is in dst_port */
-				/* see notes in sflowtool's sflowtool.c */
-				s->flow->icmp_type[0] = ip4.l4_dst_port[1];
-				s->flow->has_icmp_type = 1;
-				s->flow->icmp_type_size = 1;
+			if (!sf5_flow_tag_ip4(s, p, end)) {
+				return 0;
 			}
-
-			if (!sf5_parsed(s, *p, sizeof(struct sflow_ip_v4))) {
+			flow_data_filled_tag = tag;
+		} else if (tag == SF5_FLOW_EX_SWITCH) {
+			if (!sf5_flow_tag_ex_switch(p, end)) {
 				return 0;
 			}
 		} else {
 			/* unknown tag */
 			LOG("\t\tUnknown tag %u", tag);
-			*p += ell;
+			SKIP_TAG;
 		}
+#undef SKIP_TAG
 	}
 	return 1;
 }
 
 static inline void
-sflow_reset(struct flow_info *flow, uint32_t dev_id, int dev_ip_ver, uint32_t dev_ip4, xe_ip dev_ip6)
+sflow_reset(struct sfdata *sfd, uint32_t dev_id, int dev_ip_ver,
+	uint32_t dev_ip4, xe_ip dev_ip6)
 {
-	memset(flow, 0, sizeof(struct flow_info));
-	memcpy(flow->dev_id, &dev_id, sizeof(uint32_t));
-	flow->has_dev_id = 1;
-	flow->dev_id_size = sizeof(uint32_t);
+	memset(sfd->flow, 0, sizeof(struct flow_info));
+	memcpy(sfd->flow->dev_id, &dev_id, sizeof(uint32_t));
+	sfd->flow->has_dev_id = 1;
+	sfd->flow->dev_id_size = sizeof(uint32_t);
 
 	if (dev_ip_ver == 4) {
-		memcpy(flow->dev_ip, &dev_ip4, sizeof(uint32_t));
-		flow->has_dev_ip = 1;
-		flow->dev_ip_size = sizeof(uint32_t);
+		memcpy(sfd->flow->dev_ip, &dev_ip4, sizeof(uint32_t));
+		sfd->flow->has_dev_ip = 1;
+		sfd->flow->dev_ip_size = sizeof(uint32_t);
 	} else {
-		memcpy(flow->dev_ip6, &dev_ip6, sizeof(xe_ip));
-		flow->has_dev_ip6 = 1;
-		flow->dev_ip6_size = sizeof(xe_ip);
+		memcpy(sfd->flow->dev_ip6, &dev_ip6, sizeof(xe_ip));
+		sfd->flow->has_dev_ip6 = 1;
+		sfd->flow->dev_ip6_size = sizeof(xe_ip);
 	}
 }
 
@@ -301,8 +345,9 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	struct flow_info flow;
 	struct sfdata sfd;
 	struct timespec tmsp;
+	struct device dev;
 
-	/* srore this fields */
+	/* store this fields */
 	uint32_t dev_ip4, dev_id;
 	xe_ip dev_ip6;
 	int dev_ip_ver = 4;
@@ -311,6 +356,7 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	sfd.thread_id = thread_id;
 	sfd.fpi = fpi;
 	sfd.flow = &flow;
+	sfd.dev = &dev;
 
 	/* get time for moving averages */
 	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
@@ -350,6 +396,18 @@ sflow_process(struct xe_data *global, size_t thread_id,
 	READ_SF_BYTES(&dev_id, sizeof(uint32_t), p, end);
 	LOG("agent id: %u", be32toh(dev_id));
 
+#ifndef XESFLOW_TOOL
+	sfd.fpi->source_id = dev_id;
+	device_get(sfd.dev, sfd.fpi);
+#else
+/*
+	memset(sfd.dev, 0, sizeof(struct device));
+	sfd.dev->in_db = 1;
+	sfd.dev->sflow_skip_tag = 1;
+*/
+	sfd.dev->in_db = 0;
+#endif
+
 	READ32_H(v, p, end);
 	LOG("sequence: %u", v);
 
@@ -367,7 +425,7 @@ sflow_process(struct xe_data *global, size_t thread_id,
 		if (v == SF5_SAMPLE_FLOW) {
 			LOG("\tsample type: %u (SF5_SAMPLE_FLOW)", v);
 
-			sflow_reset(&flow, dev_id, dev_ip_ver, dev_ip4, dev_ip6);
+			sflow_reset(&sfd, dev_id, dev_ip_ver, dev_ip4, dev_ip6);
 
 			if (!sf5_flow(&sfd, &p, end, 0)) {
 				return 0;
@@ -381,7 +439,7 @@ sflow_process(struct xe_data *global, size_t thread_id,
 		} else if (v == SF5_SAMPLE_FLOW_EXPANDED) {
 			LOG("\tsample type: %u (SF5_SAMPLE_FLOW)", v);
 
-			sflow_reset(&flow, dev_id, dev_ip_ver, dev_ip4, dev_ip6);
+			sflow_reset(&sfd, dev_id, dev_ip_ver, dev_ip4, dev_ip6);
 
 			if (!sf5_flow(&sfd, &p, end, 1)) {
 				return 0;

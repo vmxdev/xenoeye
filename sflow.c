@@ -134,7 +134,7 @@ sf5_parsed(struct sfdata *s, uint8_t *p, uint32_t header_len)
 	uint8_t *end = p + header_len;
 
 	/* check interfaces */
-	if (!device_rules_check(s->flow, s->fpi)) {
+	if (!device_rules_check(s->dev, s->flow)) {
 		/* no error */
 		return 1;
 	}

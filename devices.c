@@ -1,7 +1,7 @@
 /*
  * xenoeye
  *
- * Copyright (c) 2021-2025, Vladimir Misyurov, Michael Kogan
+ * Copyright (c) 2021-2026, Vladimir Misyurov, Michael Kogan
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -92,6 +92,7 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 
 		devs->devices[devs->n_devices - 1].ip_ver = 4;
 		devs->devices[devs->n_devices - 1].ip = 0;
+		devs->devices[devs->n_devices - 1].in_db = 1;
 		memcpy(&devs->devices[devs->n_devices - 1].ip, buf, 4);
 	}
 
@@ -133,6 +134,11 @@ config_callback(struct aajson *a, aajson_val *value, void *user)
 		if (value->type == AAJSON_VALUE_TRUE) {
 			devs->devices[devs->n_devices - 1].skip_unmarked = 1;
 		}
+	}
+
+	if (STRCMP(a, 2, "sflow-skip-tag") == 0) {
+		devs->devices[devs->n_devices - 1].sflow_skip_tag
+			= atoi(value->str);
 	}
 
 	return 1;
@@ -197,72 +203,70 @@ fail_open:
 
 
 int
-device_get_sampling_rate(struct device *d)
+device_rules_check(struct device *dev, struct flow_info *fi)
 {
+	uint32_t mark = 0;
 	size_t i;
-	int found = 0;
 
-	for (i=0; i<devices.n_devices; i++) {
-		struct device *db = &devices.devices[i];
+	if (!dev->in_db) {
+		return 1;
+	}
 
-		if (db->use_ip && db->use_id) {
-			/* check all fields */
-			if ((d->ip_ver == db->ip_ver)
-				&& (d->ip == db->ip) && (d->id == db->id)) {
-
-				found = 1;
-				d->sampling_rate = db->sampling_rate;
-				break;
-			}
-		} else  if (db->use_ip) {
-			/* only IP */
-			if ((d->ip_ver == db->ip_ver) && (d->ip == db->ip)) {
-				found = 1;
-				d->sampling_rate = db->sampling_rate;
-				break;
-			}
-		} if (db->use_id) {
-			/* only ID */
-			if (d->id == db->id) {
-				found = 1;
-				d->sampling_rate = db->sampling_rate;
-				break;
-			}
+	for (i=0; i<dev->n_exprs; i++) {
+		if (filter_match(dev->exprs[i], fi)) {
+			mark++;
 		}
 	}
 
-	return found;
+	if (dev->skip_unmarked && (mark == 0)) {
+		return 0;
+	}
+
+	mark = htobe32(mark);
+	memcpy(&fi->dev_mark[0], &mark, sizeof(uint32_t));
+	fi->dev_mark_size = sizeof(uint32_t);
+	fi->has_dev_mark = 1;
+
+	return 1;
 }
 
-static int
-device_get_mark(struct device *d, struct flow_info *fi)
+/* search for device using information from flow_packet_info */
+void
+device_get(struct device *dev, struct flow_packet_info *fpi)
 {
 	size_t i;
 	int found = 0;
 	struct device *db;
 
-	d->mark = 0;
+	/* FIXME: add IPv6 */
+	dev->ip_ver = 4;
+	dev->ip = 0;
+	memcpy(&(dev->ip), &fpi->src_addr_ipv4, sizeof(uint32_t));
+
+	dev->id = fpi->source_id;
 
 	for (i=0; i<devices.n_devices; i++) {
 		db = &devices.devices[i];
 
 		if (db->use_ip && db->use_id) {
 			/* check all fields */
-			if ((d->ip_ver == db->ip_ver)
-				&& (d->ip == db->ip) && (d->id == db->id)) {
+			if ((dev->ip_ver == db->ip_ver)
+				&& (dev->ip == db->ip) && (dev->id == db->id)) {
 
 				found = 1;
 				break;
 			}
 		} else  if (db->use_ip) {
 			/* only IP */
-			if ((d->ip_ver == db->ip_ver) && (d->ip == db->ip)) {
+			if ((dev->ip_ver == db->ip_ver)
+				&& (dev->ip == db->ip)) {
+
 				found = 1;
 				break;
 			}
 		} if (db->use_id) {
 			/* only ID */
-			if (d->id == db->id) {
+			if (dev->id == db->id) {
 				found = 1;
 				break;
 			}
@@ -270,46 +274,11 @@ device_get_mark(struct device *d, struct flow_info *fi)
 	}
 
 	if (!found) {
-		return 0;
+		dev->in_db = 0;
+		dev->sampling_rate = 1;
+		return;
 	}
 
-	d->skip_unmarked = db->skip_unmarked;
-	for (i=0; i<db->n_exprs; i++) {
-		if (filter_match(db->exprs[i], fi)) {
-			d->mark++;
-		}
-	}
-
-	return 1;
-}
-
-int
-device_rules_check(struct flow_info *flow, struct flow_packet_info *fpi)
-{
-	struct device dev;
-	uint32_t mark;
-
-	/* FIXME: add IPv6 */
-	dev.ip_ver = 4;
-	dev.ip = 0;
-	memcpy(&dev.ip, &fpi->src_addr_ipv4, 4);
-
-	dev.id = fpi->source_id;
-
-	if (!device_get_mark(&dev, flow)) {
-		/* device not found */
-		return 1;
-	}
-
-	if (dev.skip_unmarked && (dev.mark == 0)) {
-		return 0;
-	}
-
-	mark = htobe32(dev.mark);
-	memcpy(&flow->dev_mark[0], &mark, sizeof(uint32_t));
-	flow->dev_mark_size = sizeof(uint32_t);
-	flow->has_dev_mark = 1;
-
-	return 1;
+	memcpy(dev, db, sizeof(struct device));
 }
 

@@ -5,6 +5,7 @@
 struct xe_data;
 struct flow_packet_info;
 struct flow_info;
+struct device;
 
 struct sfdata
 {
@@ -12,6 +13,7 @@ struct sfdata
 	size_t thread_id;
 	struct flow_packet_info *fpi;
 	struct flow_info *flow;
+	struct device *dev;
 };
 
 int

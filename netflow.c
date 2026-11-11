@@ -123,26 +123,6 @@ virtual_fields_init(struct flow_info *flow, struct flow_packet_info *fpi)
 	flow->sampling_rate = fpi->sampling_rate;
 }
 
-static void
-sampling_rate_init(struct flow_packet_info *fpi)
-{
-	struct device dev;
-
-	/* FIXME: add IPv6 */
-	dev.ip_ver = 4;
-	dev.ip = 0;
-	memcpy(&dev.ip, &fpi->src_addr_ipv4, 4);
-
-	dev.id = fpi->source_id;
-
-	if (device_get_sampling_rate(&dev)) {
-		fpi->sampling_rate = dev.sampling_rate;
-	} else {
-		/* device not found in database */
-		fpi->sampling_rate = 1;
-	}
-}
-
 
 static int
 parse_netflow_v9_template(struct xe_data *data, struct flow_packet_info *fpi,
@@ -245,7 +225,8 @@ process_mo_nf9_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 }
 
 static int
-parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id, 
+parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id,
+	struct device *dev,
 	struct flow_packet_info *fpi, uint8_t **ptr,
 	int flowset_id, int length, int count)
 {
@@ -292,7 +273,7 @@ parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id,
 		}
 		/* virtual fields */
 		virtual_fields_init(&flow, fpi);
-		if (!device_rules_check(&flow, fpi)) {
+		if (!device_rules_check(dev, &flow)) {
 			continue;
 		}
 
@@ -319,6 +300,7 @@ parse_netflow_v9_flowset(struct xe_data *globl, size_t thread_id,
 
 static int
 parse_netflow_v9(struct xe_data *data, size_t thread_id,
+	struct device *dev,
 	struct flow_packet_info *fpi, int len)
 {
 	struct nf9_header *header;
@@ -329,7 +311,10 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
 	fpi->source_id = header->source_id;
 	fpi->epoch = header->unix_secs;
 
-	sampling_rate_init(fpi);
+	device_get(dev, fpi);
+
+	/* sampling rate */
+	fpi->sampling_rate = dev->sampling_rate;
 
 	ptr = (uint8_t *)fpi->rawpacket + sizeof(struct nf9_header);
 
@@ -363,7 +348,8 @@ parse_netflow_v9(struct xe_data *data, size_t thread_id,
 			LOG("options template");
 			break;
 		} else {
-			if (!parse_netflow_v9_flowset(data, thread_id, fpi,
+			if (!parse_netflow_v9_flowset(data, thread_id, dev,
+				fpi,
 				&ptr, flowset_id, length, count)) {
 
 				break;
@@ -555,6 +541,7 @@ process_mo_ipfix_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 
 static int
 parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
+	struct device *dev,
 	struct flow_packet_info *fpi, uint8_t **ptr, int flowset_id, int length)
 {
 	struct nf_parse_data pd;
@@ -609,7 +596,7 @@ parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
 		}
 		/* virtual fields */
 		virtual_fields_init(&flow, fpi);
-		if (!device_rules_check(&flow, fpi)) {
+		if (!device_rules_check(dev, &flow)) {
 			continue;
 		}
 
@@ -636,6 +623,7 @@ parse_ipfix_flowset(struct xe_data *globl, size_t thread_id,
 
 static int
 parse_ipfix(struct xe_data *data, size_t thread_id,
+	struct device *dev,
 	struct flow_packet_info *fpi, int len)
 {
 	struct ipfix_header *header;
@@ -646,7 +634,10 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 	fpi->source_id = header->observation_domain;
 	fpi->epoch = header->export_time;
 
-	sampling_rate_init(fpi);
+	device_get(dev, fpi);
+
+	/* sampling rate */
+	fpi->sampling_rate = dev->sampling_rate;
 
 	ptr = (uint8_t *)fpi->rawpacket + sizeof(struct ipfix_header);
 
@@ -671,7 +662,8 @@ parse_ipfix(struct xe_data *data, size_t thread_id,
 			LOG("options template ipfix, skipping");
 		} else if (flowset_id_host > 255) {
 			/* data */
-			if (!parse_ipfix_flowset(data, thread_id, fpi, &ptr,
+			if (!parse_ipfix_flowset(data, thread_id, dev,
+				fpi, &ptr,
 				flowset_id, length)) {
 
 				break;
@@ -735,6 +727,7 @@ process_mo_nf5_rec(struct xe_data *globl, struct flow_packet_info *fpi,
 
 static int
 parse_netflow_v5(struct xe_data *globl, size_t thread_id,
+	struct device *dev,
 	struct flow_packet_info *fpi, int length)
 {
 	int i;
@@ -751,7 +744,10 @@ parse_netflow_v5(struct xe_data *globl, size_t thread_id,
 	fpi->source_id = pkt->header.engine_id;
 	fpi->epoch = pkt->header.unix_secs;
 
-	sampling_rate_init(fpi);
+	device_get(dev, fpi);
+
+	/* sampling rate */
+	fpi->sampling_rate = dev->sampling_rate;
 
 	for (i=0; i<nflows; i++) {
 		struct flow_info flow;
@@ -770,7 +766,7 @@ NF5_FIELDS
 #undef FIELD
 
 		virtual_fields_init(&flow, fpi);
-		if (!device_rules_check(&flow, fpi)) {
+		if (!device_rules_check(dev, &flow)) {
 			continue;
 		}
 
@@ -802,6 +798,7 @@ netflow_process(struct xe_data *data, size_t thread_id,
 	int version;
 	struct timespec tmsp;
 	int ret = 0;
+	struct device dev;
 
 	/* get time for moving averages */
 	if (clock_gettime(CLOCK_REALTIME_COARSE, &tmsp) < 0) {
@@ -814,13 +811,13 @@ netflow_process(struct xe_data *data, size_t thread_id,
 	version = ntohs(*version_ptr);
 	switch (version) {
 		case 5:
-			ret = parse_netflow_v5(data, thread_id, fpi, len);
+			ret = parse_netflow_v5(data, thread_id, &dev, fpi, len);
 			break;
 		case 9:
-			ret = parse_netflow_v9(data, thread_id, fpi, len);
+			ret = parse_netflow_v9(data, thread_id, &dev, fpi, len);
 			break;
 		case 10:
-			ret = parse_ipfix(data, thread_id, fpi, len);
+			ret = parse_ipfix(data, thread_id, &dev, fpi, len);
 			break;
 		default:
 			LOG("Unknown netflow version %u", version);
